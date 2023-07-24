@@ -7699,6 +7699,13 @@ $(document).ready(function () {
                 Generate("continue");
             }
         }
+        
+        else if (id == 'option_lookaround') {
+            if (is_send_press == false || fromSlashCommand) {
+                is_send_press = true;
+                Generate("lookaround");
+            }
+        }
 
         else if (id == "option_delete_mes") {
             setTimeout(openMessageDelete, animation_duration);
