@@ -2999,46 +2999,77 @@ function convertChatMLPrompt(messages) {
 
 // Prompt Conversion script taken from RisuAI by @kwaroran (GPLv3).
 function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix) {
-    // Claude doesn't support message names, so we'll just add them to the message content.
-    for (const message of messages) {
-        if (message.name && message.role !== "system") {
-            message.content = message.name + ": " + message.content;
-            delete message.name;
-        }
-    }
+    // Check the value of HumAssistOff
+    const { HumAssistOff } = require('./config.conf');
+    const { SystemFul  } = require('./config.conf');
+    let requestPrompt;
+    switch (HumAssistOff) {
+        // If it is true, Now you won't had H and A
+        case true:
+            requestPrompt = messages.map((v) => {
+                return v.content+"\n\n";
+            }).join('');
 
-    let requestPrompt = messages.map((v) => {
-        let prefix = '';
-        switch (v.role) {
-            case "assistant":
-                prefix = "\n\nAssistant: ";
-                break
-            case "user":
-                prefix = "\n\nHuman: ";
-                break
-            case "system":
-                // According to the Claude docs, H: and A: should be used for example conversations.
-                if (v.name === "example_assistant") {
-                    prefix = "\n\nA: ";
-                } else if (v.name === "example_user") {
-                    prefix = "\n\nH: ";
-                } else {
-                    prefix = "\n\n";
+            if (addHumanPrefix) {
+                requestPrompt = "\n\nHuman: " + requestPrompt;
+            }
+
+            if (addAssistantPostfix) {
+                requestPrompt = requestPrompt + '\n\nAssistant: ';
+            }
+
+            return requestPrompt;
+            break
+        // If it is false or anything else, use the RisuAI original code
+        default:
+            // Claude doesn't support message names, so we'll just add them to the message content.
+            for (const message of messages) {
+                if (message.name && message.role !== "system") {
+                    message.content = message.name + ": " + message.content;
+                    delete message.name;
                 }
-                break
-        }
-        return prefix + v.content;
-    }).join('');
+            }
 
-    if (addHumanPrefix) {
-        requestPrompt = "\n\nHuman: " + requestPrompt;
+            requestPrompt = messages.map((v) => {
+                let prefix = '';
+                switch (v.role) {
+                    case "assistant":
+                        prefix = "\n\nAssistant: ";
+                        break
+                    case "user":
+                        prefix = "\n\nHuman: ";
+                        break
+                    case "system":
+                        // According to the Claude docs, H: and A: should be used for example conversations.
+                        if (v.name === "example_assistant") {
+                            prefix = "\n\nA: ";
+                        } else if (v.name === "example_user") {
+                            prefix = "\n\nH: ";
+                        } else {
+                            switch (SystemFul) {
+                                case true:
+                                    prefix = "\n\nSystem: ";
+                                    break
+                                default:
+                                    prefix = "\n\n";
+                                    break
+                            }
+                        }
+                        break
+                }
+                return prefix + v.content;
+            }).join('');
+
+            if (addHumanPrefix) {
+                requestPrompt = "\n\nHuman: " + requestPrompt;
+            }
+
+            if (addAssistantPostfix) {
+                requestPrompt = requestPrompt + '\n\nAssistant: ';
+            }
+
+            return requestPrompt;
     }
-
-    if (addAssistantPostfix) {
-        requestPrompt = requestPrompt + '\n\nAssistant: ';
-    }
-
-    return requestPrompt;
 }
 
 async function sendScaleRequest(request, response) {
