@@ -76,7 +76,6 @@ import {
     persona_description_positions,
     loadMovingUIState,
     getCustomStoppingStrings,
-    MAX_CONTEXT_DEFAULT,
 } from "./scripts/power-user.js";
 
 import {
@@ -702,11 +701,11 @@ var is_use_scroll_holder = false;
 
 //settings
 var settings;
-export let koboldai_settings;
-export let koboldai_setting_names;
+var koboldai_settings;
+var koboldai_setting_names;
 var preset_settings = "gui";
 var user_avatar = "you.png";
-export var amount_gen = 80; //default max length of AI generated responses
+var amount_gen = 80; //default max length of AI generated responses
 var max_context = 2048;
 
 var is_pygmalion = false;
@@ -720,8 +719,8 @@ let extension_prompts = {};
 var main_api;// = "kobold";
 //novel settings
 let novel_tier;
-export let novelai_settings;
-export let novelai_setting_names;
+let novelai_settings;
+let novelai_setting_names;
 let abortController;
 
 //css
@@ -5088,23 +5087,7 @@ async function saveSettings(type) {
     });
 }
 
-export function setGenerationParamsFromPreset(preset) {
-    if (preset.genamt !== undefined) {
-        amount_gen = preset.genamt;
-        $("#amount_gen").val(amount_gen);
-        $("#amount_gen_counter").text(`${amount_gen}`);
-    }
 
-    if (preset.max_length !== undefined) {
-        max_context = preset.max_length;
-
-        const needsUnlock = max_context > MAX_CONTEXT_DEFAULT;
-        $('#max_context_unlocked').prop('checked', needsUnlock).trigger('change');
-
-        $("#max_context").val(max_context);
-        $("#max_context_counter").text(`${max_context}`);
-    }
-}
 
 function setCharacterBlockHeight() {
     const $children = $("#rm_print_characters_block").children();
@@ -7681,6 +7664,14 @@ $(document).ready(function () {
             }
         }
 
+        else if (id == 'option_lookaround') {
+            if (is_send_press == false || fromSlashCommand) {
+                is_send_press = true;
+                Generate("lookaround");
+            }
+        }
+
+
         else if (id == "option_delete_mes") {
             setTimeout(openMessageDelete, animation_duration);
         }
@@ -7741,7 +7732,13 @@ $(document).ready(function () {
             const preset = koboldai_settings[koboldai_setting_names[preset_settings]];
             loadKoboldSettings(preset);
 
-            setGenerationParamsFromPreset(preset);
+            amount_gen = preset.genamt;
+            $("#amount_gen").val(amount_gen);
+            $("#amount_gen_counter").text(`${amount_gen}`);
+
+            max_context = preset.max_length;
+            $("#max_context").val(max_context);
+            $("#max_context_counter").text(`${max_context}`);
 
             $("#range_block").find('input').prop("disabled", false);
             $("#kobold-advanced-config").find('input').prop("disabled", false);
