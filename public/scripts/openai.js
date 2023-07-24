@@ -3,7 +3,7 @@
 * By CncAnon (@CncAnon1)
 * https://github.com/CncAnon1/TavernAITurbo
 */
-
+var AlwaysCharnames = true;
 import {
     saveSettingsDebounced,
     substituteParams,
@@ -56,6 +56,7 @@ export {
     setOpenAIOnlineStatus,
     getChatCompletionModel,
 }
+
 
 let openai_msgs = [];
 let openai_msgs_example = [];
@@ -222,14 +223,22 @@ function setOpenAIMessages(chat) {
             role = 'system';
             openai_narrator_messages_count++;
         }
-
-        // for groups or sendas command - prepend a character's name
-        if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
-            content = `${chat[j].name}: ${content}`;
+	
+        // Check the value of AlwaysCharnames
+        switch (AlwaysCharnames) {
+            // If it is on, use Anons code
+            case true:
+                // for groups or sendas command - prepend a character's name
+                content = `${chat[j].name}: ${content}`;
+                break
+            // If it is anything else, use the original code
+            default:
+                // for groups or sendas command - prepend a character's name
+                if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
+                    content = `${chat[j].name}: ${content}`;
+                }
+                
         }
-
-        content = replaceBiasMarkup(content);
-
         // remove caret return (waste of tokens)
         content = content.replace(/\r/gm, '');
 
@@ -238,7 +247,7 @@ function setOpenAIMessages(chat) {
         openai_msgs[i] = { "role": role, "content": content };
         j++;
     }
-
+	
     // Add chat injections, 100 = maximum depth of injection. (Why would you ever need more?)
     for (let i = 0; i < 100; i++) {
         const anchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, i);
@@ -429,6 +438,15 @@ async function prepareOpenAIMessages({ systemPrompt, name2, storyString, worldIn
         total_count += handler_instance.count([continueNudge], true, 'continue');
         await delay(1);
     }
+
+    if (type == 'lookaround') {
+        const lookaroundNudge = { "role": "system", "content": stringFormat('[Complete these steps: 1. Paste a line break. 2. Write "```XML" and add a line break. 3. Describe in 50 words the scene Human is currently in. Describe the location, objects, and chatacers (if applicable) that Human can interact with, much like a Dungeon & Dragons GM would starting with "👁 You look around and see...". Make it 60 words total. 4. Add a line break and write "```".', cyclePrompt || '') };
+        openai_msgs.push(lookaroundNudge);
+
+        total_count += handler_instance.count([lookaroundNudge], true, 'lookaround');
+        await delay(1);
+    }
+
 
     // The user wants to always have all example messages in the context
     if (power_user.pin_examples) {
