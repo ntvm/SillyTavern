@@ -2999,47 +2999,79 @@ function convertChatMLPrompt(messages) {
 
 // Prompt Conversion script taken from RisuAI by @kwaroran (GPLv3).
 function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix) {
-    // Claude doesn't support message names, so we'll just add them to the message content.
-    for (const message of messages) {
-        if (message.name && message.role !== "system") {
-            message.content = message.name + ": " + message.content;
-            delete message.name;
-        }
-    }
+    // Check the value of HumAssistOff
+    const { HumAssistOff } = require('./config.conf');
+	const { SystemFul  } = require('./config.conf');
+	let requestPrompt;
+	switch (HumAssistOff) {
+        // If it is "on" Now you won't had H and A, 
+        case true:
+            requestPrompt = messages.map((v) => {
+                return v.content+"\n\n";
+            }).join('');
 
-    let requestPrompt = messages.map((v) => {
-        let prefix = '';
-        switch (v.role) {
-            case "assistant":
-                prefix = "\n\nAssistant: ";
-                break
-            case "user":
-                prefix = "\n\nHuman: ";
-                break
-            case "system":
-                // According to the Claude docs, H: and A: should be used for example conversations.
-                if (v.name === "example_assistant") {
-                    prefix = "\n\nA: ";
-                } else if (v.name === "example_user") {
-                    prefix = "\n\nH: ";
-                } else {
-                    prefix = "\n\n";
+            if (addHumanPrefix) {
+                requestPrompt = "\n\nHuman: " + requestPrompt;
+            }
+
+            if (addAssistantPostfix) {
+                requestPrompt = requestPrompt + '\n\nAssistant: ';
+            }
+
+            return requestPrompt;
+			break
+        // If it is "off" or anything else, use the RisuAI original code
+        default:
+            // Claude doesn't support message names, so we'll just add them to the message content.
+            for (const message of messages) {
+                if (message.name && message.role !== "system") {
+                    message.content = message.name + ": " + message.content;
+                    delete message.name;
                 }
-                break
-        }
-        return prefix + v.content;
-    }).join('');
+            }
 
-    if (addHumanPrefix) {
-        requestPrompt = "\n\nHuman: " + requestPrompt;
+            requestPrompt = messages.map((v) => {
+                let prefix = '';
+                switch (v.role) {
+                    case "assistant":
+                        prefix = "\n\nAssistant: ";
+                        break
+                    case "user":
+                        prefix = "\n\nHuman: ";
+                        break
+                    case "system":
+                        // According to the Claude docs, H: and A: should be used for example conversations.
+                        if (v.name === "example_assistant") {
+                            prefix = "\n\nA: ";
+                        } else if (v.name === "example_user") {
+                            prefix = "\n\nH: ";
+                        } else {
+                            switch (SystemFul) {
+								case true:
+								prefix = "\n\nSystem: ";
+								break
+							default:
+								prefix = "\n\n";
+								break
+							}
+						}
+                        break
+                }
+                return prefix + v.content;
+            }).join('');
+
+            if (addHumanPrefix) {
+                requestPrompt = "\n\nHuman: " + requestPrompt;
+            }
+
+            if (addAssistantPostfix) {
+                requestPrompt = requestPrompt + '\n\nAssistant: ';
+            }
+
+            return requestPrompt;
     }
-
-    if (addAssistantPostfix) {
-        requestPrompt = requestPrompt + '\n\nAssistant: ';
-    }
-
-    return requestPrompt;
 }
+
 
 async function sendScaleRequest(request, response) {
     const fetch = require('node-fetch').default;
@@ -3341,47 +3373,6 @@ app.post("/tokenize_openai", jsonParser, function (request, response_tokenize_op
     response_tokenize_openai.send({ "token_count": num_tokens });
 });
 
-app.post("/save_preset", jsonParser, function (request, response) {
-    const name = sanitize(request.body.name);
-    if (!request.body.preset || !name) {
-        return response.sendStatus(400);
-    }
-
-    const filename = `${name}.settings`;
-    const directory = getPresetFolderByApiId(request.body.apiId);
-
-    if (!directory) {
-        return response.sendStatus(400);
-    }
-
-    const fullpath = path.join(directory, filename);
-    fs.writeFileSync(fullpath, JSON.stringify(request.body.preset, null, 4), 'utf-8');
-    return response.send({ name });
-});
-
-app.post("/delete_preset", jsonParser, function (request, response) {
-    const name = sanitize(request.body.name);
-    if (!name) {
-        return response.sendStatus(400);
-    }
-
-    const filename = `${name}.settings`;
-    const directory = getPresetFolderByApiId(request.body.apiId);
-
-    if (!directory) {
-        return response.sendStatus(400);
-    }
-
-    const fullpath = path.join(directory, filename);
-
-    if (fs.existsSync) {
-        fs.unlinkSync(fullpath);
-        return response.sendStatus(200);
-    } else {
-        return response.sendStatus(404);
-    }
-});
-
 app.post("/savepreset_openai", jsonParser, function (request, response) {
     const name = sanitize(request.query.name);
     if (!request.body || !name) {
@@ -3393,20 +3384,6 @@ app.post("/savepreset_openai", jsonParser, function (request, response) {
     fs.writeFileSync(fullpath, JSON.stringify(request.body, null, 4), 'utf-8');
     return response.send({ name });
 });
-
-function getPresetFolderByApiId(apiId) {
-    switch (apiId) {
-        case 'kobold':
-        case 'koboldhorde':
-            return directories.koboldAI_Settings;
-        case 'novel':
-            return directories.novelAI_Settings;
-        case 'textgenerationwebui':
-            return directories.textGen_Settings;
-        default:
-            return null;
-    }
-}
 
 function createTokenizationHandler(getTokenizerFn) {
     return async function (request, response) {
