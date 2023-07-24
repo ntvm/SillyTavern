@@ -126,6 +126,7 @@ parser.addCommand('continue', continueChatCallback, ['cont'], ' – continues th
 parser.addCommand('go', goToCharacterCallback, ['char'], '<span class="monospace">(name)</span> – opens up a chat with the character by its name', true, true);
 parser.addCommand('sysgen', generateSystemMessage, [], '<span class="monospace">(prompt)</span> – generates a system message using a specified prompt', true, true);
 parser.addCommand('delname', deleteMessagesByNameCallback, ['cancel'], '<span class="monospace">(name)</span> – deletes all messages attributed to a specified name', true, true);
+parser.addCommand('lookaround', lookChatCallback, ['look'], ' – Look around, and behold beauty of this world', true, true);
 
 const NARRATOR_NAME_KEY = 'narrator_name';
 const NARRATOR_NAME_DEFAULT = 'System';
@@ -210,6 +211,12 @@ function continueChatCallback() {
     // Prevent infinite recursion
     $('#send_textarea').val('');
     $('#option_continue').trigger('click', { fromSlashCommand: true });
+}
+
+function lookChatCallback() {
+    // Prevent infinite recursion
+    $('#send_textarea').val('');
+    $('#option_lookaround').trigger('click', { fromSlashCommand: true });
 }
 
 async function generateSystemMessage(_, prompt) {
