@@ -1225,6 +1225,9 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
          //console.log('mes after removed <tags>')
          //console.log(mes)
      } */
+
+    mes = DOMPurify.sanitize(mes);
+    
     return mes;
 }
 
@@ -2955,7 +2958,7 @@ function getNextMessageId(type) {
 }
 
 export function getBiasStrings(textareaText, type) {
-    if (type == 'impersonate') {
+    if (type == 'impersonate' || type == 'continue') {
         return { messageBias: '', promptBias: '', isUserPromptBias: false };
     }
 
