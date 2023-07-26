@@ -125,8 +125,9 @@ parser.addCommand('flat', setFlatModeCallback, ['default'], ' – sets the messa
 parser.addCommand('continue', continueChatCallback, ['cont'], ' – continues the last message in the chat', true, true);
 parser.addCommand('go', goToCharacterCallback, ['char'], '<span class="monospace">(name)</span> – opens up a chat with the character by its name', true, true);
 parser.addCommand('sysgen', generateSystemMessage, [], '<span class="monospace">(prompt)</span> – generates a system message using a specified prompt', true, true);
-parser.addCommand('delname', deleteMessagesByNameCallback, ['cancel'], '<span class="monospace">(name)</span> – deletes all messages attributed to a specified name', true, true);
 parser.addCommand('lookaround', lookChatCallback, ['look'], ' – Look around, and behold beauty of this world', true, true);
+parser.addCommand('delname', deleteMessagesByNameCallback, ['cancel'], '<span class="monospace">(name)</span> – deletes all messages attributed to a specified name', true, true);
+
 
 const NARRATOR_NAME_KEY = 'narrator_name';
 const NARRATOR_NAME_DEFAULT = 'System';
