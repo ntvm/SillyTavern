@@ -1,6 +1,6 @@
 import { getStringHash, debounce, waitUntilCondition } from "../../utils.js";
 import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules } from "../../extensions.js";
-import { eventSource, event_types, extension_prompt_types, generateQuietPrompt, is_send_press, saveSettingsDebounced, substituteParams } from "../../../script.js";
+import { eventSource, event_types, extension_prompt_types, generateQuietPrompt, is_send_press, saveSettingsDebounced, saveSettings, substituteParams } from "../../../script.js";
 export { MODULE_NAME };
 
 const MODULE_NAME = '1_memory';
@@ -12,13 +12,20 @@ let lastMessageHash = null;
 let lastMessageId = null;
 let inApiCall = false;
 
-const formatMemoryValue = (value) => value ? `Summary: ${value.trim()}` : '';
+//В каком режиме будет работать расширение. Вариант XML Hints ("XML_hints"), Вариант Summarize - (false)
+
+var Extensionmode
+
 const saveChatDebounced = debounce(() => getContext().saveChat(), 2000);
+
+
 
 const summary_sources = {
     'extras': 'extras',
     'main': 'main',
 };
+
+
 
 const defaultPrompt = '[Pause your roleplay. Summarize the most important facts and events that have happened in the chat so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.]';
 
@@ -54,6 +61,7 @@ const defaultSettings = {
     promptMinInterval: 1,
     promptMaxInterval: 100,
     promptIntervalStep: 1,
+    Extensionmode: false,
 };
 
 function loadSettings() {
@@ -76,8 +84,13 @@ function loadSettings() {
     if (extension_settings.memory.promptInterval === undefined) {
         extension_settings.memory.promptInterval = defaultSettings.promptInterval;
     }
+    
+    if (extension_settings.memory.Extensionmode === undefined) {
+        extension_settings.memory.Extensionmode = defaultSettings.Extensionmode;
+    }
 
     $('#summary_source').val(extension_settings.memory.source).trigger('change');
+    $('#Extensionmode').val(extension_settings.memory.Extensionmode).trigger('change');
     $('#memory_long_length').val(extension_settings.memory.longMemoryLength).trigger('input');
     $('#memory_short_length').val(extension_settings.memory.shortMemoryLength).trigger('input');
     $('#memory_repetition_penalty').val(extension_settings.memory.repetitionPenalty).trigger('input');
@@ -89,6 +102,18 @@ function loadSettings() {
     $('#memory_prompt_interval').val(extension_settings.memory.promptInterval).trigger('input');
 }
 
+switch (extension_settings.memory.Extensionmode) {
+	case "XML_hints":
+		var formatMemoryValue = (value) => value ? `[Hints]\n${value.trim()}` : '';
+		break
+	default: 
+		var formatMemoryValue = (value) => value ? `Summary: ${value.trim()}` : '';
+		break;
+        };
+
+
+
+
 function onSummarySourceChange(event) {
     const value = event.target.value;
     extension_settings.memory.source = value;
@@ -96,7 +121,24 @@ function onSummarySourceChange(event) {
         const source = $(element).data('source');
         $(element).toggle(source === value);
     });
-    saveSettingsDebounced();
+    saveSettings();
+}
+
+function onExtensionmodeChange(event) {
+    const value = event.target.value;
+    extension_settings.memory.Extensionmode = value;
+    $('#memory_settings [data-source]').each((_, element) => {
+        const source = $(element).data('source');
+        switch (extension_settings.memory.Extensionmode) {
+	case "XML_hints":
+		var formatMemoryValue = (value) => value ? `[Hints]\n${value.trim()}` : '';
+		break
+	default: 
+		var formatMemoryValue = (value) => value ? `Summary: ${value.trim()}` : '';
+		break;
+        };
+    });
+    saveSettings();
 }
 
 function onMemoryShortInput() {
@@ -233,6 +275,10 @@ async function onChatEvent() {
     if (chat.length === 0 || (lastMessageId === chat.length && getStringHash(chat[chat.length - 1].mes) === lastMessageHash)) {
         return;
     }
+    if (chat.length === 0 || (lastMessageId === chat.length) && extension_settings.memory.Extensionmode === "XML_hints") {
+        return;
+    }
+
 
     // Messages has been deleted - rewrite the context with the latest available memory
     if (chat.length < lastMessageId) {
@@ -246,7 +292,14 @@ async function onChatEvent() {
         && chat[chat.length - 1].extra.memory
         && lastMessageId === chat.length
         && getStringHash(chat[chat.length - 1].mes) !== lastMessageHash) {
-        delete chat[chat.length - 1].extra.memory;
+            switch (extension_settings.memory.Extensionmode) {
+                case "XML_hints":
+                    break
+                default: 
+                    delete chat[chat.length - 1].extra.memory;
+                    break
+	}
+		
     }
 
     try {
@@ -457,23 +510,49 @@ function onMemoryContentInput() {
 }
 
 function setMemoryContext(value, saveToMessage) {
-    const context = getContext();
-    context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.AFTER_SCENARIO);
-    $('#memory_contents').val(value);
-    console.log('Memory set to: ' + value);
+    switch (extension_settings.memory.Extensionmode) {
+	case "XML_hints":
+		var context = getContext();
+		context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.IN_CHAT, 1);
+		$('#memory_contents').val(value);
+		console.log('Memory set to: ' + value);
 
-    if (saveToMessage && context.chat.length) {
-        const idx = context.chat.length - 2;
-        const mes = context.chat[idx < 0 ? 0 : idx];
+		if (saveToMessage && context.chat.length) {
+			const idx = context.chat.length - 2;
+			const mes = context.chat[idx < 0 ? 0 : idx];
+	
+			if (!mes.extra) {
+				mes.extra = {};
+			}
+	
+			mes.extra.memory = value;
+			saveChatDebounced();
+		}
+		break
+	default: 
+		var context = getContext();
+		context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.AFTER_SCENARIO);
+		$('#memory_contents').val(value);
+		console.log('Memory set to: ' + value);
 
-        if (!mes.extra) {
-            mes.extra = {};
-        }
+		if (saveToMessage && context.chat.length) {
+			const idx = context.chat.length - 2;
+			const mes = context.chat[idx < 0 ? 0 : idx];
 
-        mes.extra.memory = value;
-        saveChatDebounced();
-    }
+			if (!mes.extra) {
+			mes.extra = {};
+			}
+
+			mes.extra.memory = value;
+			saveChatDebounced();
+		}
+		break
 }
+}	
+	
+	
+	
+
 
 jQuery(function () {
     function addExtensionControls() {
@@ -499,7 +578,12 @@ jQuery(function () {
                     <div data-source="main" class="memory_contents_controls">
                     </div>
                     <div data-source="main">
-                        <label for="memory_prompt" class="title_restorable">
+					<label for="Extensionmode">Extension mode:</label>
+						<select id="Extensionmode">
+						<option value="XML_hints">XML_hints</option>
+						<option value="false">false</option>
+					</select>
+					<label for="memory_prompt" class="title_restorable">
                             Summarization Prompt
                             <div id="memory_force_summarize" class="menu_button menu_button_icon">
                                 <i class="fa-solid fa-database"></i>
@@ -538,7 +622,8 @@ jQuery(function () {
         $('#memory_length_penalty').on('input', onMemoryLengthPenaltyInput);
         $('#memory_frozen').on('input', onMemoryFrozenInput);
         $('#summary_source').on('change', onSummarySourceChange);
-        $('#memory_prompt_words').on('input', onMemoryPromptWordsInput);
+        $('#Extensionmode').on('change', onExtensionmodeChange);
+	$('#memory_prompt_words').on('input', onMemoryPromptWordsInput);
         $('#memory_prompt_interval').on('input', onMemoryPromptIntervalInput);
         $('#memory_prompt').on('input', onMemoryPromptInput);
         $('#memory_force_summarize').on('click', forceSummarizeChat);
