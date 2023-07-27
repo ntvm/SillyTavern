@@ -580,8 +580,8 @@ jQuery(function () {
                     <div data-source="main">
 					<label for="Extensionmode">Extension mode:</label>
 						<select id="Extensionmode">
-						<option value="XML_hints">XML_hints</option>
-						<option value="false">false</option>
+						<option value="XML_hints">XML hints</option>
+						<option value="false">Original Summarize</option>
 					</select>
 					<label for="memory_prompt" class="title_restorable">
                             Summarization Prompt
