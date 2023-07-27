@@ -623,7 +623,7 @@ jQuery(function () {
         $('#memory_frozen').on('input', onMemoryFrozenInput);
         $('#summary_source').on('change', onSummarySourceChange);
         $('#Extensionmode').on('change', onExtensionmodeChange);
-	$('#memory_prompt_words').on('input', onMemoryPromptWordsInput);
+        $('#memory_prompt_words').on('input', onMemoryPromptWordsInput);
         $('#memory_prompt_interval').on('input', onMemoryPromptIntervalInput);
         $('#memory_prompt').on('input', onMemoryPromptInput);
         $('#memory_force_summarize').on('click', forceSummarizeChat);
