@@ -197,7 +197,22 @@
             "showDefault": false
         },
         "dice": {},
-        "regex": [],
+        "regex": [
+            {
+                "scriptName": "ThinkingRemover",
+                "findRegex": "(```)?\\n?<thinking>[\\s\\S]*?<\\/thinking>\\n?(```)?\\n?\\n?",
+                "replaceString": "",
+                "trimStrings": [],
+                "placement": [
+                    2
+                ],
+                "disabled": true,
+                "markdownOnly": true,
+                "runOnEdit": true,
+                "substituteRegex": false,
+                "replaceStrategy": 0
+            }
+        ],
         "tts": {
             "voiceMap": "",
             "ttsEnabled": false,
