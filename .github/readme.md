@@ -4,7 +4,8 @@ Lookaround работает из коробки.;
 
 AlwaysCharnames(На данный момент находится в самом начале public\scripts\openai.js)(Включает перманентное имя карточки  в промпте) включено; 
 
-В корне Таверны, config.conf: HumAssistOff (Убирает'Human:' и 'Assistant' из таверны) выключен. P.S. Самый изначальный Human и Assistant в последнем сообщении Юзера убрать невозможно, ибо они необходимы для API;  Systemful (Возвращает роль System для Claude)(Работает только в режиме с присутствующими Humans и assistants) включено; 
+В корне Таверны, config.conf: HumAssistOff (Убирает'Human:' и 'Assistant' из таверны) выключен. P.S. Самый изначальный Human и Assistant в последнем сообщении Юзера убрать невозможно, ибо они необходимы для API;  
+Systemful (Возвращает роль System для Claude)(Работает только в режиме с присутствующими Humans и assistants) включено (Как выключить? В config.conf (РЯДОМ С Start.bat) меняешь Systemful = true; на Systemful = false;); 
 
 В интерфейсе Summarize встроенная возможность переключть оригинальный Summarize и вариант Hints от XML-кунов
 
