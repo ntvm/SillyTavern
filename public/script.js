@@ -2215,7 +2215,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         if (!type && !textareaText && power_user.continue_on_send && !selected_group && chat.length && !chat[chat.length - 1]['is_user']) {
             type = 'continue';
         }
-		
+
         const isContinue = type == 'continue';
         const isLookaround = type == 'lookaround';
 		deactivateSendButtons();
@@ -2317,7 +2317,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             chat2[i] = formatMessageHistoryItem(coreChat[j], isInstruct);
 
             // Do not suffix the message for continuation
-            if (i === 0 && isContinue ) {
+            if (i === 0 && isContinue) {
                 chat2[i] = chat2[i].slice(0, chat2[i].lastIndexOf(coreChat[j].mes) + coreChat[j].mes.length);
                 continue_mag = coreChat[j].mes;
             }
@@ -2395,8 +2395,6 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         if (isContinue) {
             cyclePrompt = chat2.shift();
         }
-		
-
 
         // Collect enough messages to fill the context
         let arrMes = [];
@@ -2464,8 +2462,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             is_send_press = true;
 
             generatedPromtCache += cycleGenerationPromt;
-            if (generatedPromtCache.length == 0 || type === 'continue' ) {
-            
+            if (generatedPromtCache.length == 0 || type === 'continue') {
 				if (main_api === 'openai') {
                     generateOpenAIPromptCache();
                 }
@@ -2863,10 +2860,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                         getMessage = continue_mag + getMessage;
                     }
 
-
                     //Formating
                     getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue, isLookaround);
-
                     let this_mes_is_name;
                     ({ this_mes_is_name, getMessage } = extractNameFromMessage(getMessage, force_name2, isImpersonate));
                     if (getMessage.length > 0) {
