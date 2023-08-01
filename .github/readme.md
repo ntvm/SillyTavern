@@ -14,6 +14,7 @@ Systemful (Возвращает роль System для Claude)(Работает 
 
 В силу деятельности одного "Ддосадолботряска" который даже неудосужился посмотреть какие конкретно изменения в коде сделал XML кун чтобы избежать ддоса прокси. Примеры Hints теперь будут лежать в colab/readme.md
 
+TEST
 ![image](https://github.com/SillyTavern/SillyTavern/assets/18619528/8c41a061-7f72-4d2b-9d54-e6d058209e7b)
 
 Mobile-friendly, Multi-API (KoboldAI/CPP, Horde, NovelAI, Ooba, OpenAI+proxies, WindowAI(Claude!)), VN-like Waifu Mode, Horde SD, System TTS, WorldInfo (lorebooks), customizable UI, auto-translate, and more prompt options than you'd ever want or need. Optional Extras server for more SD/TTS options + ChromaDB/Summarize.
