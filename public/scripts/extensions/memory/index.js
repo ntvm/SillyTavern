@@ -128,7 +128,6 @@ switch (extension_settings.memory.Extensionmode) {
 			}
 		}
     }
-};
 
 
 
