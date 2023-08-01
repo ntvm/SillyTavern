@@ -85,9 +85,7 @@ function loadSettings() {
             extension_settings.memory[key] = defaultSettings[key];
         }
     }
-    if (extension_settings.memory.Extensionmode === undefined) {
-        extension_settings.memory.Extensionmode = defaultSettings.Extensionmode;
-    }
+
     
 
     $('#summary_source').val(extension_settings.memory.source).trigger('change');
