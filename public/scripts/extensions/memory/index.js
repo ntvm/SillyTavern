@@ -85,6 +85,9 @@ function loadSettings() {
             extension_settings.memory[key] = defaultSettings[key];
         }
     }
+    if (extension_settings.memory.Extensionmode === undefined) {
+        extension_settings.memory.Extensionmode = defaultSettings.Extensionmode;
+    }
     
 
     $('#summary_source').val(extension_settings.memory.source).trigger('change');
@@ -108,6 +111,7 @@ switch (extension_settings.memory.Extensionmode) {
 	case "XML_hints":
 		var formatMemoryValue = (value) => value ? `[Hints]\n${value.trim()}` : '';
 		break
+		
 	default: 
 		var formatMemoryValue = function (value) {
 			if (!value) {
@@ -123,8 +127,8 @@ switch (extension_settings.memory.Extensionmode) {
 			return `Summary: ${value}`;
 			}
 		}
-
-        };
+    }
+};
 
 
 
@@ -136,7 +140,7 @@ function onSummarySourceChange(event) {
         const source = $(element).data('source');
         $(element).toggle(source === value);
     });
-    saveSettings();
+    saveSettingsDebounced ();
 }
 
 function onExtensionmodeChange(event) {
@@ -144,31 +148,8 @@ function onExtensionmodeChange(event) {
     extension_settings.memory.Extensionmode = value;
     $('#memory_settings [data-source]').each((_, element) => {
         const source = $(element).data('source');
-        switch (extension_settings.memory.Extensionmode) {
-	case "XML_hints":
-		var formatMemoryValue = (value) => value ? `[Hints]\n${value.trim()}` : '';
-		$('[data-source="false"]').hide();
-		break
-	default: 
-		var formatMemoryValue = function (value) {
-			if (!value) {
-				return '';
-			}
-
-		value = value.trim();
-
-		if (extension_settings.memory.template) {
-			let result = extension_settings.memory.template.replace(/{{summary}}/i, value);
-			return substituteParams(result);
-		} else {
-			return `Summary: ${value}`;
-			}
-		}
-		$('[data-source="false"]').show();
-		break;
-        };
-    });
-    saveSettings();
+    });    
+    saveSettingsDebounced();
 }
 
 function onMemoryShortInput() {
@@ -649,29 +630,30 @@ jQuery(function () {
                     <div data-source="main" class="memory_contents_controls">
                     </div>
                     <div data-source="main">
-					<label for="Extensionmode">Extension mode:</label>
-						<select id="Extensionmode">
-						<option value="XML_hints">XML hints</option>
-						<option value="false">Original Summarize</option>
+                    <label for="Extensionmode">Extension mode:</label>
+                        <select id="Extensionmode">
+                        <option value="XML_hints">XML hints override</option>
+                        <option value="false">Original Summarize</option>
+                            
 					</select>
-					<div data-source="false">
-					    <div class="memory_template">
-							<label for="memory_template">Injection template:</label>
-							<textarea id="memory_template" class="text_pole textarea_compact" rows="1" placeholder="Use {{summary}} macro to specify the position of summarized text."></textarea>
-						</div>
-						<label for="memory_position">Injection position:</label>
-						<div class="radio_group">
-							<label>
-								<input type="radio" name="memory_position" value="0" />
-								After scenario
-							</label>
-							<label>
-								<input type="radio" name="memory_position" value="1" />
-								In-chat @ Depth <input id="memory_depth" class="text_pole widthUnset" type="number" min="0" max="99" />
-							</label>
-						</div>
-						</div>
-					<label for="memory_prompt" class="title_restorable">
+                    <div ExtensionmodeOriginal>
+                        <div class="memory_template">
+                            <label for="memory_template">Injection template:</label>
+                            <textarea id="memory_template" class="text_pole textarea_compact" rows="1" placeholder="Use {{summary}} macro to specify the position of summarized text."></textarea>
+                        </div>
+                        <label for="memory_position">Injection position:</label>
+                        <div class="radio_group">
+                            <label>
+                                <input type="radio" name="memory_position" value="0" />
+                                After scenario
+                            </label>
+                            <label>
+                                <input type="radio" name="memory_position" value="1" />
+                                In-chat @ Depth <input id="memory_depth" class="text_pole widthUnset" type="number" min="0" max="99" />
+                            </label>
+                        </div>
+                        </div>
+                        <label for="memory_prompt" class="title_restorable">
                             Summarization Prompt
                             <div id="memory_force_summarize" class="menu_button menu_button_icon">
                                 <i class="fa-solid fa-database"></i>
