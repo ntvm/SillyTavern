@@ -445,7 +445,7 @@ async function prepareOpenAIMessages({ systemPrompt, name2, storyString, worldIn
         await delay(1);
     }
     if (type == 'lookaround') {
-    const lookaroundNudge = { "role": "system", "content": stringFormat('[Complete these steps: 1. Paste a line break. 2. Write "```XML" and add a line break. 3. Describe in 50 words the scene Human is currently in. Describe the location, objects, and chatacers (if applicable) that Human can interact with, much like a Dungeon & Dragons GM would starting with "👁 You look around and see...". Make it 60 words total. 4. Add a line break and write "```".', cyclePrompt || '') };
+    const lookaroundNudge = { "role": "system", "content": stringFormat('[Complete these steps: 1. Paste a line break. 2. Write "```XML" and add a line break. 3. Describe in 50 words the scene Human is currently in. Describe the location, objects, and chatacers (if applicable) that Human can interact with, much like a Dungeon & Dragons GM would starting with "👁 You look around and see...". Make it 60 words total. 4. Add a line break and write "```".]', cyclePrompt || '') };
     openai_msgs.push(lookaroundNudge);
 
     total_count += handler_instance.count([lookaroundNudge], true, 'lookaround');
