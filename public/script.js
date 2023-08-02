@@ -84,6 +84,7 @@ import {
 import {
     setOpenAIMessageExamples,
     setOpenAIMessages,
+    setupChatCompletionPromptManager,
     prepareOpenAIMessages,
     sendOpenAIRequest,
     loadOpenAISettings,
@@ -162,6 +163,7 @@ import { context_settings, loadContextTemplatesFromSettings } from "./scripts/co
 import { markdownExclusionExt } from "./scripts/showdown-exclusion.js";
 import { NOTE_MODULE_NAME, metadata_keys, setFloatingPrompt, shouldWIAddPrompt } from "./scripts/authors-note.js";
 import { deviceInfo } from "./scripts/RossAscends-mods.js";
+import { registerPromptManagerMigration } from "./scripts/PromptManager.js";
 import { getRegexedString, regex_placement } from "./scripts/extensions/regex/engine.js";
 
 //exporting functions and vars for mods
@@ -255,6 +257,12 @@ export const event_types = {
     SETTINGS_UPDATED: 'settings_updated',
     GROUP_UPDATED: 'group_updated',
     MOVABLE_PANELS_RESET: 'movable_panels_reset',
+    SETTINGS_LOADED_BEFORE: 'settings_loaded_before',
+    SETTINGS_LOADED_AFTER: 'settings_loaded_after',
+    OAI_BEFORE_CHATCOMPLETION: 'oai_before_chatcompletion',
+    OAI_PRESET_CHANGED: 'oai_preset_changed',
+    WORLDINFO_SETTINGS_UPDATED: 'worldinfo_settings_updated',
+    CHARACTER_EDITED: 'character_edited',
 }
 
 export const eventSource = new EventEmitter();
@@ -520,6 +528,9 @@ const system_messages = {
         mes: `Click here to return to the previous chat: <a class="bookmark_link" file_name="{0}" href="javascript:void(null);">Return</a>`,
     },
 };
+
+// Register configuration migrations
+registerPromptManagerMigration(saveSettings);
 
 $(document).ajaxError(function myErrorHandler(_, xhr) {
     if (xhr.status == 403) {
@@ -1581,9 +1592,11 @@ function scrollChatToBottom() {
     }
 }
 
-function substituteParams(content, _name1, _name2, _original) {
+function substituteParams(content, _name1, _name2, _original, _group) {
     _name1 = _name1 ?? name1;
     _name2 = _name2 ?? name2;
+    _original = _original || '';
+    _group = _group ?? name2;
 
     if (!content) {
         return '';
@@ -1598,8 +1611,14 @@ function substituteParams(content, _name1, _name2, _original) {
     content = content.replace(/{{input}}/gi, $('#send_textarea').val());
     content = content.replace(/{{user}}/gi, _name1);
     content = content.replace(/{{char}}/gi, _name2);
+    content = content.replace(/{{charIfNotGroup}}/gi, _group);
+    content = content.replace(/{{group}}/gi, _group);
+
     content = content.replace(/<USER>/gi, _name1);
     content = content.replace(/<BOT>/gi, _name2);
+    content = content.replace(/<CHARIFNOTGROUP>/gi, _group);
+    content = content.replace(/<GROUP>/gi, _group);
+
     content = content.replace(/{{time}}/gi, moment().format('LT'));
     content = content.replace(/{{date}}/gi, moment().format('LL'));
     content = content.replace(/{{idle_duration}}/gi, () => getTimeSinceLastMessage());
@@ -2158,7 +2177,7 @@ class StreamingProcessor {
     }
 }
 
-async function Generate(type, { automatic_trigger, force_name2, resolve, reject, quiet_prompt, force_chid, signal } = {}) {
+async function Generate(type, { automatic_trigger, force_name2, resolve, reject, quiet_prompt, force_chid, signal } = {}, dryRun = false) {
     //console.log('Generate entered');
     setGenerationProgress(0);
     tokens_already_generated = 0;
@@ -2230,12 +2249,32 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         reject = () => { };
     }
 
-    if (selected_group && !is_group_generating) {
+    if (selected_group && !is_group_generating && !dryRun) {
         generateGroupWrapper(false, type, { resolve, reject, quiet_prompt, force_chid, signal: abortController.signal });
         return;
+    } else if (selected_group && !is_group_generating && dryRun) {
+        const characterIndexMap = new Map(characters.map((char, index) => [char.avatar, index]));
+        const group = groups.find((x) => x.id === selected_group);
+
+        const enabledMembers = group.members.reduce((acc, member) => {
+            if (!group.disabled_members.includes(member) && !acc.includes(member)) {
+                acc.push(member);
+            }
+            return acc;
+        }, []);
+
+        const memberIds = enabledMembers
+            .map((member) => characterIndexMap.get(member))
+            .filter((index) => index !== undefined);
+
+        if (memberIds.length > 0) {
+            setCharacterId(memberIds[0]);
+            setCharacterName('');
+        }
     }
 
-    if (online_status != 'no_connection' && this_chid != undefined && this_chid !== 'invalid-safety-id') {
+    if (true === dryRun ||
+        (online_status != 'no_connection' && this_chid != undefined && this_chid !== 'invalid-safety-id')) {
         let textareaText;
         if (type !== 'regenerate' && type !== "swipe" && type !== 'quiet' && !isImpersonate) {
             is_send_press = true;
@@ -2724,19 +2763,20 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                 generate_data = getNovelGenerationData(finalPromt, this_settings, this_amount_gen, isImpersonate);
             }
             else if (main_api == 'openai') {
-                let [prompt, counts] = await prepareOpenAIMessages({
-                    systemPrompt: systemPrompt,
+                let [prompt, counts] = prepareOpenAIMessages({
                     name2: name2,
-                    storyString: storyString,
+                    charDescription: charDescription,
+                    charPersonality: charPersonality,
+                    Scenario: Scenario,
                     worldInfoBefore: worldInfoBefore,
                     worldInfoAfter: worldInfoAfter,
-                    extensionPrompt: afterScenarioAnchor,
+                    extensionPrompts: extension_prompts,
                     bias: promptBias,
                     type: type,
                     quietPrompt: quiet_prompt,
                     jailbreakPrompt: jailbreakPrompt,
                     cyclePrompt: cyclePrompt,
-                });
+                }, dryRun);
                 generate_data = { prompt: prompt };
 
                 // counts will return false if the user has not enabled the token breakdown feature
@@ -2746,6 +2786,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
                 setInContextMessages(openai_messages_count, type);
             }
+
+            if (true === dryRun) return onSuccess({error: 'dryRun'});
 
             if (power_user.console_log_prompts) {
 
@@ -3130,14 +3172,14 @@ function parseTokenCounts(counts, thisPromptBits) {
     const total = Object.values(counts).filter(x => !Number.isNaN(x)).reduce((acc, val) => acc + val, 0);
 
     thisPromptBits.push({
-        oaiStartTokens: Object.entries(counts)[0][1],
-        oaiPromptTokens: Object.entries(counts)[1][1],
-        oaiBiasTokens: Object.entries(counts)[2][1],
-        oaiNudgeTokens: Object.entries(counts)[3][1],
-        oaiJailbreakTokens: Object.entries(counts)[4][1],
-        oaiImpersonateTokens: Object.entries(counts)[5][1],
-        oaiExamplesTokens: Object.entries(counts)[6][1],
-        oaiConversationTokens: Object.entries(counts)[7][1],
+        oaiStartTokens: Object.entries(counts)?.[0]?.[1] ?? 0,
+        oaiPromptTokens: Object.entries(counts)?.[1]?.[1] ?? 0,
+        oaiBiasTokens: Object.entries(counts)?.[2]?.[1] ?? 0,
+        oaiNudgeTokens: Object.entries(counts)?.[3]?.[1] ?? 0,
+        oaiJailbreakTokens: Object.entries(counts)?.[4]?.[1] ?? 0,
+        oaiImpersonateTokens: Object.entries(counts)?.[5]?.[1] ?? 0,
+        oaiExamplesTokens: Object.entries(counts)?.[6]?.[1] ?? 0,
+        oaiConversationTokens: Object.entries(counts)?.[7]?.[1] ?? 0,
         oaiTotalTokens: total,
     });
 }
@@ -4269,6 +4311,7 @@ async function getChat() {
         }
         await getChatResult();
         await saveChat();
+        eventSource.emit('chatLoaded', {detail: {id: this_chid, character: characters[this_chid]}});
 
 
         setTimeout(function () {
@@ -4427,6 +4470,17 @@ function changeMainAPI() {
         is_get_status = true;
         getStatus();
         getHordeModels();
+    }
+
+    switch (oai_settings.chat_completion_source) {
+        case chat_completion_sources.SCALE:
+        case chat_completion_sources.OPENROUTER:
+        case chat_completion_sources.WINDOWAI:
+        case chat_completion_sources.CLAUDE:
+        case chat_completion_sources.OPENAI:
+        default:
+            setupChatCompletionPromptManager(oai_settings);
+            break;
     }
 }
 
@@ -4934,6 +4988,9 @@ async function getSettings(type) {
             $("#your_name").val(name1);
         }
 
+        // Allow subscribers to mutate settings before applying any modifiers
+        eventSource.emit(event_types.SETTINGS_LOADED_BEFORE, settings);
+
         //Load KoboldAI settings
         koboldai_setting_names = data.koboldai_setting_names;
         koboldai_settings = data.koboldai_settings;
@@ -5020,6 +5077,9 @@ async function getSettings(type) {
 
         // Load context templates
         loadContextTemplatesFromSettings(data, settings);
+
+        // Allow subscribers to mutate settings
+        eventSource.emit(event_types.SETTINGS_LOADED_AFTER, settings);
 
         // Set context size after loading power user (may override the max value)
         $("#max_context").val(max_context);
@@ -6382,6 +6442,7 @@ async function createOrEditCharacter(e) {
                 );
                 $("#create_button").attr("value", "Save");
                 crop_data = undefined;
+                eventSource.emit(event_types.CHARACTER_EDITED, {detail: {id: this_chid, character: characters[this_chid]}});
             },
             error: function (jqXHR, exception) {
                 $("#create_button").removeAttr("disabled");
@@ -7402,6 +7463,7 @@ $(document).ready(function () {
         }
         if (popup_type == "del_ch") {
             handleDeleteCharacter(popup_type, this_chid, characters);
+            eventSource.emit('characterDeleted', {id: this_chid, character: characters[this_chid]});
         }
         if (popup_type == "alternate_greeting" && menu_type !== "create") {
             createOrEditCharacter();
