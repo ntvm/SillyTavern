@@ -1242,9 +1242,8 @@
                                                     Prompt that is used for Impersonation function
                                                 </div>
                                                 <div class="wide100p">
-
                                                     <textarea id="impersonation_prompt_textarea" class="text_pole textarea_compact" name="impersonation_prompt" rows="3" placeholder=""></textarea>
-
+                                                </div>
                                             </div>
                                             <div class="range-block m-t-1">
                                                 <div class="range-block-title openai_restorable">
@@ -1285,6 +1284,19 @@
                                         <input type="text" id="claude_assistant_prefill" class="text_pole" placeholder="Start Claude's answer with...">
                                     </div>
                                 </div>
+                                            <div class="range-block m-t-1">
+                                                <div class="range-block-title openai_restorable">
+                                                    <span>New Chat</span>
+                                                    <div id="newchat_prompt_restore" title="Restore new chat prompt" class="right_menu_button">
+                                                        <div class="fa-solid fa-clock-rotate-left"></div>
+                                                    </div>
+                                                </div>
+                                                <div class="toggle-description justifyLeft">
+                                            <span data-i18n="Set at the beginning of the chat history to indicate that a new chat is about to start.">
+                                                Set at the beginning of the chat history to indicate that a new chat is about to start.
+                                            </span>
+                                                </div>
+                                                <div class="wide100p">
                                                     <textarea id="newchat_prompt_textarea" class="text_pole textarea_compact" name="new_chat" rows="3" placeholder=""></textarea>
                                                 </div>
                                             </div>
@@ -2611,14 +2623,14 @@
                             </div>
                         </div>
                         <div class="flex1">
-                            <h4 class="title_restorable">
-                                <span data-i18n="Your Persona">Your Persona</span>
+                            <h4 data-i18n="Your Avatar" class="title_restorable">
+                                <span>Your Persona</span>
                                 <button class="menu_button menu_button_icon user_stats_button" title="Click for stats!">
-                                    <i class="fa-solid fa-circle-info"></i><span data-i18n="Usage Stats">Usage Stats</span>
+                                    <i class="fa-solid fa-circle-info"></i>Usage Stats
                                 </button>
                                 <div id="create_dummy_persona" class="menu_button menu_button_icon" title="Create a dummy persona" data-i18n="[title]Create a dummy persona">
                                     <i class="fa-solid fa-person-circle-question fa-fw"></i>
-                                    <span data-i18n="Blank">Blank</span>
+                                    <span>Blank</span>
                                 </div>
                             </h4>
                             <div id="user_avatar_block">
