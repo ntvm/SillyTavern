@@ -544,6 +544,30 @@ async function onSelectInjectFile(e) {
     }
 }
 
+// Gets the length of character description in the current context
+function getCharacterDataLength() {
+    const context = getContext();
+    const character = context.characters[context.characterId];
+
+    if (typeof character?.data !== 'object') {
+        return 0;
+    }
+
+    let characterDataLength = 0;
+
+    for (const [key, value] of Object.entries(character.data)) {
+        if (typeof value !== 'string') {
+            continue;
+        }
+
+        if (['description', 'personality', 'scenario'].includes(key)) {
+            characterDataLength += character.data[key].length;
+        }
+    }
+
+    return characterDataLength;
+}
+
 /*
 * Automatically adjusts the extension settings for the optimal number of messages to keep and query based
 * on the chat history and a specified maximum context length.
@@ -551,12 +575,16 @@ async function onSelectInjectFile(e) {
 function doAutoAdjust(chat, maxContext) {
     console.debug('CHROMADB: Auto-adjusting sliders (messages: %o, maxContext: %o)', chat.length, maxContext);
     // Get mean message length
-    const meanMessageLength = chat.reduce((acc, cur) => acc + cur.mes.length, 0) / chat.length;
+    const meanMessageLength = chat.reduce((acc, cur) => acc + (cur?.mes?.length ?? 0), 0) / chat.length;
 
-    if (Number.isNaN(meanMessageLength)) {
-        console.debug('CHROMADB: Mean message length is NaN, aborting auto-adjust');
+    if (Number.isNaN(meanMessageLength) || meanMessageLength === 0) {
+        console.debug('CHROMADB: Mean message length is zero or NaN, aborting auto-adjust');
         return;
     }
+
+    // Adjust max context for character defs length
+    maxContext = Math.floor(maxContext - (getCharacterDataLength() / CHARACTERS_PER_TOKEN_RATIO));
+    console.debug('CHROMADB: Max context adjusted for character defs: %o', maxContext);
 
     console.debug('CHROMADB: Mean message length (characters): %o', meanMessageLength);
     // Convert to number of "tokens"
@@ -611,7 +639,7 @@ window.chromadb_interceptGeneration = async (chat, maxContext) => {
         console.debug("CHROMADB: Messages to store length vs keep context: %o vs %o", messagesToStore.length, extension_settings.chromadb.keep_context);
         await addMessages(currentChatId, messagesToStore);
     }
-    
+
     const lastMessage = chat[chat.length - 1];
 
     let queriedMessages;
@@ -811,15 +839,15 @@ jQuery(async () => {
             <textarea id="chromadb_custom_msg" hidden class="text_pole textarea_compact" rows="2" placeholder="${defaultSettings.chroma_default_msg}" style="height: 61px; display: none;"></textarea>
             <label for="chromadb_custom_depth" hidden><small>How deep should the memory messages be injected?: (<span id="chromadb_custom_depth_value"></span>)</small></label>
             <input id="chromadb_custom_depth" type="range" min="${defaultSettings.chroma_depth_min}" max="${defaultSettings.chroma_depth_max}" step="${defaultSettings.chroma_depth_step}" value="${defaultSettings.chroma_depth}" hidden/>
-            
+
             <label for="chromadb_hhaa_wrapperfmt" hidden><small>Custom wrapper format:</small></label>
             <textarea id="chromadb_hhaa_wrapperfmt" hidden class="text_pole textarea_compact" rows="2" placeholder="${defaultSettings.chroma_default_hhaa_wrapper}" style="height: 61px; display: none;"></textarea>
             <label for="chromadb_hhaa_memoryfmt" hidden><small>Custom memory format:</small></label>
             <textarea id="chromadb_hhaa_memoryfmt" hidden class="text_pole textarea_compact" rows="2" placeholder="${defaultSettings.chroma_default_hhaa_memory}" style="height: 61px; display: none;"></textarea>
             <label for="chromadb_hhaa_token_limit" hidden><small>Maximum tokens allowed for memories: (<span id="chromadb_hhaa_token_limit_value"></span>)</small></label>
             <input id="chromadb_hhaa_token_limit" type="range" min="0" max="2048" step="64" value="${defaultSettings.hhaa_token_limit}" hidden/>
-            
-            
+
+
             <span>Memory Recall Strategy</span>
             <select id="chromadb_recall_strategy">
                 <option value="original">Recall only from this chat</option>
@@ -834,7 +862,7 @@ jQuery(async () => {
             <input id="chromadb_keep_context" type="range" min="${defaultSettings.keep_context_min}" max="${defaultSettings.keep_context_max}" step="${defaultSettings.keep_context_step}" value="${defaultSettings.keep_context}" />
             <label for="chromadb_n_results"><small>Maximum number of ChromaDB 'memories' to inject: (<span id="chromadb_n_results_value"></span>) messages</small></label>
             <input id="chromadb_n_results" type="range" min="${defaultSettings.n_results_min}" max="${defaultSettings.n_results_max}" step="${defaultSettings.n_results_step}" value="${defaultSettings.n_results}" />
-            
+
             <label for="chromadb_keep_context_proportion"><small>Keep (<span id="chromadb_keep_context_proportion_value"></span>%) of in-context chat messages; replace the rest with memories</small></label>
             <input id="chromadb_keep_context_proportion" type="range" min="${defaultSettings.keep_context_proportion_min}" max="${defaultSettings.keep_context_proportion_max}" step="${defaultSettings.keep_context_proportion_step}" value="${defaultSettings.keep_context_proportion}" />
             <label for="chromadb_split_length"><small>Max length for each 'memory' pulled from the current chat history: (<span id="chromadb_split_length_value"></span>) characters</small></label>

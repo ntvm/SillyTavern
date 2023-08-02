@@ -1,19 +1,19 @@
 import { callPopup, cancelTtsPlay, eventSource, event_types, isMultigenEnabled, is_send_press, saveSettingsDebounced } from '../../../script.js'
-import { ModuleWorkerWrapper, extension_settings, getContext } from '../../extensions.js'
+import { ModuleWorkerWrapper, doExtrasFetch, extension_settings, getApiUrl, getContext } from '../../extensions.js'
 import { escapeRegex, getStringHash } from '../../utils.js'
 import { EdgeTtsProvider } from './edge.js'
 import { ElevenLabsTtsProvider } from './elevenlabs.js'
 import { SileroTtsProvider } from './silerotts.js'
+import { CoquiTtsProvider } from './coquitts.js'
 import { SystemTtsProvider } from './system.js'
 import { NovelTtsProvider } from './novel.js'
-import { isMobile } from '../../RossAscends-mods.js'
 import { power_user } from '../../power-user.js'
 
 const UPDATE_INTERVAL = 1000
 
 let voiceMap = {} // {charName:voiceid, charName2:voiceid2}
 let audioControl
-
+let storedvalue = false;
 let lastCharacterId = null
 let lastGroupId = null
 let lastChatId = null
@@ -64,6 +64,7 @@ let ttsProviders = {
     ElevenLabs: ElevenLabsTtsProvider,
     Silero: SileroTtsProvider,
     System: SystemTtsProvider,
+    Coqui: CoquiTtsProvider,
     Edge: EdgeTtsProvider,
     Novel: NovelTtsProvider,
 }
@@ -162,6 +163,20 @@ async function moduleWorker() {
     ttsJobQueue.push(message)
 }
 
+function talkingAnimation(switchValue) {
+    const apiUrl = getApiUrl();
+    const animationType = switchValue ? "start" : "stop";
+
+    if (switchValue !== storedvalue) {
+        try {
+            console.log(animationType + " Talking Animation");
+            doExtrasFetch(`${apiUrl}/api/live2d/${animationType}_talking`);
+            storedvalue = switchValue; // Update the storedvalue to the current switchValue
+        } catch (error) {
+            // Handle the error here or simply ignore it to prevent logging
+        }
+    }
+}
 
 function resetTtsPlayback() {
     // Stop system TTS utterance
@@ -289,8 +304,10 @@ function updateUiAudioPlayState() {
         // Give user feedback that TTS is active by setting the stop icon if processing or playing
         if (!audioElement.paused || isTtsProcessing()) {
             img = 'fa-solid fa-stop-circle extensionsMenuExtensionButton'
+            talkingAnimation(true)
         } else {
             img = 'fa-solid fa-circle-play extensionsMenuExtensionButton'
+            talkingAnimation(false)
         }
         $('#tts_media_control').attr('class', img);
     } else {
@@ -352,6 +369,7 @@ async function processAudioJobQueue() {
         audioQueueProcessorReady = false
         currentAudioJob = audioJobQueue.pop()
         playAudioData(currentAudioJob)
+        talkingAnimation(true)
     } catch (error) {
         console.error(error)
         audioQueueProcessorReady = true

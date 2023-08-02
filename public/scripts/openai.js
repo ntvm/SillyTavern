@@ -3,7 +3,7 @@
 * By CncAnon (@CncAnon1)
 * https://github.com/CncAnon1/TavernAITurbo
 */
-
+var Alwayscharnames = true;
 import {
     saveSettingsDebounced,
     checkOnlineStatus,
@@ -30,6 +30,7 @@ import {groups, selected_group} from "./group-chats.js";
 import {
     promptManagerDefaultSettings,
     promptManagerDefaultPromptLists,
+    promptManagerDefaultPromptOrders,
     chatCompletionDefaultPrompts, Prompt,
     PromptManagerModule as PromptManager
 } from "./PromptManager.js";
@@ -142,9 +143,8 @@ const default_settings = {
     openai_max_tokens: 300,
     wrap_in_quotes: false,
     names_in_completion: false,
-    ...chatCompletionDefaultPrompts,
-    ...promptManagerDefaultPromptLists,
-    ...promptManagerDefaultSettings,
+    chatCompletionDefaultPrompts,
+    promptManagerDefaultPromptOrders,
     send_if_empty: '',
     impersonation_prompt: default_impersonation_prompt,
     new_chat_prompt: default_new_chat_prompt,
@@ -165,6 +165,8 @@ const default_settings = {
     max_context_unlocked: false,
     api_url_scale: '',
     show_external_models: false,
+    proxy_password: '',
+    assistant_prefill: '',
 };
 
 const oai_settings = {
@@ -179,9 +181,8 @@ const oai_settings = {
     openai_max_tokens: 300,
     wrap_in_quotes: false,
     names_in_completion: false,
-    ...chatCompletionDefaultPrompts,
-    ...promptManagerDefaultPromptLists,
-    ...promptManagerDefaultSettings,
+    chatCompletionDefaultPrompts,
+    promptManagerDefaultPromptOrders,
     send_if_empty: '',
     impersonation_prompt: default_impersonation_prompt,
     new_chat_prompt: default_new_chat_prompt,
@@ -202,6 +203,8 @@ const oai_settings = {
     max_context_unlocked: false,
     api_url_scale: '',
     show_external_models: false,
+    proxy_password: '',
+    assistant_prefill: '',
 };
 
 let openai_setting_names;
@@ -625,8 +628,8 @@ function populateChatCompletion (prompts, chatCompletion, {bias, quietPrompt, ty
  * @returns {Object} prompts - The prepared and merged system and user-defined prompts.
  */
 function preparePromptsForChatCompletion(Scenario, charPersonality, name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts) {
-    const scenarioText = Scenario ? `Circumstances and context of the dialogue: ${Scenario}` : '';
-    const charPersonalityText = charPersonality ? `${name2}'s personality: ${charPersonality}` : '';
+    const scenarioText = Scenario ? `[Circumstances and context of the dialogue: ${Scenario}]` : '';
+    const charPersonalityText = charPersonality ? `[${name2}'s personality: ${charPersonality}]` : '';
 
     // Create entries for system prompts
     const systemPrompts = [
@@ -753,7 +756,7 @@ function prepareOpenAIMessages({
     chatCompletion.setTokenBudget(userSettings.openai_max_context, userSettings.openai_max_tokens);
 
     try {
-        // Populate markers, merge markers and ordered user prompts with system prompts
+        // Merge markers and ordered user prompts with system prompts
         const prompts = preparePromptsForChatCompletion(Scenario, charPersonality, name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts);
 
         // Fill the chat completion with as much context as the budget allows
@@ -766,17 +769,17 @@ function prepareOpenAIMessages({
         } else if (error instanceof  InvalidCharacterNameError) {
             toastr.warning('An error occurred while counting tokens: Invalid character name')
             chatCompletion.log('Invalid character name');
-            promptManager.error = 'The name of at least one character contained whitespaces or special characters. Please check your user and character name';
+            promptManager.error = 'The name of at least one character contained whitespaces or special characters. Please check your user and character name.';
         } else {
-            toastr.error('An unknown error occurred while counting tokens. Further information available in console.')
+            toastr.error('An unknown error occurred while counting tokens. Further information may be available in console.')
             chatCompletion.log('Unexpected error:');
             chatCompletion.log(error);
         }
     } finally {
         // Pass chat completion to prompt manager for inspection
         promptManager.setChatCompletion(chatCompletion);
-
-        // All information are up-to-date, render.
+		
+        // All information is up-to-date, render.
         if (false === dryRun) promptManager.render(false);
     }
 
@@ -1011,11 +1014,13 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
     if (oai_settings.reverse_proxy && [chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI].includes(oai_settings.chat_completion_source)) {
         validateReverseProxy();
         generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
+        generate_data['proxy_password'] = oai_settings.proxy_password;
     }
 
     if (isClaude) {
         generate_data['use_claude'] = true;
         generate_data['top_k'] = parseFloat(oai_settings.top_k_openai);
+        generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
     }
 
     if (isOpenRouter) {
@@ -1784,9 +1789,11 @@ function loadOpenAISettings(data, settings) {
     oai_settings.chat_completion_source = settings.chat_completion_source ?? default_settings.chat_completion_source;
     oai_settings.api_url_scale = settings.api_url_scale ?? default_settings.api_url_scale;
     oai_settings.show_external_models = settings.show_external_models ?? default_settings.show_external_models;
+    oai_settings.proxy_password = settings.proxy_password ?? default_settings.proxy_password;
+    oai_settings.assistant_prefill = settings.assistant_prefill ?? default_settings.assistant_prefill;
 
     oai_settings.prompts = settings.prompts ?? default_settings.prompts;
-    oai_settings.prompt_lists = settings.prompt_lists ?? default_settings.prompt_lists;
+    oai_settings.prompt_order = settings.prompt_order ?? default_settings.prompt_order;
     oai_settings.prompt_manager_settings = settings.prompt_manager_settings ?? default_settings.prompt_manager_settings;
 
     oai_settings.new_chat_prompt = settings.new_chat_prompt ?? default_settings.new_chat_prompt;
@@ -1801,6 +1808,8 @@ function loadOpenAISettings(data, settings) {
 
     $('#stream_toggle').prop('checked', oai_settings.stream_openai);
     $('#api_url_scale').val(oai_settings.api_url_scale);
+    $('#openai_proxy_password').val(oai_settings.proxy_password);
+    $('#claude_assistant_prefill').val(oai_settings.assistant_prefill);
 
     $('#model_openai_select').val(oai_settings.openai_model);
     $(`#model_openai_select option[value="${oai_settings.openai_model}"`).attr('selected', true);
@@ -1825,9 +1834,7 @@ function loadOpenAISettings(data, settings) {
     $('#openai_external_category').toggle(oai_settings.show_external_models);
 
     if (settings.impersonation_prompt !== undefined) oai_settings.impersonation_prompt = settings.impersonation_prompt;
-    $('#main_prompt_textarea').val(oai_settings.main_prompt);
-    $('#nsfw_prompt_textarea').val(oai_settings.nsfw_prompt);
-    $('#jailbreak_prompt_textarea').val(oai_settings.jailbreak_prompt);
+
     $('#impersonation_prompt_textarea').val(oai_settings.impersonation_prompt);
     $('#nsfw_avoidance_prompt_textarea').val(oai_settings.nsfw_avoidance_prompt);
 
@@ -1857,9 +1864,7 @@ function loadOpenAISettings(data, settings) {
     if (settings.reverse_proxy !== undefined) oai_settings.reverse_proxy = settings.reverse_proxy;
     $('#openai_reverse_proxy').val(oai_settings.reverse_proxy);
 
-    if (oai_settings.reverse_proxy !== '') {
-        $("#ReverseProxyWarningMessage").css('display', 'block');
-    }
+    $(".reverse_proxy_warning").toggle(oai_settings.reverse_proxy !== '');
 
     $('#openai_logit_bias_preset').empty();
     for (const preset of Object.keys(oai_settings.bias_presets)) {
@@ -1900,6 +1905,7 @@ async function getStatusOpen() {
 
         let data = {
             reverse_proxy: oai_settings.reverse_proxy,
+            proxy_password: oai_settings.proxy_password,
             use_openrouter: oai_settings.chat_completion_source == chat_completion_sources.OPENROUTER,
         };
 
@@ -1999,16 +2005,18 @@ async function saveOpenAIPreset(name, settings) {
         continue_nudge_prompt: settings.continue_nudge_prompt,
         bias_preset_selected: settings.bias_preset_selected,
         reverse_proxy: settings.reverse_proxy,
+        proxy_password: settings.proxy_password,
         legacy_streaming: settings.legacy_streaming,
         max_context_unlocked: settings.max_context_unlocked,
         nsfw_avoidance_prompt: settings.nsfw_avoidance_prompt,
         wi_format: settings.wi_format,
         stream_openai: settings.stream_openai,
         prompts: settings.prompts,
-        prompt_lists: settings.prompt_lists,
+        prompt_order: settings.prompt_order,
         prompt_manager_settings: settings.prompt_manager_settings,
         api_url_scale: settings.api_url_scale,
         show_external_models: settings.show_external_models,
+        assistant_prefill: settings.assistant_prefill,
     };
 
     const savePresetSettings = await fetch(`/savepreset_openai?name=${name}`, {
@@ -2338,11 +2346,13 @@ function onSettingsPresetChange() {
         wi_format: ['#wi_format_textarea', 'wi_format', false],
         stream_openai: ['#stream_toggle', 'stream_openai', true],
         prompts: ['', 'prompts', false],
-        prompt_lists: ['', 'prompt_lists', false],
+        prompt_order: ['', 'prompt_order', false],
         prompt_manager_settings: ['', 'prompt_manager_settings', false],
         use_openrouter: ['#use_openrouter', 'use_openrouter', true],
         api_url_scale: ['#api_url_scale', 'api_url_scale', false],
         show_external_models: ['#openai_show_external_models', 'show_external_models', true],
+        proxy_password: ['#openai_proxy_password', 'proxy_password', false],
+        assistant_prefill: ['#claude_assistant_prefill', 'assistant_prefill', false],
     };
 
     for (const [key, [selector, setting, isCheckbox]] of Object.entries(settingsToUpdate)) {
@@ -2554,9 +2564,7 @@ async function onNewPresetClick() {
 
 function onReverseProxyInput() {
     oai_settings.reverse_proxy = $(this).val();
-    if (oai_settings.reverse_proxy == '') {
-        $("#ReverseProxyWarningMessage").css('display', 'none');
-    } else { $("#ReverseProxyWarningMessage").css('display', 'block'); }
+    $(".reverse_proxy_warning").toggle(oai_settings.reverse_proxy != '');
     saveSettingsDebounced();
 }
 
@@ -2608,7 +2616,7 @@ async function onConnectButtonClick(e) {
             await writeSecret(SECRET_KEYS.CLAUDE, api_key_claude);
         }
 
-        if (!secret_state[SECRET_KEYS.CLAUDE]) {
+        if (!secret_state[SECRET_KEYS.CLAUDE] && !oai_settings.reverse_proxy) {
             console.log('No secret key saved for Claude');
             return;
         }
@@ -2621,7 +2629,7 @@ async function onConnectButtonClick(e) {
             await writeSecret(SECRET_KEYS.OPENAI, api_key_openai);
         }
 
-        if (!secret_state[SECRET_KEYS.OPENAI]) {
+        if (!secret_state[SECRET_KEYS.OPENAI] && !oai_settings.reverse_proxy) {
             console.log('No secret key saved for OpenAI');
             return;
         }
@@ -2886,6 +2894,16 @@ $(document).ready(function () {
     $('#openai_show_external_models').on('input', function () {
         oai_settings.show_external_models = !!$(this).prop('checked');
         $('#openai_external_category').toggle(oai_settings.show_external_models);
+        saveSettingsDebounced();
+    });
+
+    $('#openai_proxy_password').on('input', function () {
+        oai_settings.proxy_password = $(this).val();
+        saveSettingsDebounced();
+    });
+
+    $('#claude_assistant_prefill').on('input', function () {
+        oai_settings.assistant_prefill = $(this).val();
         saveSettingsDebounced();
     });
 
