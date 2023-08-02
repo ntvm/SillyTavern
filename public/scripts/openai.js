@@ -3,7 +3,9 @@
 * By CncAnon (@CncAnon1)
 * https://github.com/CncAnon1/TavernAITurbo
 */
-var Alwayscharnames = true;
+
+var AlwaysCharnames = true;
+var AlwaysCharnames = true;
 import {
     saveSettingsDebounced,
     checkOnlineStatus,
@@ -252,9 +254,20 @@ function setOpenAIMessages(chat) {
             openai_narrator_messages_count++;
         }
 
-        // for groups or sendas command - prepend a character's name
-        if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
-            content = `${chat[j].name}: ${content}`;
+        // Check the value of AlwaysCharnames
+        switch (AlwaysCharnames) {
+            // If it is on, use Anons code
+            case true:
+                // for groups or sendas command - prepend a character's name
+                content = `${chat[j].name}: ${content}`;
+                break
+            // If it is anything else, use the original code
+            default:
+                // for groups or sendas command - prepend a character's name
+                if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
+                    content = `${chat[j].name}: ${content}`;
+                }
+
         }
 
         content = replaceBiasMarkup(content);

@@ -614,6 +614,36 @@ function countTokensRemote(endpoint, str, padding) {
     return tokenCount + padding;
 }
 
+function getTextTokensRemote(endpoint, str) {
+    let ids = [];
+    jQuery.ajax({
+        async: false,
+        type: 'POST',
+        url: endpoint,
+        data: JSON.stringify({ text: str }),
+        dataType: "json",
+        contentType: "application/json",
+        success: function (data) {
+            ids = data.ids;
+        }
+    });
+    return ids;
+}
+
+export function getTextTokens(tokenizerType, str) {
+    switch (tokenizerType) {
+        case tokenizers.LLAMA:
+            return getTextTokensRemote('/tokenize_llama', str);
+        case tokenizers.NERD:
+            return getTextTokensRemote('/tokenize_nerdstash', str);
+        case tokenizers.NERD2:
+            return getTextTokensRemote('/tokenize_nerdstash_v2', str);
+        default:
+            console.warn("Calling getTextTokens with unsupported tokenizer type", tokenizerType);
+            return [];
+    }
+}
+
 function reloadMarkdownProcessor(render_formulas = false) {
     if (render_formulas) {
         converter = new showdown.Converter({
@@ -1980,6 +2010,7 @@ class StreamingProcessor {
     onProgressStreaming(messageId, text, isFinal) {
         const isImpersonate = this.type == "impersonate";
         const isContinue = this.type == "continue";
+        const isLookaround = this.type == "lookaround";
         text = this.removePrefix(text);
         let processedText = cleanUpMessage(text, isImpersonate, isContinue, !isFinal);
         let result = extractNameFromMessage(processedText, this.force_name2, isImpersonate);
@@ -2269,7 +2300,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         }
 
         const isContinue = type == 'continue';
-        deactivateSendButtons();
+        const isLookaround = type == 'lookaround';
+		deactivateSendButtons();
 
         let { messageBias, promptBias, isUserPromptBias } = getBiasStrings(textareaText, type);
 
@@ -2514,7 +2546,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
             generatedPromtCache += cycleGenerationPromt;
             if (generatedPromtCache.length == 0 || type === 'continue') {
-                if (main_api === 'openai') {
+				if (main_api === 'openai') {
                     generateOpenAIPromptCache();
                 }
 
@@ -2528,7 +2560,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     }
 
                     if (i === arrMes.length - 1 && !item.trim().startsWith(name1 + ":")) {
-                        if (textareaText == "") {
+                        //if (textareaText == "") {
                             // Cohee: I think this was added to allow the model to continue
                             // where it left off by removing the trailing newline at the end
                             // that was added by chat2 generator. This causes problems with
@@ -2536,7 +2568,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                             // removing a newline ONLY at the end of the string if it exists.
                             item = item.replace(/\n?$/, '');
                             //item = item.substr(0, item.length - 1);
-                        }
+                        //}
                     }
                     if (is_pygmalion && !isInstruct) {
                         if (item.trim().startsWith(name1)) {
@@ -2728,7 +2760,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             }
             else if (main_api == 'novel') {
                 const this_settings = novelai_settings[novelai_setting_names[nai_settings.preset_settings_novel]];
-                generate_data = getNovelGenerationData(finalPromt, this_settings, this_amount_gen);
+                generate_data = getNovelGenerationData(finalPromt, this_settings, this_amount_gen, isImpersonate);
             }
             else if (main_api == 'openai') {
                 let [prompt, counts] = prepareOpenAIMessages({
@@ -2916,8 +2948,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     }
 
                     //Formating
-                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue);
-
+                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue, isLookaround);
                     let this_mes_is_name;
                     ({ this_mes_is_name, getMessage } = extractNameFromMessage(getMessage, force_name2, isImpersonate));
                     if (getMessage.length > 0) {
@@ -3032,7 +3063,7 @@ function getNextMessageId(type) {
 }
 
 export function getBiasStrings(textareaText, type) {
-    if (type == 'impersonate' || type == 'continue') {
+    if (type == 'impersonate' || type == 'continue' || type === 'lookaround') {
         return { messageBias: '', promptBias: '', isUserPromptBias: false };
     }
 
@@ -7819,6 +7850,13 @@ $(document).ready(function () {
             if (is_send_press == false || fromSlashCommand) {
                 is_send_press = true;
                 Generate("continue");
+            }
+        }
+        
+        else if (id == 'option_lookaround') {
+            if (is_send_press == false || fromSlashCommand) {
+                is_send_press = true;
+                Generate("lookaround");
             }
         }
 

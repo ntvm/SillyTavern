@@ -178,13 +178,19 @@ async function loadSentencepieceTokenizer(modelPath) {
 async function countSentencepieceTokens(spp, text) {
     // Fallback to strlen estimation
     if (!spp) {
-        return Math.ceil(text.length / CHARS_PER_TOKEN);
+        return {
+            ids: [],
+            count: Math.ceil(text.length / CHARS_PER_TOKEN)
+        };
     }
 
-    let cleaned = cleanText(text);
+    let cleaned = text; // cleanText(text); <-- cleaning text can result in an incorrect tokenization
 
     let ids = spp.encodeIds(cleaned);
-    return ids.length;
+    return {
+        ids,
+        count: ids.length
+    };
 }
 
 async function loadClaudeTokenizer(modelPath) {
@@ -1832,6 +1838,7 @@ app.post("/generate_novelai", jsonParser, async function (request, response_gene
             "cfg_scale": request.body.cfg_scale,
             "cfg_uc": request.body.cfg_uc,
             "phrase_rep_pen": request.body.phrase_rep_pen,
+            "stop_sequences": request.body.stop_sequences,
             //"stop_sequences": {{187}},
             "bad_words_ids": isNewModel ? novelai.badWordsList : (isKrake ? novelai.krakeBadWordsList : novelai.euterpeBadWordsList),
             "logit_bias_exp": isNewModel ? novelai.logitBiasExp : null,
@@ -2997,46 +3004,77 @@ function convertChatMLPrompt(messages) {
 
 // Prompt Conversion script taken from RisuAI by @kwaroran (GPLv3).
 function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix) {
-    // Claude doesn't support message names, so we'll just add them to the message content.
-    for (const message of messages) {
-        if (message.name && message.role !== "system") {
-            message.content = message.name + ": " + message.content;
-            delete message.name;
-        }
-    }
+    // Check the value of HumAssistOff
+    const { HumAssistOff } = require('./config.conf');
+    const { SystemFul  } = require('./config.conf');
+    let requestPrompt;
+    switch (HumAssistOff) {
+        // If it is true, Now you won't had H and A
+        case true:
+            requestPrompt = messages.map((v) => {
+                return v.content+"\n\n";
+            }).join('');
 
-    let requestPrompt = messages.map((v) => {
-        let prefix = '';
-        switch (v.role) {
-            case "assistant":
-                prefix = "\n\nAssistant: ";
-                break
-            case "user":
-                prefix = "\n\nHuman: ";
-                break
-            case "system":
-                // According to the Claude docs, H: and A: should be used for example conversations.
-                if (v.name === "example_assistant") {
-                    prefix = "\n\nA: ";
-                } else if (v.name === "example_user") {
-                    prefix = "\n\nH: ";
-                } else {
-                    prefix = "\n\n";
+            if (addHumanPrefix) {
+                requestPrompt = "\n\nHuman: " + requestPrompt;
+            }
+
+            if (addAssistantPostfix) {
+                requestPrompt = requestPrompt + '\n\nAssistant: ';
+            }
+
+            return requestPrompt;
+            break
+        // If it is false or anything else, use the RisuAI original code
+        default:
+            // Claude doesn't support message names, so we'll just add them to the message content.
+            for (const message of messages) {
+                if (message.name && message.role !== "system") {
+                    message.content = message.name + ": " + message.content;
+                    delete message.name;
                 }
-                break
-        }
-        return prefix + v.content;
-    }).join('');
+            }
 
-    if (addHumanPrefix) {
-        requestPrompt = "\n\nHuman: " + requestPrompt;
+            requestPrompt = messages.map((v) => {
+                let prefix = '';
+                switch (v.role) {
+                    case "assistant":
+                        prefix = "\n\nAssistant: ";
+                        break
+                    case "user":
+                        prefix = "\n\nHuman: ";
+                        break
+                    case "system":
+                        // According to the Claude docs, H: and A: should be used for example conversations.
+                        if (v.name === "example_assistant") {
+                            prefix = "\n\nA: ";
+                        } else if (v.name === "example_user") {
+                            prefix = "\n\nH: ";
+                        } else {
+                            switch (SystemFul) {
+                                case true:
+                                    prefix = "\n\nSystem: ";
+                                    break
+                                default:
+                                    prefix = "\n\n";
+                                    break
+                            }
+                        }
+                        break
+                }
+                return prefix + v.content;
+            }).join('');
+
+            if (addHumanPrefix) {
+                requestPrompt = "\n\nHuman: " + requestPrompt;
+            }
+
+            if (addAssistantPostfix) {
+                requestPrompt = requestPrompt + '\n\nAssistant: ';
+            }
+
+            return requestPrompt;
     }
-
-    if (addAssistantPostfix) {
-        requestPrompt = requestPrompt + '\n\nAssistant: ';
-    }
-
-    return requestPrompt;
 }
 
 async function sendScaleRequest(request, response) {
@@ -3289,11 +3327,11 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
 
         switch (error?.response?.status) {
             case 402:
-                message = 'Credit limit reached';
+                message = error?.response?.data?.error?.message || 'Credit limit reached';
                 console.log(message);
                 break;
             case 403:
-                message = 'API key disabled or exhausted';
+                message = error?.response?.data?.error?.message || 'API key disabled or exhausted';
                 console.log(message);
                 break;
             case 451:
@@ -3427,8 +3465,8 @@ function createTokenizationHandler(getTokenizerFn) {
 
         const text = request.body.text || '';
         const tokenizer = getTokenizerFn();
-        const count = await countSentencepieceTokens(tokenizer, text);
-        return response.send({ count });
+        const { ids, count } = await countSentencepieceTokens(tokenizer, text);
+        return response.send({ ids, count });
     };
 }
 
