@@ -608,6 +608,7 @@ function reloadMarkdownProcessor(render_formulas = false) {
         converter = new showdown.Converter({
             emoji: "true",
             underline: "true",
+            parseImgDimensions: "true",
             extensions: [
                 showdownKatex(
                     {
@@ -623,6 +624,7 @@ function reloadMarkdownProcessor(render_formulas = false) {
         converter = new showdown.Converter({
             emoji: "true",
             literalMidWordUnderscores: "true",
+            parseImgDimensions: "true",
         });
     }
 
@@ -6837,6 +6839,11 @@ function importCharacter(file) {
         contentType: false,
         processData: false,
         success: async function (data) {
+            if (data.error) {
+                toastr.error('The file is likely invalid or corrupted.', 'Could not import character');
+                return;
+            }
+
             if (data.file_name !== undefined) {
                 $('#character_search_bar').val('').trigger('input');
                 $("#rm_info_block").transition({ opacity: 0, duration: 0 });
