@@ -534,12 +534,14 @@ export function dragElement(elmnt) {
 
     if (elmntHeader.length) {
         elmntHeader.off('mousedown').on('mousedown', (e) => {
-
+            hasBeenDraggedByUser = true
+            observer.observe(elmnt.get(0), { attributes: true, attributeFilter: ['style'] });
             dragMouseDown(e);
         });
-        $(elmnt).off('mousedown').on('mousedown', () => { isMouseDown = true })
-    } else {
-        elmnt.off('mousedown').on('mousedown', dragMouseDown);
+        $(elmnt).off('mousedown').on('mousedown', () => {
+            isMouseDown = true
+            observer.observe(elmnt.get(0), { attributes: true, attributeFilter: ['style'] });
+        })
     }
 
     const observer = new MutationObserver((mutations) => {
@@ -618,7 +620,7 @@ export function dragElement(elmnt) {
             }
 
             //prevent resizing from top left into the top bar
-            if (top <= 40 && maxX >= topBarFirstX && left <= topBarFirstX
+            if (top < 40 && maxX >= topBarFirstX && left <= topBarFirstX
             ) {
                 console.debug('prevent topbar underlap resize')
                 elmnt.css('width', width - 1 + "px");
@@ -673,8 +675,6 @@ export function dragElement(elmnt) {
             elmnt.off('mousedown').on('mousedown', dragMouseDown);
         }
     });
-
-    observer.observe(elmnt.get(0), { attributes: true, attributeFilter: ['style'] });
 
     function dragMouseDown(e) {
 
@@ -745,6 +745,7 @@ export function dragElement(elmnt) {
         $("body").css("overflow", "");
         // Clear the "data-dragged" attribute
         elmnt.attr('data-dragged', 'false');
+        observer.disconnect()
         console.debug(`Saving ${elmntName} UI position`)
         saveSettingsDebounced();
 
@@ -987,6 +988,12 @@ $("document").ready(function () {
                 Generate();
             }
         }
+        if ($(':focus').attr('id') === 'dialogue_popup_input' && !isMobile()) {
+            if (!event.shiftKey && !event.ctrlKey && event.key == "Enter") {
+                event.preventDefault();
+                $('#dialogue_popup_ok').trigger('click');
+            }
+        }
         //ctrl+shift+up to scroll to context line
         if (event.shiftKey && event.ctrlKey && event.key == "ArrowUp") {
             event.preventDefault();
@@ -1133,6 +1140,12 @@ $("document").ready(function () {
                 $("#rightNavDrawerIcon").trigger('click');
                 return
             }
+        }
+
+        if (event.ctrlKey && /^[1-9]$/.test(event.key)) {
+            // Your code here
+            event.preventDefault();
+            console.log("Ctrl +" + event.key + " pressed!");
         }
     }
 });

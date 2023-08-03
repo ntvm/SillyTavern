@@ -379,6 +379,10 @@ async function summarizeChat(context) {
 
 async function summarizeChatMain(context, force) {
     try {
+        // Wait for group to finish generating
+        if (selected_group) {
+            await waitUntilCondition(() => is_group_generating === false, 1000, 10);
+        }
         // Wait for the send button to be released
         waitUntilCondition(() => is_send_press === false, 30000, 100);
     } catch {
