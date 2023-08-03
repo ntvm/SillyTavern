@@ -1998,6 +1998,7 @@ class StreamingProcessor {
     onProgressStreaming(messageId, text, isFinal) {
         const isImpersonate = this.type == "impersonate";
         const isContinue = this.type == "continue";
+        const isLookaround = this.type == "lookaround";
         text = this.removePrefix(text);
         let processedText = cleanUpMessage(text, isImpersonate, isContinue, !isFinal);
         let result = extractNameFromMessage(processedText, this.force_name2, isImpersonate);
@@ -2267,7 +2268,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         }
 
         const isContinue = type == 'continue';
-        deactivateSendButtons();
+        const isLookaround = type == 'lookaround';
+		deactivateSendButtons();
 
         let { messageBias, promptBias, isUserPromptBias } = getBiasStrings(textareaText, type);
 
@@ -2512,7 +2514,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
             generatedPromtCache += cycleGenerationPromt;
             if (generatedPromtCache.length == 0 || type === 'continue') {
-                if (main_api === 'openai') {
+				if (main_api === 'openai') {
                     generateOpenAIPromptCache();
                 }
 
@@ -2912,8 +2914,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     }
 
                     //Formating
-                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue);
-
+                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue, isLookaround);
                     let this_mes_is_name;
                     ({ this_mes_is_name, getMessage } = extractNameFromMessage(getMessage, force_name2, isImpersonate));
                     if (getMessage.length > 0) {
@@ -3035,7 +3036,7 @@ function getNextMessageId(type) {
 }
 
 export function getBiasStrings(textareaText, type) {
-    if (type == 'impersonate' || type == 'continue') {
+    if (type == 'impersonate' || type == 'continue' || type === 'lookaround') {
         return { messageBias: '', promptBias: '', isUserPromptBias: false };
     }
 
@@ -7848,6 +7849,13 @@ $(document).ready(function () {
             if (is_send_press == false || fromSlashCommand) {
                 is_send_press = true;
                 Generate("continue");
+            }
+        }
+        
+        else if (id == 'option_lookaround') {
+            if (is_send_press == false || fromSlashCommand) {
+                is_send_press = true;
+                Generate("lookaround");
             }
         }
 
