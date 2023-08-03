@@ -13,6 +13,7 @@ import {
     menu_type,
     max_context,
     saveSettingsDebounced,
+    eventSource,
     active_group,
     active_character,
     setActiveGroup,
@@ -747,7 +748,6 @@ export function dragElement(elmnt) {
         elmnt.attr('data-dragged', 'false');
         console.debug(`Saving ${elmntName} UI position`)
         saveSettingsDebounced();
-
     }
 }
 
@@ -919,12 +919,11 @@ $("document").ready(function () {
     // when a char is selected from the list, save them as the auto-load character for next page load
 
     // when a char is selected from the list, save their name as the auto-load character for next page load
-    $(document).on("click", ".character_select", function () {
+        $(document).on("click", ".character_select", function () {
         setActiveCharacter($(this).find('.avatar').attr('title'));
         setActiveGroup(null);
         saveSettingsDebounced();
     });
-
     $(document).on("click", ".group_select", function () {
         setActiveCharacter(null);
         setActiveGroup($(this).data('id'));
