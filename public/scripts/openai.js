@@ -29,8 +29,6 @@ import {
 import {groups, selected_group} from "./group-chats.js";
 
 import {
-    promptManagerDefaultSettings,
-    promptManagerDefaultPromptLists,
     promptManagerDefaultPromptOrders,
     chatCompletionDefaultPrompts, Prompt,
     PromptManagerModule as PromptManager
@@ -95,6 +93,8 @@ const default_new_chat_prompt = '[Start a new Chat]';
 const default_new_group_chat_prompt = '[Start a new group chat. Group members: {{group}}]';
 const default_new_example_chat_prompt = '[Start a new Chat]';
 const default_continue_nudge_prompt = '[Continue the following message. Do not include ANY parts of the original message. Use capitalization and punctuation as if your reply is a part of the original message: {{lastChatMessage}}]';
+const default_lookaround_nudge_prompt = '[Complete these steps: 1. Paste a line break. 2. Write "```XML" and add a line break. 3. Describe in 50 words the scene Human is currently in. Describe the location, objects, and chatacers (if applicable) that Human can interact with, much like a Dungeon & Dragons GM would starting with "👁 You look around and see...". Make it 60 words total. 4. Add a line break and write "```".]';
+const default_assistant_prefill = ''
 const default_bias = 'Default (none)';
 const default_bias_presets = {
     [default_bias]: [],
@@ -152,6 +152,7 @@ const default_settings = {
     new_group_chat_prompt: default_new_group_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
+	lookaround_nudge_prompt: default_lookaround_nudge_prompt,
     bias_preset_selected: default_bias,
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
@@ -190,6 +191,7 @@ const oai_settings = {
     new_group_chat_prompt: default_new_group_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
+	lookaround_nudge_prompt: default_lookaround_nudge_prompt,
     bias_preset_selected: default_bias,
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
@@ -448,6 +450,20 @@ function populateChatHistory(prompts, chatCompletion, type = null, cyclePrompt =
         continueMessage = Message.fromPrompt(preparedPrompt);
         chatCompletion.reserveBudget(continueMessage);
     }
+	
+	    // Reserve budget for continue nudge
+    let lookaroundMessage = null;
+    if (type === 'lookaround') {
+        const continuePrompt = new Prompt({
+            identifier: 'continueNudge',
+            role: 'system',
+            content: oai_settings.lookaround_nudge_prompt,
+            system_prompt: true
+        });
+        const preparedPrompt = promptManager.preparePrompt(continuePrompt);
+        continueMessage = Message.fromPrompt(preparedPrompt);
+        chatCompletion.reserveBudget(continueMessage);
+    }
 
     const lastChatPrompt = openai_msgs[openai_msgs.length - 1];
     const message = new Message('user', oai_settings.send_if_empty, 'emptyUserMessageReplacement');
@@ -480,7 +496,10 @@ function populateChatHistory(prompts, chatCompletion, type = null, cyclePrompt =
         chatCompletion.freeBudget(continueMessage);
         chatCompletion.insertAtEnd(continueMessage, 'chatHistory')
     }
-
+    if (type === 'lookaround') {
+        chatCompletion.freeBudget(continueMessage);
+        chatCompletion.insertAtEnd(continueMessage, 'chatHistory')
+    }
 }
 
 /**
@@ -1033,7 +1052,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
     if (isClaude) {
         generate_data['use_claude'] = true;
         generate_data['top_k'] = parseFloat(oai_settings.top_k_openai);
-        generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
+        generate_data['assistant_prefill'] = (oai_settings.assistant_prefill);
     }
 
     if (isOpenRouter) {
@@ -1813,6 +1832,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.new_group_chat_prompt = settings.new_group_chat_prompt ?? default_settings.new_group_chat_prompt;
     oai_settings.new_example_chat_prompt = settings.new_example_chat_prompt ?? default_settings.new_example_chat_prompt;
     oai_settings.continue_nudge_prompt = settings.continue_nudge_prompt ?? default_settings.continue_nudge_prompt;
+	oai_settings.lookaround_nudge_prompt = settings.lookaround_nudge_prompt ?? default_settings.lookaround_nudge_prompt;
 
     if (settings.keep_example_dialogue !== undefined) oai_settings.keep_example_dialogue = !!settings.keep_example_dialogue;
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
@@ -1855,6 +1875,7 @@ function loadOpenAISettings(data, settings) {
     $('#newgroupchat_prompt_textarea').val(oai_settings.new_group_chat_prompt);
     $('#newexamplechat_prompt_textarea').val(oai_settings.new_example_chat_prompt);
     $('#continue_nudge_prompt_textarea').val(oai_settings.continue_nudge_prompt);
+	$('#lookaround_nudge_prompt_textarea').val(oai_settings.lookaround_nudge_prompt);
 
     $('#wi_format_textarea').val(oai_settings.wi_format);
     $('#send_if_empty_textarea').val(oai_settings.send_if_empty);
@@ -2016,6 +2037,7 @@ async function saveOpenAIPreset(name, settings) {
         new_group_chat_prompt: settings.new_group_chat_prompt,
         new_example_chat_prompt: settings.new_example_chat_prompt,
         continue_nudge_prompt: settings.continue_nudge_prompt,
+        lookaround_nudge_prompt: settings.lookaround_nudge_prompt,
         bias_preset_selected: settings.bias_preset_selected,
         reverse_proxy: settings.reverse_proxy,
         proxy_password: settings.proxy_password,
@@ -2352,6 +2374,7 @@ function onSettingsPresetChange() {
         new_group_chat_prompt: ['#newgroupchat_prompt_textarea', 'new_group_chat_prompt', false],
         new_example_chat_prompt: ['#newexamplechat_prompt_textarea', 'new_example_chat_prompt', false],
         continue_nudge_prompt: ['#continue_nudge_prompt_textarea', 'continue_nudge_prompt', false],
+        lookaround_nudge_prompt: ['#lookaround_nudge_prompt_textarea', 'lookaround_nudge_prompt', false],
         bias_preset_selected: ['#openai_logit_bias_preset', 'bias_preset_selected', false],
         reverse_proxy: ['#openai_reverse_proxy', 'reverse_proxy', false],
         legacy_streaming: ['#legacy_streaming', 'legacy_streaming', true],
@@ -2797,6 +2820,11 @@ $(document).ready(function () {
         saveSettingsDebounced();
     });
 
+    $("#lookaround_nudge_prompt_textarea").on('input', function () {
+        oai_settings.lookaround_nudge_prompt = $('#lookaround_nudge_prompt_textarea').val();
+        saveSettingsDebounced();
+    });
+
     $("#nsfw_avoidance_prompt_textarea").on('input', function () {
         oai_settings.nsfw_avoidance_prompt = $('#nsfw_avoidance_prompt_textarea').val();
         saveSettingsDebounced();
@@ -2869,6 +2897,12 @@ $(document).ready(function () {
     $("#continue_nudge_prompt_restore").on('click', function () {
         oai_settings.continue_nudge_prompt = default_continue_nudge_prompt;
         $('#continue_nudge_prompt_textarea').val(oai_settings.continue_nudge_prompt);
+        saveSettingsDebounced();
+    });
+
+    $("#lookaround_nudge_prompt_restore").on('click', function () {
+        oai_settings.lookaround_nudge_prompt = default_lookaround_nudge_prompt;
+        $('#lookaround_nudge_prompt_textarea').val(oai_settings.lookaround_nudge_prompt);
         saveSettingsDebounced();
     });
 
