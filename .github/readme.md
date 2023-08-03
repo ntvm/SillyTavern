@@ -1,7 +1,7 @@
 О Форке.
 Добавляю сюда интересные куски кода для Таверны которые встретил надваче или еще где-либо и адаптирую различные кустарные переделки в основной код. Вытягиваю обновления из основного SillyTavern 1-2 раза в день. Форк не должен подтягиваться на основную витку в исходном виде(И не будет), Однако, Вы можете попросить реализовать функции отсюда самого Cohee
 
-Обновлена ветка Prompt manager, (Можно менять местами где конкретно находятся разные части промпта. Однако как и в оргигинале, есть подвох, Main NSFW jail не автоэкспортируюся)
+Обновлена ветка Prompt manager, (Можно менять местами где конкретно находятся разные части промпта. Однако как и в оргигинале, есть подвох, Main NSFW jail не автоэкспортируюся).
 
 ----------------------
 Мини инструкция. 
@@ -316,6 +316,7 @@ GNU Affero General Public License for more details.**
 * RossAscends' additions: AGPL v3
 * Portions of CncAnon's TavernAITurbo mod: Unknown license
 * kingbri's various commits and suggestions (<https://github.com/bdashore3>)
+* StefanDanielSchwarz's various commits and bug reports (<https://github.com/StefanDanielSchwarz>)
 * Waifu mode inspired by the work of PepperTaco (<https://github.com/peppertaco/Tavern/>)
 * Thanks Pygmalion University for being awesome testers and suggesting cool features!
 * Thanks oobabooga for compiling presets for TextGen
