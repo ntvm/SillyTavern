@@ -3,7 +3,8 @@
 * By CncAnon (@CncAnon1)
 * https://github.com/CncAnon1/TavernAITurbo
 */
-var AlwaysCharnames = true;
+
+
 import {
     saveSettingsDebounced,
     substituteParams,
@@ -23,6 +24,8 @@ import {
     main_api,
 } from "../script.js";
 import { groups, selected_group } from "./group-chats.js";
+import { extension_settings} from "./extensions.js";
+
 
 import {
     power_user,
@@ -146,6 +149,11 @@ const default_settings = {
     assistant_prefill: '',
 };
 
+
+
+
+
+
 const oai_settings = {
     preset_settings_openai: 'Default',
     temp_openai: 1.0,
@@ -182,6 +190,7 @@ const oai_settings = {
     show_external_models: false,
     proxy_password: '',
     assistant_prefill: '',
+
 };
 
 let openai_setting_names;
@@ -226,7 +235,17 @@ function setOpenAIMessages(chat) {
             role = 'system';
             openai_narrator_messages_count++;
         }
-
+    switch (extension_settings.Nvkun.AlwaysCharnames) {
+        case undefined:
+            var AlwaysCharnames = extension_settings.Nvkun.AlwaysCharnames;
+            break
+        case "true": 
+            AlwaysCharnames = true;
+            break
+        default:
+            AlwaysCharnames = false;
+            break
+    }
         // Check the value of AlwaysCharnames
         switch (AlwaysCharnames) {
             // If it is on, use Anons code
@@ -445,7 +464,7 @@ async function prepareOpenAIMessages({ systemPrompt, name2, storyString, worldIn
         await delay(1);
     }
     if (type == 'lookaround') {
-    const lookaroundNudge = { "role": "system", "content": stringFormat('[Complete these steps: 1. Paste a line break. 2. Write "```XML" and add a line break. 3. Describe in 50 words the scene Human is currently in. Describe the location, objects, and chatacers (if applicable) that Human can interact with, much like a Dungeon & Dragons GM would starting with "👁 You look around and see...". Make it 60 words total. 4. Add a line break and write "```".]', cyclePrompt || '') };
+    const lookaroundNudge = { "role": "system", "content": stringFormat('[Complete these steps: 1. Paste a line break. 2. Write "```XML" and add a line break. 3. Describe in 50 words the scene Human is currently in. Describe the location, objects, and chatacers (if applicable) that Human can interact with, much like a Dungeon & Dragons GM would starting with "👁 You look around and see...". Make it 60 words total. 4. Add a line break and write "```".', cyclePrompt || '') };
     openai_msgs.push(lookaroundNudge);
 
     total_count += handler_instance.count([lookaroundNudge], true, 'lookaround');
