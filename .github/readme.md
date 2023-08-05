@@ -1,7 +1,33 @@
 
+О Форке.
+Добавляю сюда интересные куски кода для Таверны которые встретил надваче или еще где-либо и адаптирую различные кустарные переделки в основной код. Вытягиваю обновления из основного SillyTavern 1-2 раза в день. Форк не должен подтягиваться на основную витку в исходном виде(И не будет), Однако, Вы можете попросить реализовать функции отсюда самого Cohee
+
+Обновлена ветка Prompt manager, (Можно менять местами где конкретно находятся разные части промпта. Однако как и в оргигинале, есть подвох, Main NSFW jail не автоэкспортируюся)
+
+----------------------
+Мини инструкция. 
+
+Lookaround работает из коробки.; 
+
+AlwaysCharnames(На данный момент находится в самом начале public\scripts\openai.js)(Включает перманентное имя карточки  в промпте) включено; 
+
+В корне Таверны, config.conf: HumAssistOff (Убирает'Human:' и 'Assistant' из таверны) выключен. P.S. Самый изначальный Human и Assistant в последнем сообщении Юзера убрать невозможно, ибо они необходимы для API;  
+Systemful (Возвращает роль System для Claude)(Работает только в режиме с присутствующими Humans и assistants) включено (Как выключить? В config.conf (РЯДОМ С Start.bat) меняешь Systemful = true; на Systemful = false;); 
+
+В интерфейсе Summarize встроенная возможность переключть оригинальный Summarize и вариант Hints от XML-кунов (После апдейта на базе данного изменения У вас просто есть переключатель, чтобы использовать вариант XML кунов без возни с настройками, однако основной функционал остается.)
+
+
+
+
+В силу деятельности одного "Ддосадолботряска" который даже неудосужился посмотреть какие конкретно изменения в коде сделал XML кун чтобы избежать ддоса прокси. Примеры Hints теперь будут лежать в colab/readme.md
+
+----------------------
+
+English | [中文](readme-zh_cn.md)
+
 ![image](https://github.com/SillyTavern/SillyTavern/assets/18619528/8c41a061-7f72-4d2b-9d54-e6d058209e7b)
 
-Mobile-friendly, Multi-API (KoboldAI/CPP, Horde, NovelAI, Ooba, OpenAI+proxies, WindowAI(Claude!)), VN-like Waifu Mode, Horde SD, System TTS, WorldInfo (lorebooks), customizable UI, auto-translate, and more prompt options than you'd ever want or need. Optional Extras server for more SD/TTS options + ChromaDB/Summarize.
+Mobile-friendly, Multi-API (KoboldAI/CPP, Horde, NovelAI, Ooba, OpenAI, OpenRouter, Claude, Scale), VN-like Waifu Mode, Horde SD, System TTS, WorldInfo (lorebooks), customizable UI, auto-translate, and more prompt options than you'd ever want or need. Optional Extras server for more SD/TTS options + ChromaDB/Summarize.
 
 Based on a fork of TavernAI 1.2.8
 
@@ -66,7 +92,7 @@ Get in touch with the developers directly:
 * Chat bookmarks / branching (duplicates the dialogue in its current state)
 * Advanced KoboldAI / TextGen generation settings with a lot of community-made presets
 * World Info support: create rich lore or save tokens on your character card
-* Window AI browser extension support (run models like Claude, GPT 4): <https://windowai.io/>
+* [OpenRouter](https://openrouter.ai) connection for various APIs (Claude, GPT-4/3.5 and more)
 * [Oobabooga's TextGen WebUI](https://github.com/oobabooga/text-generation-webui) API connection
 * [AI Horde](https://horde.koboldai.net/) connection
 * Prompt generation formatting tweaking
@@ -308,3 +334,4 @@ GNU Affero General Public License for more details.**
 * Default content (characters and lore books) provided by @OtisAlejandro, @RossAscends and @kallmeflocc
 * Korean translation by @doloroushyeonse
 * k_euler_a support for Horde by <https://github.com/Teashrock>
+* Chinese translation by [@XXpE3](https://github.com/XXpE3), 中文 ISSUES 可以联系 @XXpE3
