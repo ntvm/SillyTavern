@@ -134,7 +134,7 @@ jQuery(function () {
                 	<label for="Inputer_prompt">Current XMLK AfterScenario: </label>
                     <textarea id="Inputer_prompt" class="text_pole textarea_compact" rows="6" placeholder="Put there things, what supposed be in author's notes here..."></textarea>
                     <div class="Inputer_contents_controls">
-                        <label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />acticate insertion</label>
+                        <label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />Activate insertion</label>
                     </div>
                 </div>
             </div>
