@@ -283,6 +283,12 @@ table.responsiveTable {
     font-weight: 500;
 }
 
+.mes_text blockquote {
+    border-left: 3px solid var(--SmartThemeQuoteColor);
+    padding-left: 10px;
+    background-color: var(--black30a);
+}
+
 .mes_text strong em,
 .mes_text strong,
 .mes_text h2,
@@ -1353,7 +1359,8 @@ body.charListGrid #rm_print_characters_block .tags_inline {
 
 }
 
-.floating_prompt_radio_group, .radio_group {
+.floating_prompt_radio_group,
+.radio_group {
     display: flex;
     flex-direction: column;
 }
@@ -3100,9 +3107,23 @@ h5 {
     opacity: 0.4;
 }
 
+
 .PastChat_cross:hover {
     color: red;
     filter: drop-shadow(0 0 2px red);
+    -webkit-animation: infinite-spinning 1s ease-out 0s infinite normal;
+    animation: infinite-spinning 1s ease-out 0s infinite normal;
+}
+
+/* HEINOUS */
+@keyframes infinite-spinning {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 #export_character_div {
@@ -4470,6 +4491,10 @@ toolcool-color-picker {
 
 .wide50px {
     width: 50px;
+}
+
+.indent20p {
+    margin-left: 20px;
 }
 
 .wi-enter-footer-text {
