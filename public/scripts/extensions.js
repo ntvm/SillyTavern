@@ -74,6 +74,7 @@ const extension_settings = {
         enabled: false,
     },
     speech_recognition: {},
+    Nvkun: {},
 };
 
 let modules = [];
