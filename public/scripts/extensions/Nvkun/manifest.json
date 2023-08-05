@@ -1,0 +1,9 @@
+{
+    "display_name": "Nv-kun_settings",
+    "loading_order": 9,
+    "requires": [],
+    "js": "index.js",
+    "author": "Nv-Kun",
+    "version": "1.0.0",
+    "homePage": "https://github.com/ntvm/SillyTavern"
+}
