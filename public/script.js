@@ -910,7 +910,7 @@ async function getStatus() {
 
                 // We didn't get a 200 status code, but the endpoint has an explanation. Which means it DID connect, but I digress.
                 if (online_status == "no_connection" && data.response) {
-                    toastr.error(data.response, "API Error", {timeOut: 5000, preventDuplicates:true})
+                    toastr.error(data.response, "API Error", { timeOut: 5000, preventDuplicates: true })
                 }
 
                 //console.log(online_status);
