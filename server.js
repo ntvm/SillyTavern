@@ -34,7 +34,11 @@ if (net.setDefaultAutoSelectFamily) {
 }
 
 const cliArguments = yargs(hideBin(process.argv))
-    .option('ssl', {
+    .option('disableCsrf', {
+        type: 'boolean',
+        default: false,
+        describe: 'Disables CSRF protection'
+    }).option('ssl', {
         type: 'boolean',
         default: false,
         describe: 'Enables SSL'
@@ -119,10 +123,15 @@ const allowKeysExposure = config.allowKeysExposure;
 const axios = require('axios');
 const tiktoken = require('@dqbd/tiktoken');
 const WebSocket = require('ws');
-const AIHorde = require("./src/horde");
-const ai_horde = new AIHorde({
-    client_agent: getVersion()?.agent || 'SillyTavern:UNKNOWN:Cohee#1207',
-});
+
+function getHordeClient() {
+    const AIHorde = require("./src/horde");
+    const ai_horde = new AIHorde({
+        client_agent: getVersion()?.agent || 'SillyTavern:UNKNOWN:Cohee#1207',
+    });
+    return ai_horde;
+}
+
 const ipMatching = require('ip-matching');
 const yauzl = require('yauzl');
 
@@ -149,7 +158,7 @@ let first_run = true;
 
 function get_mancer_headers() {
     const api_key_mancer = readSecret(SECRET_KEYS.MANCER);
-    return api_key_mancer ? { "X-API-KEY": api_key_mancer} : {};
+    return api_key_mancer ? { "X-API-KEY": api_key_mancer } : {};
 }
 
 
@@ -308,31 +317,40 @@ const directories = {
 };
 
 // CSRF Protection //
-const doubleCsrf = require('csrf-csrf').doubleCsrf;
+if (cliArguments.disableCsrf === false) {
+    const doubleCsrf = require('csrf-csrf').doubleCsrf;
 
-const CSRF_SECRET = crypto.randomBytes(8).toString('hex');
-const COOKIES_SECRET = crypto.randomBytes(8).toString('hex');
+    const CSRF_SECRET = crypto.randomBytes(8).toString('hex');
+    const COOKIES_SECRET = crypto.randomBytes(8).toString('hex');
 
-const { generateToken, doubleCsrfProtection } = doubleCsrf({
-    getSecret: () => CSRF_SECRET,
-    cookieName: "X-CSRF-Token",
-    cookieOptions: {
-        httpOnly: true,
-        sameSite: "strict",
-        secure: false
-    },
-    size: 64,
-    getTokenFromRequest: (req) => req.headers["x-csrf-token"]
-});
-
-app.get("/csrf-token", (req, res) => {
-    res.json({
-        "token": generateToken(res)
+    const { generateToken, doubleCsrfProtection } = doubleCsrf({
+        getSecret: () => CSRF_SECRET,
+        cookieName: "X-CSRF-Token",
+        cookieOptions: {
+            httpOnly: true,
+            sameSite: "strict",
+            secure: false
+        },
+        size: 64,
+        getTokenFromRequest: (req) => req.headers["x-csrf-token"]
     });
-});
 
-app.use(cookieParser(COOKIES_SECRET));
-app.use(doubleCsrfProtection);
+    app.get("/csrf-token", (req, res) => {
+        res.json({
+            "token": generateToken(res)
+        });
+    });
+
+    app.use(cookieParser(COOKIES_SECRET));
+    app.use(doubleCsrfProtection);
+} else {
+    console.warn("\nCSRF protection is disabled. This will make your server vulnerable to CSRF attacks.\n");
+    app.get("/csrf-token", (req, res) => {
+        res.json({
+            "token": 'disabled'
+        });
+    });
+}
 
 // CORS Settings //
 const cors = require('cors');
@@ -662,7 +680,7 @@ app.post("/generate_textgenerationwebui", jsonParser, async function (request, r
             try {
                 retval.response = await error.json();
                 retval.response = retval.response.result;
-            } catch {}
+            } catch { }
             return response_generate.send(retval);
         }
     }
@@ -1791,13 +1809,12 @@ app.post("/getstatus_novelai", jsonParser, function (request, response_getstatus
     const api_key_novel = readSecret(SECRET_KEYS.NOVEL);
 
     if (!api_key_novel) {
-        return response_generate_novel.sendStatus(401);
+        return response_getstatus_novel.sendStatus(401);
     }
 
     var data = {};
     var args = {
         data: data,
-
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + api_key_novel }
     };
     client.get(api_novelai + "/user/subscription", args, function (data, response) {
@@ -1805,17 +1822,15 @@ app.post("/getstatus_novelai", jsonParser, function (request, response_getstatus
             //console.log(data);
             response_getstatus_novel.send(data);//data);
         }
-        if (response.statusCode == 401) {
-            console.log('Access Token is incorrect.');
-            response_getstatus_novel.send({ error: true });
-        }
-        if (response.statusCode == 500 || response.statusCode == 501 || response.statusCode == 501 || response.statusCode == 503 || response.statusCode == 507) {
+        else {
+            if (response.statusCode == 401) {
+                console.log('Access Token is incorrect.');
+            }
+
             console.log(data);
             response_getstatus_novel.send({ error: true });
         }
     }).on('error', function () {
-        //console.log('');
-        //console.log('something went wrong on the request', err.request.options);
         response_getstatus_novel.send({ error: true });
     });
 });
@@ -1901,8 +1916,19 @@ app.post("/generate_novelai", jsonParser, async function (request, response_gene
             });
         } else {
             if (!response.ok) {
-                console.log(`Novel API returned error: ${response.status} ${response.statusText} ${await response.text()}`);
-                return response.status(response.status).send({ error: true });
+                const text = await response.text();
+                let message = text;
+                console.log(`Novel API returned error: ${response.status} ${response.statusText} ${text}`);
+
+                try {
+                    const data = JSON.parse(text);
+                    message = data.message;
+                }
+                catch {
+                    // ignore
+                }
+
+                return response_generate_novel.status(response.status).send({ error: { message } });
             }
 
             const data = await response.json();
@@ -3848,6 +3874,7 @@ app.post('/viewsecrets', jsonParser, async (_, response) => {
 
 app.post('/horde_samplers', jsonParser, async (_, response) => {
     try {
+        const ai_horde = getHordeClient();
         const samplers = Object.values(ai_horde.ModelGenerationInputStableSamplers);
         response.send(samplers);
     } catch (error) {
@@ -3858,6 +3885,7 @@ app.post('/horde_samplers', jsonParser, async (_, response) => {
 
 app.post('/horde_models', jsonParser, async (_, response) => {
     try {
+        const ai_horde = getHordeClient();
         const models = await ai_horde.getModels();
         response.send(models);
     } catch (error) {
@@ -3874,6 +3902,7 @@ app.post('/horde_userinfo', jsonParser, async (_, response) => {
     }
 
     try {
+        const ai_horde = getHordeClient();
         const user = await ai_horde.findUser({ token: api_key_horde });
         return response.send(user);
     } catch (error) {
@@ -3889,6 +3918,7 @@ app.post('/horde_generateimage', jsonParser, async (request, response) => {
     console.log('Stable Horde request:', request.body);
 
     try {
+        const ai_horde = getHordeClient();
         const generation = await ai_horde.postAsyncImageGenerate(
             {
                 prompt: `${request.body.prompt_prefix} ${request.body.prompt} ### ${request.body.negative_prompt}`,
