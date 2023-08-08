@@ -364,10 +364,10 @@ const system_messages = {
         mes:
             `Hello there! Please select the help topic you would like to learn more about:
             <ul>
-            <li><a href="javascript:displayHelp('1')">Slash Commands</a> (or <tt>/help slash</tt>)</li>
-            <li><a href="javascript:displayHelp('2')">Formatting</a> (or <tt>/help format</tt>)</li>
-            <li><a href="javascript:displayHelp('3')">Hotkeys</a> (or <tt>/help hotkeys</tt>)</li>
-            <li><a href="javascript:displayHelp('4')">{{Macros}}</a> (or <tt>/help macros</tt>)</li>
+            <li><a href="#" data-displayHelp="1">Slash Commands</a> (or <tt>/help slash</tt>)</li>
+            <li><a href="#" data-displayHelp="2">Formatting</a> (or <tt>/help format</tt>)</li>
+            <li><a href="#" data-displayHelp="3">Hotkeys</a> (or <tt>/help hotkeys</tt>)</li>
+            <li><a href="#" data-displayHelp="4">{{Macros}}</a> (or <tt>/help macros</tt>)</li>
             </ul>
             <br><b>Still got questions left? The <a target="_blank" href="https://docs.sillytavern.app/">Official SillyTavern Documentation Website</a> has much more information!</b>`
     },
@@ -524,7 +524,11 @@ const system_messages = {
 
 $(document).ajaxError(function myErrorHandler(_, xhr) {
     if (xhr.status == 403) {
-        toastr.warning("doubleCsrf errors in console are NORMAL in this case. Just reload the page or close this tab.", "Looks like you've opened SillyTavern in another browser tab", { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
+        toastr.warning(
+            "doubleCsrf errors in console are NORMAL in this case. If you want to run ST in multiple tabs, start the server with --disableCsrf option.",
+            "Looks like you've opened SillyTavern in another browser tab",
+            { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true },
+        );
     }
 });
 
@@ -566,7 +570,7 @@ function getTokenizerBestMatch() {
 }
 
 function getTokenCount(str, padding = undefined) {
-    if (typeof str !== 'string') {
+    if (typeof str !== 'string' || !str?.length) {
         return 0;
     }
 
@@ -1295,7 +1299,7 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
     */
 
     if (!power_user.allow_name2_display && ch_name && !isUser && !isSystem) {
-        mes = mes.replaceAll(`${ch_name}:`, "");
+        mes = mes.replace(new RegExp(`(^|\n)${ch_name}:`, 'g'), "$1");
     }
 
     //function to hide any <tags> from AI response output
@@ -1393,9 +1397,6 @@ function addOneMessage(mes, { type = "normal", insertAfter = null, scroll = true
     var messageText = mes["mes"];
     const momentDate = timestampToMoment(mes.send_date);
     const timestamp = momentDate.isValid() ? momentDate.format('LL LT') : '';
-
-
-
 
     if (mes?.extra?.display_text) {
         messageText = mes.extra.display_text;
@@ -3319,21 +3320,20 @@ function promptItemize(itemizedPrompts, requestedMesId) {
     }
 
     //these happen regardless of API
-    var charPersonalityTokens = getTokenCount(itemizedPrompts[thisPromptSet].charPersonality);
     var charDescriptionTokens = getTokenCount(itemizedPrompts[thisPromptSet].charDescription);
+    var charPersonalityTokens = getTokenCount(itemizedPrompts[thisPromptSet].charPersonality);
     var scenarioTextTokens = getTokenCount(itemizedPrompts[thisPromptSet].scenarioText);
+    var userPersonaStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].userPersona);
+    var worldInfoStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].worldInfoString);
     var allAnchorsTokens = getTokenCount(itemizedPrompts[thisPromptSet].allAnchors);
     var summarizeStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].summarizeString);
     var authorsNoteStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].authorsNoteString);
     var smartContextStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].smartContextString);
     var afterScenarioAnchorTokens = getTokenCount(itemizedPrompts[thisPromptSet].afterScenarioAnchor);
     var zeroDepthAnchorTokens = getTokenCount(itemizedPrompts[thisPromptSet].zeroDepthAnchor);
-    var worldInfoStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].worldInfoString);
     var thisPrompt_max_context = itemizedPrompts[thisPromptSet].this_max_context;
     var thisPrompt_padding = itemizedPrompts[thisPromptSet].padding;
-    var promptBiasTokens = getTokenCount(itemizedPrompts[thisPromptSet].promptBias);
     var this_main_api = itemizedPrompts[thisPromptSet].main_api;
-    var userPersonaStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].userPersona);
 
     if (this_main_api == 'openai') {
         //for OAI API
@@ -3375,6 +3375,7 @@ function promptItemize(itemizedPrompts, requestedMesId) {
         var mesSendStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].mesSendString)
         var ActualChatHistoryTokens = mesSendStringTokens - (allAnchorsTokens - afterScenarioAnchorTokens) + power_user.token_padding;
         var instructionTokens = getTokenCount(itemizedPrompts[thisPromptSet].instruction);
+        var promptBiasTokens = getTokenCount(itemizedPrompts[thisPromptSet].promptBias);
 
         var totalTokensInPrompt =
             storyStringTokens +     //chardefs total
@@ -3812,13 +3813,15 @@ function cleanUpMessage(getMessage, isImpersonate, isContinue, displayIncomplete
         getMessage = cleanGroupMessage(getMessage);
     }
 
+    if (!power_user.allow_name2_display) {
+        getMessage = getMessage.replace(new RegExp(`(^|\n)${name2}:`, 'g'), "$1");
+    }
+
     if (isImpersonate) {
         getMessage = getMessage.trim();
     }
 
     const stoppingStrings = getStoppingStrings(isImpersonate, false);
-    //console.log('stopping on these strings: ');
-    //console.log(stoppingStrings);
 
     for (const stoppingString of stoppingStrings) {
         if (stoppingString.length) {
@@ -4288,7 +4291,7 @@ async function read_avatar_load(input) {
 }
 
 export function getCropPopup(src) {
-    return `<h3>Set the crop position of the avatar image and click Ok to confirm.</h3>
+    return `<h3>Set the crop position of the avatar image and click Accept to confirm.</h3>
             <div id='avatarCropWrap'>
                 <img id='avatarToCrop' src='${src}'>
             </div>`;

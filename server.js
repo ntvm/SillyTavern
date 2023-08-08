@@ -34,7 +34,11 @@ if (net.setDefaultAutoSelectFamily) {
 }
 
 const cliArguments = yargs(hideBin(process.argv))
-    .option('ssl', {
+    .option('disableCsrf', {
+        type: 'boolean',
+        default: false,
+        describe: 'Disables CSRF protection'
+    }).option('ssl', {
         type: 'boolean',
         default: false,
         describe: 'Enables SSL'
@@ -119,10 +123,15 @@ const allowKeysExposure = config.allowKeysExposure;
 const axios = require('axios');
 const tiktoken = require('@dqbd/tiktoken');
 const WebSocket = require('ws');
-const AIHorde = require("./src/horde");
-const ai_horde = new AIHorde({
-    client_agent: getVersion()?.agent || 'SillyTavern:UNKNOWN:Cohee#1207',
-});
+
+function getHordeClient() {
+    const AIHorde = require("./src/horde");
+    const ai_horde = new AIHorde({
+        client_agent: getVersion()?.agent || 'SillyTavern:UNKNOWN:Cohee#1207',
+    });
+    return ai_horde;
+}
+
 const ipMatching = require('ip-matching');
 const yauzl = require('yauzl');
 
@@ -149,7 +158,7 @@ let first_run = true;
 
 function get_mancer_headers() {
     const api_key_mancer = readSecret(SECRET_KEYS.MANCER);
-    return api_key_mancer ? { "X-API-KEY": api_key_mancer} : {};
+    return api_key_mancer ? { "X-API-KEY": api_key_mancer } : {};
 }
 
 
@@ -308,31 +317,40 @@ const directories = {
 };
 
 // CSRF Protection //
-const doubleCsrf = require('csrf-csrf').doubleCsrf;
+if (cliArguments.disableCsrf === false) {
+    const doubleCsrf = require('csrf-csrf').doubleCsrf;
 
-const CSRF_SECRET = crypto.randomBytes(8).toString('hex');
-const COOKIES_SECRET = crypto.randomBytes(8).toString('hex');
+    const CSRF_SECRET = crypto.randomBytes(8).toString('hex');
+    const COOKIES_SECRET = crypto.randomBytes(8).toString('hex');
 
-const { generateToken, doubleCsrfProtection } = doubleCsrf({
-    getSecret: () => CSRF_SECRET,
-    cookieName: "X-CSRF-Token",
-    cookieOptions: {
-        httpOnly: true,
-        sameSite: "strict",
-        secure: false
-    },
-    size: 64,
-    getTokenFromRequest: (req) => req.headers["x-csrf-token"]
-});
-
-app.get("/csrf-token", (req, res) => {
-    res.json({
-        "token": generateToken(res)
+    const { generateToken, doubleCsrfProtection } = doubleCsrf({
+        getSecret: () => CSRF_SECRET,
+        cookieName: "X-CSRF-Token",
+        cookieOptions: {
+            httpOnly: true,
+            sameSite: "strict",
+            secure: false
+        },
+        size: 64,
+        getTokenFromRequest: (req) => req.headers["x-csrf-token"]
     });
-});
 
-app.use(cookieParser(COOKIES_SECRET));
-app.use(doubleCsrfProtection);
+    app.get("/csrf-token", (req, res) => {
+        res.json({
+            "token": generateToken(res)
+        });
+    });
+
+    app.use(cookieParser(COOKIES_SECRET));
+    app.use(doubleCsrfProtection);
+} else {
+    console.warn("\nCSRF protection is disabled. This will make your server vulnerable to CSRF attacks.\n");
+    app.get("/csrf-token", (req, res) => {
+        res.json({
+            "token": 'disabled'
+        });
+    });
+}
 
 // CORS Settings //
 const cors = require('cors');
@@ -662,7 +680,7 @@ app.post("/generate_textgenerationwebui", jsonParser, async function (request, r
             try {
                 retval.response = await error.json();
                 retval.response = retval.response.result;
-            } catch {}
+            } catch { }
             return response_generate.send(retval);
         }
     }
@@ -3856,6 +3874,7 @@ app.post('/viewsecrets', jsonParser, async (_, response) => {
 
 app.post('/horde_samplers', jsonParser, async (_, response) => {
     try {
+        const ai_horde = getHordeClient();
         const samplers = Object.values(ai_horde.ModelGenerationInputStableSamplers);
         response.send(samplers);
     } catch (error) {
@@ -3866,6 +3885,7 @@ app.post('/horde_samplers', jsonParser, async (_, response) => {
 
 app.post('/horde_models', jsonParser, async (_, response) => {
     try {
+        const ai_horde = getHordeClient();
         const models = await ai_horde.getModels();
         response.send(models);
     } catch (error) {
@@ -3882,6 +3902,7 @@ app.post('/horde_userinfo', jsonParser, async (_, response) => {
     }
 
     try {
+        const ai_horde = getHordeClient();
         const user = await ai_horde.findUser({ token: api_key_horde });
         return response.send(user);
     } catch (error) {
@@ -3897,6 +3918,7 @@ app.post('/horde_generateimage', jsonParser, async (request, response) => {
     console.log('Stable Horde request:', request.body);
 
     try {
+        const ai_horde = getHordeClient();
         const generation = await ai_horde.postAsyncImageGenerate(
             {
                 prompt: `${request.body.prompt_prefix} ${request.body.prompt} ### ${request.body.negative_prompt}`,
