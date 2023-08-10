@@ -2945,7 +2945,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     }
 
                     //Formating
-                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue, isLookaround);
+                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue);
                     let this_mes_is_name;
                     ({ this_mes_is_name, getMessage } = extractNameFromMessage(getMessage, force_name2, isImpersonate));
                     if (getMessage.length > 0) {
