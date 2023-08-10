@@ -136,6 +136,7 @@ import {
     download,
     isDataURL,
     getCharaFilename,
+    isDigitsOnly,
 } from "./scripts/utils.js";
 
 import { extension_settings, getContext, loadExtensionSettings, runGenerationInterceptors, saveMetadataDebounced } from "./scripts/extensions.js";
@@ -304,7 +305,6 @@ export const comment_avatar = "img/quill.png";
 export let CLIENT_VERSION = 'SillyTavern:UNKNOWN:Cohee#1207'; // For Horde header
 let is_colab = false;
 let is_checked_colab = false;
-let is_mes_reload_avatar = false;
 let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
     placement: 'top-start'
 });
@@ -409,12 +409,25 @@ const system_messages = {
         mes:
             `Text formatting commands:
             <ul>
-            <li><tt>{​{text}​}</tt> - sets a one-time behavioral bias for the AI. Resets when you send the next message.</li>
             <li><tt>*text*</tt> - displays as <i>italics</i></li>
             <li><tt>**text**</tt> - displays as <b>bold</b></li>
             <li><tt>***text***</tt> - displays as <b><i>bold italics</i></b></li>
-            <li><tt>` + "```" + `text` + "```" + `</tt> - displays as a code block</li>
-            <li><tt>` + "`" + `text` + "`" + `</tt> - displays as inline code</li>
+            <li><tt>` + "```" + `text` + "```" + `</tt> - displays as a code block (new lines allowed between the backticks)</li>
+            <pre>
+<code>
+like
+this
+</code>
+            </pre>
+            <li><tt>` + "`" + `text` + "`" + `</tt> - displays as <code>inline code</code></li>
+            <li><tt>` + "> " + `text` + `</tt> - displays as a blockquote (note the space after >)</li>
+            <blockquote>like this</blockquote>
+            <li><tt>` + "# " + `text` + `</tt> - displays as a large header (note the space)</li>
+            <h1>like this</h1>
+            <li><tt>` + "## " + `text` + `</tt> - displays as a medium header (note the space)</li>
+            <h2>like this</h2>
+            <li><tt>` + "### " + `text` + `</tt> - displays as a small header (note the space)</li>
+            <h3>like this</h3>
             <li><tt>$$ text $$</tt> - renders a LaTeX formula (if enabled)</li>
             <li><tt>$ text $</tt> - renders an AsciiMath formula (if enabled)</li>
             </ul>`
@@ -1427,9 +1440,6 @@ function addOneMessage(mes, { type = "normal", insertAfter = null, scroll = true
         } else {
             if (characters[this_chid].avatar != "none") {
                 avatarImg = getThumbnailUrl('avatar', characters[this_chid].avatar);
-                if (is_mes_reload_avatar !== false) {
-                    avatarImg += "&" + is_mes_reload_avatar;
-                }
             } else {
                 avatarImg = default_avatar;
             }
@@ -1677,7 +1687,7 @@ function getTimeSinceLastMessage() {
 }
 
 function randomReplace(input, emptyListPlaceholder = '') {
-    const randomPattern = /{{random:([^}]+)}}/gi;
+    const randomPattern = /{{random[ : ]([^}]+)}}/gi;
 
     return input.replace(randomPattern, (match, listString) => {
         const list = listString.split(',').map(item => item.trim()).filter(item => item.length > 0);
@@ -1695,10 +1705,15 @@ function randomReplace(input, emptyListPlaceholder = '') {
 }
 
 function diceRollReplace(input, invalidRollPlaceholder = '') {
-    const randomPattern = /{{roll:([^}]+)}}/gi;
+    const rollPattern = /{{roll[ : ]([^}]+)}}/gi;
 
-    return input.replace(randomPattern, (match, matchValue) => {
-        const formula = matchValue.trim();
+    return input.replace(rollPattern, (match, matchValue) => {
+        let formula = matchValue.trim();
+
+        if (isDigitsOnly(formula)) {
+            formula = `1d${formula}`;
+        }
+
         const isValid = droll.validate(formula);
 
         if (!isValid) {
@@ -1835,7 +1850,7 @@ export function extractMessageBias(message) {
         const match = curMatch[1].trim();
 
         // Ignore random/roll pattern matches
-        if (/^random:.+/i.test(match) || /^roll:.+/i.test(match)) {
+        if (/^random[ : ].+/i.test(match) || /^roll[ : ].+/i.test(match)) {
             continue;
         }
 
@@ -2945,7 +2960,10 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     }
 
                     //Formating
-                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue);
+                    const displayIncomplete = type == 'quiet';
+
+                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue, isLookaround, displayIncomplete);
+
                     let this_mes_is_name;
                     ({ this_mes_is_name, getMessage } = extractNameFromMessage(getMessage, force_name2, isImpersonate));
                     if (getMessage.length > 0) {
@@ -4256,9 +4274,18 @@ async function read_avatar_load(input) {
             return;
         }
 
-        $("#create_button").trigger('click');
+        await createOrEditCharacter();
+        await delay(durationSaveEdit);
 
         const formData = new FormData($("#form_create").get(0));
+        await fetch(getThumbnailUrl('avatar', formData.get('avatar_url')), {
+            method: 'GET',
+            cache: 'no-cache',
+            headers: {
+                'pragma': 'no-cache',
+                'cache-control': 'no-cache',
+            }
+        });
 
         $(".mes").each(async function () {
             if ($(this).attr("is_system") == 'true') {
@@ -4276,17 +4303,7 @@ async function read_avatar_load(input) {
             }
         });
 
-        await delay(durationSaveEdit);
-        await fetch(getThumbnailUrl('avatar', formData.get('avatar_url')), {
-            method: 'GET',
-            cache: 'no-cache',
-            headers: {
-                'pragma': 'no-cache',
-                'cache-control': 'no-cache',
-            }
-        });
         console.log('Avatar refreshed');
-
     }
 }
 
@@ -7562,7 +7579,6 @@ $(document).ready(function () {
     });
 
     $("#add_avatar_button").change(function () {
-        is_mes_reload_avatar = Date.now();
         read_avatar_load(this);
     });
 
@@ -7768,9 +7784,9 @@ $(document).ready(function () {
     $("#api_button_textgenerationwebui").click(async function (e) {
         e.stopPropagation();
         if ($("#textgenerationwebui_api_url_text").val() != "") {
-            let value = formatTextGenURL($("#textgenerationwebui_api_url_text").val().trim())
+            let value = formatTextGenURL($("#textgenerationwebui_api_url_text").val().trim(), api_use_mancer_webui);
             if (!value) {
-                callPopup('Please enter a valid URL.<br/>WebUI URLs should end with <tt>/api</tt>', 'text');
+                callPopup("Please enter a valid URL.<br/>WebUI URLs should end with <tt>/api</tt><br/>Enable 'Relaxed API URLs' to allow other paths.", 'text');
                 return;
             }
 

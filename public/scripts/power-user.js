@@ -178,6 +178,7 @@ let power_user = {
         preset: 'Alpaca',
         separator_sequence: '',
         macro: false,
+        names_force_groups: true,
     },
 
     personas: {},
@@ -191,6 +192,7 @@ let power_user = {
     custom_stopping_strings: '',
     custom_stopping_strings_macro: true,
     fuzzy_search: false,
+    encode_tags: false,
 };
 
 let themes = [];
@@ -685,6 +687,7 @@ function loadPowerUserSettings(settings, data) {
     $("#custom_stopping_strings_macro").prop("checked", power_user.custom_stopping_strings_macro);
     $('#fuzzy_search_checkbox').prop("checked", power_user.fuzzy_search);
     $('#persona_show_notifications').prop("checked", power_user.persona_show_notifications);
+    $('#encode_tags').prop("checked", power_user.encode_tags);
 
     $("#console_log_prompts").prop("checked", power_user.console_log_prompts);
     $('#auto_fix_generated_markdown').prop("checked", power_user.auto_fix_generated_markdown);
@@ -855,7 +858,12 @@ function loadInstructMode() {
         { id: "instruct_stop_sequence", property: "stop_sequence", isCheckbox: false },
         { id: "instruct_names", property: "names", isCheckbox: true },
         { id: "instruct_macro", property: "macro", isCheckbox: true },
+        { id: "instruct_names_force_groups", property: "names_force_groups", isCheckbox: true },
     ];
+
+    if (power_user.instruct.names_force_groups === undefined) {
+        power_user.instruct.names_force_groups = true;
+    }
 
     controls.forEach(control => {
         const $element = $(`#${control.id}`);
@@ -867,7 +875,7 @@ function loadInstructMode() {
         }
 
         $element.on('input', function () {
-            power_user.instruct[control.property] = control.isCheckbox ? $(this).prop('checked') : $(this).val();
+            power_user.instruct[control.property] = control.isCheckbox ? !!$(this).prop('checked') : $(this).val();
             saveSettingsDebounced();
         });
     });
@@ -931,7 +939,12 @@ export function fuzzySearchCharacters(searchValue) {
 }
 
 export function formatInstructModeChat(name, mes, isUser, isNarrator, forceAvatar, name1, name2) {
-    const includeNames = isNarrator ? false : (power_user.instruct.names || !!selected_group || !!forceAvatar);
+    let includeNames = isNarrator ? false : power_user.instruct.names;
+
+    if (!isNarrator && power_user.instruct.names_force_groups && (selected_group || forceAvatar)) {
+        includeNames = true;
+    }
+
     let sequence = (isUser || isNarrator) ? power_user.instruct.input_sequence : power_user.instruct.output_sequence;
 
     if (power_user.instruct.macro) {
@@ -959,7 +972,7 @@ export function formatInstructStoryString(story, systemPrompt) {
 }
 
 export function formatInstructModePrompt(name, isImpersonate, promptBias, name1, name2) {
-    const includeNames = power_user.instruct.names || !!selected_group;
+    const includeNames = power_user.instruct.names || (!!selected_group && power_user.instruct.names_force_groups);
     let sequence = isImpersonate ? power_user.instruct.input_sequence : power_user.instruct.output_sequence;
 
     if (power_user.instruct.macro) {
@@ -2018,6 +2031,12 @@ $(document).ready(() => {
 
     $('#persona_show_notifications').on('input', function () {
         power_user.persona_show_notifications = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#encode_tags').on('input', async function () {
+        power_user.encode_tags = !!$(this).prop('checked');
+        await reloadCurrentChat();
         saveSettingsDebounced();
     });
 
