@@ -75,6 +75,7 @@ let extension_settings = {
     },
     Nvkun: {},
     speech_recognition: {},
+    rvc: {},
 };
 
 let modules = [];

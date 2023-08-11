@@ -759,10 +759,13 @@ function saveModelList(data) {
         $('#model_openrouter_select').empty();
         $('#model_openrouter_select').append($('<option>', { value: openrouter_website_model, text: 'Use OpenRouter website setting' }));
         model_list.forEach((model) => {
+            let tokens_dollar = parseFloat(1 / (1000 * model.pricing.prompt));
+            let tokens_rounded = (Math.round(tokens_dollar * 1000) / 1000).toFixed(0);
+            let model_description = `${model.id} | ${tokens_rounded}k t/$ | ${model.context_length} ctx`;
             $('#model_openrouter_select').append(
                 $('<option>', {
                     value: model.id,
-                    text: model.id,
+                    text: model_description,
                 }));
         });
         $('#model_openrouter_select').val(oai_settings.openrouter_model).trigger('change');
@@ -797,6 +800,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
     const isScale = oai_settings.chat_completion_source == chat_completion_sources.SCALE;
     const isTextCompletion = oai_settings.chat_completion_source == chat_completion_sources.OPENAI && (oai_settings.openai_model.startsWith('text-') || oai_settings.openai_model.startsWith('code-'));
     const stream = type !== 'quiet' && oai_settings.stream_openai && !isScale;
+    const isQuiet = type === 'quiet';
 
     // If we're using the window.ai extension, use that instead
     // Doesn't support logit bias yet
@@ -836,7 +840,11 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
     if (isClaude) {
         generate_data['use_claude'] = true;
         generate_data['top_k'] = parseFloat(oai_settings.top_k_openai);
-        generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
+
+        // Don't add a prefill on quiet gens (summarization)
+        if (!isQuiet) {
+            generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
+        }
     }
 
     if (isOpenRouter) {
