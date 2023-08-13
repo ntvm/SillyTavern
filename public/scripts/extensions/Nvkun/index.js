@@ -97,7 +97,7 @@ function setInputerContext(value, saveToMessage) {
 			var context = getContext();
 			context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.AFTER_SCENARIO, extension_settings.Nvkun.depth);
 			$('#Inputer_prompt').val(value);
-			console.log('Summary set to: ' + value);
+			console.log('After Scenario injected');
 			console.debug('Position: ' + extension_settings.Nvkun.position);
 			console.debug('Depth: ' + extension_settings.Nvkun.depth);
 
@@ -114,6 +114,13 @@ function setInputerContext(value, saveToMessage) {
 			}
 			break
 		}
+}
+
+async function onChatEvent() {
+    // Chat/character/group changed
+	var value = extension_settings.Nvkun.Inputer_prompt ;
+	setInputerContext(value, true);
+    return;
 }
 
 //Savesets	
@@ -260,5 +267,6 @@ jQuery(function () {
 
     addExtensionControls();
     loadSettings();
+    eventSource.on(event_types.CHAT_CHANGED, onChatEvent);
 });
 
