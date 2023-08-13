@@ -1656,6 +1656,7 @@ app.post('/getsettings', jsonParser, (request, response) => {
     const themes = readAndParseFromDirectory(directories.themes);
     const movingUIPresets = readAndParseFromDirectory(directories.movingUI);
     const quickReplyPresets = readAndParseFromDirectory(directories.quickreplies);
+    const NvPresets = readAndParseFromDirectory(directories.NvSettings);
 
     const instruct = readAndParseFromDirectory(directories.instruct);
     const context = readAndParseFromDirectory(directories.context);
