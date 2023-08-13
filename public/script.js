@@ -79,6 +79,7 @@ import {
 import {
     setOpenAIMessageExamples,
     setOpenAIMessages,
+    setupChatCompletionPromptManager,
     prepareOpenAIMessages,
     sendOpenAIRequest,
     loadOpenAISettings,
@@ -96,7 +97,7 @@ import {
 import {
     generateNovelWithStreaming,
     getNovelGenerationData,
-    getNovelMaxContextTokens,
+    getKayraMaxContextTokens,
     getNovelTier,
     loadNovelPreset,
     loadNovelSettings,
@@ -160,6 +161,7 @@ import { context_settings, loadContextTemplatesFromSettings } from "./scripts/co
 import { markdownExclusionExt } from "./scripts/showdown-exclusion.js";
 import { NOTE_MODULE_NAME, metadata_keys, setFloatingPrompt, shouldWIAddPrompt } from "./scripts/authors-note.js";
 import { deviceInfo } from "./scripts/RossAscends-mods.js";
+import { registerPromptManagerMigration } from "./scripts/PromptManager.js";
 import { getRegexedString, regex_placement } from "./scripts/extensions/regex/engine.js";
 
 //exporting functions and vars for mods
@@ -253,6 +255,14 @@ export const event_types = {
     SETTINGS_UPDATED: 'settings_updated',
     GROUP_UPDATED: 'group_updated',
     MOVABLE_PANELS_RESET: 'movable_panels_reset',
+    SETTINGS_LOADED_BEFORE: 'settings_loaded_before',
+    SETTINGS_LOADED_AFTER: 'settings_loaded_after',
+    CHATCOMPLETION_SOURCE_CHANGED: 'chatcompletion_source_changed',
+    CHATCOMPLETION_MODEL_CHANGED: 'chatcompletion_model_changed',
+    OAI_BEFORE_CHATCOMPLETION: 'oai_before_chatcompletion',
+    OAI_PRESET_CHANGED: 'oai_preset_changed',
+    WORLDINFO_SETTINGS_UPDATED: 'worldinfo_settings_updated',
+    CHARACTER_EDITED: 'character_edited',
 }
 
 export const eventSource = new EventEmitter();
@@ -530,6 +540,9 @@ this
         mes: `Click here to return to the previous chat: <a class="bookmark_link" file_name="{0}" href="javascript:void(null);">Return</a>`,
     },
 };
+
+// Register configuration migrations
+registerPromptManagerMigration();
 
 $(document).ajaxError(function myErrorHandler(_, xhr) {
     if (xhr.status == 403) {
@@ -1193,6 +1206,16 @@ function printMessages() {
     chat.forEach(function (item, i, arr) {
         addOneMessage(item, { scroll: i === arr.length - 1 });
     });
+
+    if (power_user.lazy_load > 0) {
+        const height = $('#chat').height();
+        const scrollHeight = $('#chat').prop('scrollHeight');
+
+        // Only hide if oveflowing the scroll
+        if (scrollHeight > height) {
+            $('#chat').children('.mes').slice(0, -power_user.lazy_load).hide();
+        }
+    }
 }
 
 function clearChat() {
@@ -1619,9 +1642,11 @@ function scrollChatToBottom() {
     }
 }
 
-function substituteParams(content, _name1, _name2, _original) {
+function substituteParams(content, _name1, _name2, _original, _group) {
     _name1 = _name1 ?? name1;
     _name2 = _name2 ?? name2;
+    _original = _original || '';
+    _group = _group ?? name2;
 
     if (!content) {
         return '';
@@ -1636,8 +1661,14 @@ function substituteParams(content, _name1, _name2, _original) {
     content = content.replace(/{{input}}/gi, $('#send_textarea').val());
     content = content.replace(/{{user}}/gi, _name1);
     content = content.replace(/{{char}}/gi, _name2);
+    content = content.replace(/{{charIfNotGroup}}/gi, _group);
+    content = content.replace(/{{group}}/gi, _group);
+
     content = content.replace(/<USER>/gi, _name1);
     content = content.replace(/<BOT>/gi, _name2);
+    content = content.replace(/<CHARIFNOTGROUP>/gi, _group);
+    content = content.replace(/<GROUP>/gi, _group);
+
     content = content.replace(/{{time}}/gi, moment().format('LT'));
     content = content.replace(/{{date}}/gi, moment().format('LL'));
     content = content.replace(/{{idle_duration}}/gi, () => getTimeSinceLastMessage());
@@ -2205,7 +2236,7 @@ class StreamingProcessor {
     }
 }
 
-async function Generate(type, { automatic_trigger, force_name2, resolve, reject, quiet_prompt, force_chid, signal } = {}) {
+async function Generate(type, { automatic_trigger, force_name2, resolve, reject, quiet_prompt, force_chid, signal } = {}, dryRun = false) {
     //console.log('Generate entered');
     setGenerationProgress(0);
     tokens_already_generated = 0;
@@ -2277,14 +2308,34 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         reject = () => { };
     }
 
-    if (selected_group && !is_group_generating) {
+    if (selected_group && !is_group_generating && !dryRun) {
         generateGroupWrapper(false, type, { resolve, reject, quiet_prompt, force_chid, signal: abortController.signal });
         return;
+    } else if (selected_group && !is_group_generating && dryRun) {
+        const characterIndexMap = new Map(characters.map((char, index) => [char.avatar, index]));
+        const group = groups.find((x) => x.id === selected_group);
+
+        const enabledMembers = group.members.reduce((acc, member) => {
+            if (!group.disabled_members.includes(member) && !acc.includes(member)) {
+                acc.push(member);
+            }
+            return acc;
+        }, []);
+
+        const memberIds = enabledMembers
+            .map((member) => characterIndexMap.get(member))
+            .filter((index) => index !== undefined);
+
+        if (memberIds.length > 0) {
+            setCharacterId(memberIds[0]);
+            setCharacterName('');
+        }
     }
 
-    if (online_status != 'no_connection' && this_chid != undefined && this_chid !== 'invalid-safety-id') {
+    if (true === dryRun ||
+        (online_status != 'no_connection' && this_chid != undefined && this_chid !== 'invalid-safety-id')) {
         let textareaText;
-        if (type !== 'regenerate' && type !== "swipe" && type !== 'quiet' && !isImpersonate) {
+        if (type !== 'regenerate' && type !== "swipe" && type !== 'quiet' && !isImpersonate && !dryRun) {
             is_send_press = true;
             textareaText = $("#send_textarea").val();
             $("#send_textarea").val('').trigger('input');
@@ -2293,7 +2344,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             if (chat.length && chat[chat.length - 1]['is_user']) {
                 //do nothing? why does this check exist?
             }
-            else if (type !== 'quiet' && type !== "swipe" && !isImpersonate) {
+            else if (type !== 'quiet' && type !== "swipe" && !isImpersonate && !dryRun) {
                 chat.length = chat.length - 1;
                 count_view_mes -= 1;
                 $('#chat').children().last().hide(500, function () {
@@ -2775,19 +2826,20 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                 generate_data = getNovelGenerationData(finalPromt, this_settings, this_amount_gen, isImpersonate);
             }
             else if (main_api == 'openai') {
-                let [prompt, counts] = await prepareOpenAIMessages({
-                    systemPrompt: systemPrompt,
+                let [prompt, counts] = prepareOpenAIMessages({
                     name2: name2,
-                    storyString: storyString,
+                    charDescription: charDescription,
+                    charPersonality: charPersonality,
+                    Scenario: Scenario,
                     worldInfoBefore: worldInfoBefore,
                     worldInfoAfter: worldInfoAfter,
-                    extensionPrompt: afterScenarioAnchor,
+                    extensionPrompts: extension_prompts,
                     bias: promptBias,
                     type: type,
                     quietPrompt: quiet_prompt,
                     jailbreakPrompt: jailbreakPrompt,
                     cyclePrompt: cyclePrompt,
-                });
+                }, dryRun);
                 generate_data = { prompt: prompt };
 
                 // counts will return false if the user has not enabled the token breakdown feature
@@ -2797,6 +2849,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
                 setInContextMessages(openai_messages_count, type);
             }
+
+            if (true === dryRun) return onSuccess({error: 'dryRun'});
 
             if (power_user.console_log_prompts) {
 
@@ -3171,20 +3225,19 @@ function getMaxContextSize() {
     if (main_api == 'novel') {
         this_max_context = Number(max_context);
         if (nai_settings.model_novel == 'krake-v2' || nai_settings.model_novel == 'euterpe-v2') {
-            // Krake and Euterpe have a max context of 2048
-            // Should be used with classic gpt tokenizer for best results
             this_max_context = Math.min(max_context, 2048);
         }
-        if (nai_settings.model_novel == 'clio-v1' || nai_settings.model_novel == 'kayra-v1') {
-            // Clio and Kayra have a max context of 8192
-            // Should be used with nerdstash / nerdstash_v2 tokenizer for best results
+        if (nai_settings.model_novel == 'clio-v1') {
             this_max_context = Math.min(max_context, 8192);
         }
+        if (nai_settings.model_novel == 'kayra-v1') {
+            this_max_context = Math.min(max_context, 8192);
 
-        const subscriptionLimit = getNovelMaxContextTokens();
-        if (typeof subscriptionLimit === "number" && this_max_context > subscriptionLimit) {
-            this_max_context = subscriptionLimit;
-            console.log(`NovelAI subscription limit reached. Max context size is now ${this_max_context}`);
+            const subscriptionLimit = getKayraMaxContextTokens();
+            if (typeof subscriptionLimit === "number" && this_max_context > subscriptionLimit) {
+                this_max_context = subscriptionLimit;
+                console.log(`NovelAI subscription limit reached. Max context size is now ${this_max_context}`);
+            }
         }
 
         this_max_context = this_max_context - amount_gen;
@@ -3199,14 +3252,14 @@ function parseTokenCounts(counts, thisPromptBits) {
     const total = Object.values(counts).filter(x => !Number.isNaN(x)).reduce((acc, val) => acc + val, 0);
 
     thisPromptBits.push({
-        oaiStartTokens: Object.entries(counts)[0][1],
-        oaiPromptTokens: Object.entries(counts)[1][1],
-        oaiBiasTokens: Object.entries(counts)[2][1],
-        oaiNudgeTokens: Object.entries(counts)[3][1],
-        oaiJailbreakTokens: Object.entries(counts)[4][1],
-        oaiImpersonateTokens: Object.entries(counts)[5][1],
-        oaiExamplesTokens: Object.entries(counts)[6][1],
-        oaiConversationTokens: Object.entries(counts)[7][1],
+        oaiStartTokens: Object.entries(counts)?.[0]?.[1] ?? 0,
+        oaiPromptTokens: Object.entries(counts)?.[1]?.[1] ?? 0,
+        oaiBiasTokens: Object.entries(counts)?.[2]?.[1] ?? 0,
+        oaiNudgeTokens: Object.entries(counts)?.[3]?.[1] ?? 0,
+        oaiJailbreakTokens: Object.entries(counts)?.[4]?.[1] ?? 0,
+        oaiImpersonateTokens: Object.entries(counts)?.[5]?.[1] ?? 0,
+        oaiExamplesTokens: Object.entries(counts)?.[6]?.[1] ?? 0,
+        oaiConversationTokens: Object.entries(counts)?.[7]?.[1] ?? 0,
         oaiTotalTokens: total,
     });
 }
@@ -4348,6 +4401,7 @@ async function getChat() {
         }
         await getChatResult();
         await saveChat();
+        eventSource.emit('chatLoaded', {detail: {id: this_chid, character: characters[this_chid]}});
 
 
         setTimeout(function () {
@@ -4506,6 +4560,17 @@ function changeMainAPI() {
         is_get_status = true;
         getStatus();
         getHordeModels();
+    }
+
+    switch (oai_settings.chat_completion_source) {
+        case chat_completion_sources.SCALE:
+        case chat_completion_sources.OPENROUTER:
+        case chat_completion_sources.WINDOWAI:
+        case chat_completion_sources.CLAUDE:
+        case chat_completion_sources.OPENAI:
+        default:
+            setupChatCompletionPromptManager(oai_settings);
+            break;
     }
 }
 
@@ -5025,6 +5090,9 @@ async function getSettings(type) {
             $("#your_name").val(name1);
         }
 
+        // Allow subscribers to mutate settings
+        eventSource.emit(event_types.SETTINGS_LOADED_BEFORE, settings);
+
         //Load KoboldAI settings
         koboldai_setting_names = data.koboldai_setting_names;
         koboldai_settings = data.koboldai_settings;
@@ -5111,6 +5179,9 @@ async function getSettings(type) {
 
         // Load context templates
         loadContextTemplatesFromSettings(data, settings);
+
+        // Allow subscribers to mutate settings
+        eventSource.emit(event_types.SETTINGS_LOADED_AFTER, settings);
 
         // Set context size after loading power user (may override the max value)
         $("#max_context").val(max_context);
@@ -5474,7 +5545,7 @@ async function getStatusNovel() {
             success: function (data) {
                 if (data.error != true) {
                     setNovelData(data);
-                    online_status = `${getNovelTier(data.tier)} (${getNovelMaxContextTokens()} context tokens)`;
+                    online_status = `${getNovelTier(data.tier)}`;
                 }
                 resultCheckStatusNovel();
             },
@@ -6469,6 +6540,7 @@ async function createOrEditCharacter(e) {
                 );
                 $("#create_button").attr("value", "Save");
                 crop_data = undefined;
+                eventSource.emit(event_types.CHARACTER_EDITED, {detail: {id: this_chid, character: characters[this_chid]}});
             },
             error: function (jqXHR, exception) {
                 $("#create_button").removeAttr("disabled");
@@ -7145,6 +7217,17 @@ $(document).ready(function () {
         updateVisibleDivs('#rm_print_characters_block', true);
     }, 5));
 
+    $('#chat').on('scroll', async () => {
+        // if on the start of the chat and has hidden messages
+        if ($('#chat').scrollTop() === 0 && $('#chat').children('.mes').not(':visible').length > 0) {
+            // show next hidden messages
+            const prevHeight = $('#chat').prop('scrollHeight');
+            $('#chat').children('.mes').not(':visible').slice(-power_user.lazy_load).show();
+            const newHeight = $('#chat').prop('scrollHeight');
+            $('#chat').scrollTop(newHeight - prevHeight);
+        }
+    });
+
     $("#chat").on('mousewheel touchstart', () => {
         scrollLock = true;
     });
@@ -7501,6 +7584,7 @@ $(document).ready(function () {
         if (popup_type == "del_ch") {
             const deleteChats = !!$("#del_char_checkbox").prop("checked");
             await handleDeleteCharacter(popup_type, this_chid, deleteChats);
+            eventSource.emit('characterDeleted', {id: this_chid, character: characters[this_chid]});
         }
         if (popup_type == "alternate_greeting" && menu_type !== "create") {
             createOrEditCharacter();
@@ -7977,7 +8061,7 @@ $(document).ready(function () {
         is_delete_mode = false;
     });
 
-    //confirms message delation with the "ok" button
+    //confirms message deletion with the "ok" button
     $("#dialogue_del_mes_ok").click(function () {
         $("#dialogue_del_mes").css("display", "none");
         $("#send_form").css("display", css_send_form_display);
@@ -8376,6 +8460,8 @@ $(document).ready(function () {
 
         updateViewMessageIds();
         saveChatConditional();
+
+        eventSource.emit(event_types.MESSAGE_DELETED, count_view_mes);
 
         hideSwipeButtons();
         showSwipeButtons();
@@ -8982,7 +9068,9 @@ $(document).ready(function () {
         $dropzone.removeClass('dragover');
 
         const files = Array.from(event.originalEvent.dataTransfer.files);
-        await importFromURL(event.originalEvent.dataTransfer.items, files);
+        if (!files.length) {
+            await importFromURL(event.originalEvent.dataTransfer.items, files);
+        }
         processDroppedFiles(files);
     });
 
