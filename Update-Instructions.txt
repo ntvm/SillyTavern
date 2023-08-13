@@ -54,6 +54,6 @@ If you insist on installing via a zip, here is the tedious process for doing the
 
 5. Paste those items into the /Public/ folder of the new install.
 
-6. Start SillyTavern once again with the method appropriate to your OS, and pray you got it right.
+6. Start SillyTavern once again with the method appropriate to your OS, and pray you got it right. 
 
 7. If everything shows up, you can safely delete the old ST folder.
