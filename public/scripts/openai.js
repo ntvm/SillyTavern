@@ -4,6 +4,7 @@
 * https://github.com/CncAnon1/TavernAITurbo
 */
 
+
 import {
     saveSettingsDebounced,
     checkOnlineStatus,
@@ -21,12 +22,15 @@ import {
     is_send_press,
     saveSettings,
     Generate,
+    saveSettings,
     main_api,
     eventSource,
     event_types,
     substituteParams,
 } from "../script.js";
-import {groups, selected_group} from "./group-chats.js";
+import { groups, selected_group } from "./group-chats.js";
+import { extension_settings} from "./extensions.js";
+
 
 import {
     promptManagerDefaultPromptOrders,
@@ -93,6 +97,7 @@ const default_new_chat_prompt = '[Start a new Chat]';
 const default_new_group_chat_prompt = '[Start a new group chat. Group members: {{group}}]';
 const default_new_example_chat_prompt = '[Start a new Chat]';
 const default_continue_nudge_prompt = '[Continue the following message. Do not include ANY parts of the original message. Use capitalization and punctuation as if your reply is a part of the original message: {{lastChatMessage}}]';
+const default_lookaround_nudge_prompt = '[Complete these steps: 1. Paste a line break. 2. Write "```XML" and add a line break. 3. Describe in 50 words the scene Human is currently in. Describe the location, objects, and chatacers (if applicable) that Human can interact with, much like a Dungeon & Dragons GM would starting with "👁 You look around and see...". Make it 60 words total. 4. Add a line break and write "```".]';
 const default_bias = 'Default (none)';
 const default_bias_presets = {
     [default_bias]: [],
@@ -150,7 +155,8 @@ const default_settings = {
     new_group_chat_prompt: default_new_group_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
-    bias_preset_selected: default_bias,
+    lookaround_nudge_prompt: default_lookaround_nudge_prompt,
+	bias_preset_selected: default_bias,
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
     openai_model: 'gpt-3.5-turbo',
@@ -167,6 +173,11 @@ const default_settings = {
     proxy_password: '',
     assistant_prefill: '',
 };
+
+
+
+
+
 
 const oai_settings = {
     preset_settings_openai: 'Default',
@@ -188,6 +199,7 @@ const oai_settings = {
     new_group_chat_prompt: default_new_group_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
+    lookaround_nudge_prompt: default_lookaround_nudge_prompt,						
     bias_preset_selected: default_bias,
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
@@ -204,6 +216,7 @@ const oai_settings = {
     show_external_models: false,
     proxy_password: '',
     assistant_prefill: '',
+
 };
 
 let openai_setting_names;
@@ -250,12 +263,33 @@ function setOpenAIMessages(chat) {
             role = 'system';
             openai_narrator_messages_count++;
         }
-
-        // for groups or sendas command - prepend a character's name
-        if (!oai_settings.names_in_completion) {
-            if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
+    switch (extension_settings.Nvkun.AlwaysCharnames) {
+        case undefined:
+            var AlwaysCharnames = extension_settings.Nvkun.AlwaysCharnames;
+            break
+        case "true": 
+            AlwaysCharnames = true;
+            break
+        default:
+            AlwaysCharnames = false;
+            break
+    }
+        // Check the value of AlwaysCharnames
+        switch (AlwaysCharnames) {
+            // If it is on, use Anons code
+            case true:
+                // for groups or sendas command - prepend a character's name
                 content = `${chat[j].name}: ${content}`;
-            }
+                break
+            // If it is anything else, use the original code
+            default:
+                // for groups or sendas command - prepend a character's name
+                if (!oai_settings.names_in_completion) {
+                    if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
+                        content = `${chat[j].name}: ${content}`;
+                    }
+
+				}
         }
         content = replaceBiasMarkup(content);
 
@@ -270,7 +304,7 @@ function setOpenAIMessages(chat) {
     }
 
     // Add chat injections, 100 = maximum depth of injection. (Why would you ever need more?)
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 200; i++) {
         const anchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, i);
 
         if (anchor && anchor.length) {
@@ -366,7 +400,7 @@ function parseExampleIntoIndividual(messageExampleString) {
     for (let i = 1; i < tmp.length; i++) {
         let cur_str = tmp[i];
         // if it's the user message, switch into user mode and out of bot mode
-        // yes, repeated code, but I don't care
+        // yes, repeated code, but I don't care// //If Silly Don't why I should?
         if (cur_str.startsWith(name1 + ":")) {
             in_user = true;
             // we were in the bot mode previously, add the message
@@ -437,6 +471,21 @@ function populateChatHistory(prompts, chatCompletion, type = null, cyclePrompt =
         chatCompletion.reserveBudget(continueMessage);
     }
 
+
+	// Reserve budget for continue(why not?) nudge
+    let lookaroundMessage = null;
+    if (type === 'lookaround') {
+        const continuePrompt = new Prompt({
+            identifier: 'continueNudge',
+            role: 'system',
+            content: oai_settings.lookaround_nudge_prompt,
+            system_prompt: true
+        });
+        const preparedPrompt = promptManager.preparePrompt(continuePrompt);
+        continueMessage = Message.fromPrompt(preparedPrompt);
+        chatCompletion.reserveBudget(continueMessage);
+	}
+
     const lastChatPrompt = openai_msgs[openai_msgs.length - 1];
     const message = new Message('user', oai_settings.send_if_empty, 'emptyUserMessageReplacement');
     if (lastChatPrompt && lastChatPrompt.role === 'assistant' && oai_settings.send_if_empty && chatCompletion.canAfford(message)) {
@@ -463,8 +512,12 @@ function populateChatHistory(prompts, chatCompletion, type = null, cyclePrompt =
     chatCompletion.freeBudget(newChatMessage);
     chatCompletion.insertAtStart(newChatMessage, 'chatHistory');
 
-    // Insert and free continue nudge
+    // Insert and free continue nudge (Yeah, same nudge, not like you can get them at same time anyway)
     if (type === 'continue' && continueMessage) {
+        chatCompletion.freeBudget(continueMessage);
+        chatCompletion.insertAtEnd(continueMessage, 'chatHistory')
+    }
+    if (type === 'lookaround') {
         chatCompletion.freeBudget(continueMessage);
         chatCompletion.insertAtEnd(continueMessage, 'chatHistory')
     }
@@ -570,6 +623,10 @@ function populateChatCompletion (prompts, chatCompletion, {bias, quietPrompt, ty
     // Tavern Extras - Summary
     if (prompts.has('summary')) chatCompletion.insert(Message.fromPrompt(prompts.get('summary')), 'main');
 
+
+    // Tavern Extras - rework later
+    //if (prompts.has('summary')) chatCompletion.insert(Message.fromPrompt(prompts.get('summary')), 'main');
+
     // Authors Note
     if (prompts.has('authorsNote')) {
         const authorsNote = Message.fromPrompt(prompts.get('authorsNote'));
@@ -662,6 +719,13 @@ function preparePromptsForChatCompletion(Scenario, charPersonality, name2, world
         role: 'system',
         content: summary.content,
         identifier: 'summary'
+    });
+    //(Yep, XML prompt)
+    const inject1 = extensionPrompts['Nvkun'];
+    if (inject1 && inject1.content) systemPrompts.push({
+        role: 'system',
+        content: inject1.content,
+        identifier: 'inject1'
     });
 
     // Authors Note
@@ -1840,6 +1904,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.new_group_chat_prompt = settings.new_group_chat_prompt ?? default_settings.new_group_chat_prompt;
     oai_settings.new_example_chat_prompt = settings.new_example_chat_prompt ?? default_settings.new_example_chat_prompt;
     oai_settings.continue_nudge_prompt = settings.continue_nudge_prompt ?? default_settings.continue_nudge_prompt;
+    oai_settings.lookaround_nudge_prompt = settings.lookaround_nudge_prompt ?? default_settings.lookaround_nudge_prompt;
 
     if (settings.keep_example_dialogue !== undefined) oai_settings.keep_example_dialogue = !!settings.keep_example_dialogue;
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
@@ -1882,6 +1947,7 @@ function loadOpenAISettings(data, settings) {
     $('#newgroupchat_prompt_textarea').val(oai_settings.new_group_chat_prompt);
     $('#newexamplechat_prompt_textarea').val(oai_settings.new_example_chat_prompt);
     $('#continue_nudge_prompt_textarea').val(oai_settings.continue_nudge_prompt);
+    $('#lookaround_nudge_prompt_textarea').val(oai_settings.lookaround_nudge_prompt);
 
     $('#wi_format_textarea').val(oai_settings.wi_format);
     $('#send_if_empty_textarea').val(oai_settings.send_if_empty);
@@ -2051,6 +2117,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         new_group_chat_prompt: settings.new_group_chat_prompt,
         new_example_chat_prompt: settings.new_example_chat_prompt,
         continue_nudge_prompt: settings.continue_nudge_prompt,
+        lookaround_nudge_prompt: settings.lookaround_nudge_prompt,
         bias_preset_selected: settings.bias_preset_selected,
         reverse_proxy: settings.reverse_proxy,
         proxy_password: settings.proxy_password,
@@ -2380,6 +2447,7 @@ function onSettingsPresetChange() {
         new_group_chat_prompt: ['#newgroupchat_prompt_textarea', 'new_group_chat_prompt', false],
         new_example_chat_prompt: ['#newexamplechat_prompt_textarea', 'new_example_chat_prompt', false],
         continue_nudge_prompt: ['#continue_nudge_prompt_textarea', 'continue_nudge_prompt', false],
+        lookaround_nudge_prompt: ['#lookaround_nudge_prompt_textarea', 'lookaround_nudge_prompt', false],
         bias_preset_selected: ['#openai_logit_bias_preset', 'bias_preset_selected', false],
         reverse_proxy: ['#openai_reverse_proxy', 'reverse_proxy', false],
         legacy_streaming: ['#legacy_streaming', 'legacy_streaming', true],
@@ -2844,6 +2912,11 @@ $(document).ready(function () {
         saveSettingsDebounced();
     });
 
+    $("#lookaround_nudge_prompt_textarea").on('input', function () {
+        oai_settings.lookaround_nudge_prompt = $('#lookaround_nudge_prompt_textarea').val();
+        saveSettingsDebounced();
+    });
+
     $("#nsfw_avoidance_prompt_textarea").on('input', function () {
         oai_settings.nsfw_avoidance_prompt = $('#nsfw_avoidance_prompt_textarea').val();
         saveSettingsDebounced();
@@ -2916,6 +2989,12 @@ $(document).ready(function () {
     $("#continue_nudge_prompt_restore").on('click', function () {
         oai_settings.continue_nudge_prompt = default_continue_nudge_prompt;
         $('#continue_nudge_prompt_textarea').val(oai_settings.continue_nudge_prompt);
+        saveSettingsDebounced();
+    });
+
+    $("#lookaround_nudge_prompt_restore").on('click', function () {
+        oai_settings.lookaround_nudge_prompt = default_lookaround_nudge_prompt;
+        $('#lookaround_nudge_prompt_textarea').val(oai_settings.lookaround_nudge_prompt);
         saveSettingsDebounced();
     });
 

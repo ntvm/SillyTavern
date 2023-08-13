@@ -1289,10 +1289,8 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
         mes = fixMarkdown(mes);
     }
 
-    if (!isSystem && power_user.encode_tags) {
-        mes = mes.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-    }
-
+    //if (this_chid != undefined && !isSystem)
+    //    mes = mes.replaceAll("<", "&lt;").replaceAll(">", "&gt;"); //for welcome message
     if ((this_chid === undefined || this_chid === "invalid-safety-id") && !selected_group) {
         mes = mes
             .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
@@ -2071,6 +2069,7 @@ class StreamingProcessor {
     onProgressStreaming(messageId, text, isFinal) {
         const isImpersonate = this.type == "impersonate";
         const isContinue = this.type == "continue";
+        const isLookaround = this.type == "lookaround";
         text = this.removePrefix(text);
         let processedText = cleanUpMessage(text, isImpersonate, isContinue, !isFinal);
         let result = extractNameFromMessage(processedText, this.force_name2, isImpersonate);
@@ -2360,7 +2359,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         }
 
         const isContinue = type == 'continue';
-        deactivateSendButtons();
+        const isLookaround = type == 'lookaround';
+		deactivateSendButtons();
 
         let { messageBias, promptBias, isUserPromptBias } = getBiasStrings(textareaText, type);
 
@@ -2605,7 +2605,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
             generatedPromtCache += cycleGenerationPromt;
             if (generatedPromtCache.length == 0 || type === 'continue') {
-                if (main_api === 'openai') {
+				if (main_api === 'openai') {
                     generateOpenAIPromptCache();
                 }
 
@@ -3012,7 +3012,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
                     //Formating
                     const displayIncomplete = type == 'quiet';
-                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue, displayIncomplete);
+
+                    getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue, isLookaround, displayIncomplete);
 
                     let this_mes_is_name;
                     ({ this_mes_is_name, getMessage } = extractNameFromMessage(getMessage, force_name2, isImpersonate));
@@ -3135,7 +3136,7 @@ function getNextMessageId(type) {
 }
 
 export function getBiasStrings(textareaText, type) {
-    if (type == 'impersonate' || type == 'continue') {
+    if (type == 'impersonate' || type == 'continue' || type === 'lookaround') {
         return { messageBias: '', promptBias: '', isUserPromptBias: false };
     }
 
@@ -7981,6 +7982,13 @@ $(document).ready(function () {
             if (is_send_press == false || fromSlashCommand) {
                 is_send_press = true;
                 Generate("continue");
+            }
+        }
+        
+        else if (id == 'option_lookaround') {
+            if (is_send_press == false || fromSlashCommand) {
+                is_send_press = true;
+                Generate("lookaround");
             }
         }
 

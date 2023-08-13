@@ -11,7 +11,4 @@ if %errorlevel% neq 0 (
         echo There were errors while updating. Please download the latest version manually.
     )
 )
-call npm install
-node server.js
 pause
-popd

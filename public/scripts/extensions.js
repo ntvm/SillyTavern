@@ -41,7 +41,7 @@ class ModuleWorkerWrapper {
     }
 }
 
-const extension_settings = {
+let extension_settings = {
     apiUrl: defaultUrl,
     apiKey: '',
     autoConnect: false,
@@ -73,6 +73,7 @@ const extension_settings = {
         fluctuation: 0.1,
         enabled: false,
     },
+    Nvkun: {},
     speech_recognition: {},
     rvc: {},
 };
