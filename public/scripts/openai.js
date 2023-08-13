@@ -22,7 +22,6 @@ import {
     is_send_press,
     saveSettings,
     Generate,
-    saveSettings,
     main_api,
     eventSource,
     event_types,
