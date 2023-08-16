@@ -74,6 +74,7 @@ import {
     getCustomStoppingStrings,
     fuzzySearchCharacters,
     MAX_CONTEXT_DEFAULT,
+    fuzzySearchGroups,
 } from "./scripts/power-user.js";
 
 import {
@@ -1351,6 +1352,61 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
     return mes;
 }
 
+/**
+ * Inserts or replaces an SVG icon adjacent to the provided message's timestamp.
+ *
+ * If the `extra.api` is "openai" and `extra.model` contains the substring "claude",
+ * the function fetches the "claude.svg". Otherwise, it fetches the SVG named after
+ * the value in `extra.api`.
+ *
+ * @param {jQuery} mes - The message element containing the timestamp where the icon should be inserted or replaced.
+ * @param {Object} extra - Contains the API and model details.
+ * @param {string} extra.api - The name of the API, used to determine which SVG to fetch.
+ * @param {string} extra.model - The model name, used to check for the substring "claude".
+ */
+function insertSVGIcon(mes, extra) {
+    // Determine the SVG filename
+    let modelName;
+
+    // Claude on OpenRouter or Anthropic
+    if (extra.api === "openai" && extra.model?.toLowerCase().includes("claude")) {
+        modelName = "claude";
+    }
+    // OpenAI on OpenRouter
+    else if (extra.api === "openai" && extra.model?.toLowerCase().includes("openai")) {
+        modelName = "openai";
+    }
+    // OpenRouter website model or other models
+    else if (extra.api === "openai" && (extra.model === null || extra.model?.toLowerCase().includes("/"))) {
+        modelName = "openrouter";
+    }
+    // Everything else
+    else {
+        modelName = extra.api;
+    }
+
+    // Fetch the SVG based on the modelName
+    $.get(`/img/${modelName}.svg`, function (data) {
+        // Extract the SVG content from the XML data
+        let svg = $(data).find('svg');
+
+        // Add classes for styling and identification
+        svg.addClass('icon-svg timestamp-icon');
+
+        // Check if an SVG already exists adjacent to the timestamp
+        let existingSVG = mes.find('.timestamp').next('.timestamp-icon');
+
+        if (existingSVG.length) {
+            // Replace existing SVG
+            existingSVG.replaceWith(svg);
+        } else {
+            // Append the new SVG if none exists
+            mes.find('.timestamp').after(svg);
+        }
+    });
+}
+
+
 function getMessageFromTemplate({
     mesId,
     characterName,
@@ -1383,6 +1439,10 @@ function getMessageFromTemplate({
     mes.find('.mesIDDisplay').text(`#${mesId}`);
     title && mes.attr('title', title);
     timerValue && mes.find('.mes_timer').attr('title', timerTitle).text(timerValue);
+
+    if (power_user.timestamp_model_icon && extra?.api) {
+        insertSVGIcon(mes, extra);
+    }
 
     return mes;
 }
@@ -1575,6 +1635,9 @@ function addOneMessage(mes, { type = "normal", insertAfter = null, scroll = true
         appendImageToMessage(mes, $("#chat").find(`[mesid="${count_view_mes - 1}"]`));
         $("#chat").find(`[mesid="${count_view_mes - 1}"]`).attr('title', title);
         $("#chat").find(`[mesid="${count_view_mes - 1}"]`).find('.timestamp').text(timestamp).attr('title', `${params.extra.api} - ${params.extra.model}`);
+        if (power_user.timestamp_model_icon && params.extra?.api) {
+            insertSVGIcon($("#chat").find(`[mesid="${count_view_mes - 1}"]`), params.extra);
+        }
 
         if (mes.swipe_id == mes.swipes.length - 1) {
             $("#chat").find(`[mesid="${count_view_mes - 1}"]`).find('.mes_timer').text(params.timerValue);
@@ -2296,7 +2359,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
     }
 
     // Hide swipes on either multigen or real streaming
-    if (isStreamingEnabled() || isMultigenEnabled()) {
+    if ((isStreamingEnabled() || isMultigenEnabled()) && !dryRun) {
         hideSwipeButtons();
     }
 
@@ -2360,7 +2423,11 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
         const isContinue = type == 'continue';
         const isLookaround = type == 'lookaround';
-		deactivateSendButtons();
+
+        if (!dryRun) {
+            deactivateSendButtons();
+        }
+
 
         let { messageBias, promptBias, isUserPromptBias } = getBiasStrings(textareaText, type);
 
@@ -2420,8 +2487,13 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         // Determine token limit
         let this_max_context = getMaxContextSize();
 
-        // Always run the extension interceptors.
-        await runGenerationInterceptors(coreChat, this_max_context);
+        if (!dryRun) {
+            console.debug('Running extension interceptors');
+            await runGenerationInterceptors(coreChat, this_max_context);
+        } else {
+            console.debug('Skipping extension interceptors for dry run');
+        }
+
         console.log(`Core/all messages: ${coreChat.length}/${chat.length}`);
 
         let storyString = "";
@@ -2581,7 +2653,10 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
         let mesSend = [];
         console.debug('calling runGenerate');
-        streamingProcessor = isStreamingEnabled() ? new StreamingProcessor(type, force_name2) : false;
+
+        if (!dryRun) {
+            streamingProcessor = isStreamingEnabled() ? new StreamingProcessor(type, force_name2) : false;
+        }
 
         if (isContinue) {
             // Coping mechanism for OAI spacing
@@ -2601,7 +2676,9 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         runGenerate(cyclePrompt);
 
         async function runGenerate(cycleGenerationPromt = '') {
-            is_send_press = true;
+            if (!dryRun) {
+                is_send_press = true;
+            }
 
             generatedPromtCache += cycleGenerationPromt;
             if (generatedPromtCache.length == 0 || type === 'continue') {
@@ -2847,7 +2924,9 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     parseTokenCounts(counts, thisPromptBits);
                 }
 
-                setInContextMessages(openai_messages_count, type);
+                if (!dryRun) {
+                    setInContextMessages(openai_messages_count, type);
+                }
             }
 
             if (true === dryRun) return onSuccess({error: 'dryRun'});
@@ -2954,6 +3033,12 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             }
 
             async function onSuccess(data) {
+                if (data.error == 'dryRun') {
+                    generatedPromtCache = '';
+                    resolve();
+                    return;
+                }
+
                 hideStopButton();
                 is_send_press = false;
                 if (!data.error) {
@@ -3265,8 +3350,9 @@ function parseTokenCounts(counts, thisPromptBits) {
 }
 
 function addChatsPreamble(mesSendString) {
-    const preamble = main_api === 'novel' ? nai_settings.preamble : "";
-    return preamble + '\n' + mesSendString;
+    return main_api === 'novel'
+        ? nai_settings.preamble + '\n' + mesSendString
+        : mesSendString;
 }
 
 function addChatsSeparator(mesSendString) {
@@ -3280,7 +3366,7 @@ function addChatsSeparator(mesSendString) {
     }
 
     else if (main_api === 'novel') {
-        mesSendString = '\n***\n' + mesSendString;
+        mesSendString = '***\n' + mesSendString;
     }
 
     // add non-pygma dingus
@@ -4538,6 +4624,12 @@ function changeMainAPI() {
         console.log("enabling amount_gen for ooba/novel");
         activeItem.amountGenElem.find('input').prop("disabled", false);
         activeItem.amountGenElem.css("opacity", 1.0);
+    }
+
+    if (selectedVal === "novel") {
+        $("#ai_module_block_novel").css("display", "block");
+    } else {
+        $("#ai_module_block_novel").css("display", "none");
     }
 
     // Hide common settings for OpenAI
@@ -7281,14 +7373,22 @@ $(document).ready(function () {
     $("#character_search_bar").on("input", function () {
         const selector = ['#rm_print_characters_block .character_select', '#rm_print_characters_block .group_select'].join(',');
         const searchValue = $(this).val().trim().toLowerCase();
-        const fuzzySearchResults = power_user.fuzzy_search ? fuzzySearchCharacters(searchValue) : [];
+        const fuzzySearchCharactersResults = power_user.fuzzy_search ? fuzzySearchCharacters(searchValue) : [];
+        const fuzzySearchGroupsResults = power_user.fuzzy_search ? fuzzySearchGroups(searchValue) : [];
 
         function getIsValidSearch(_this) {
             const name = $(_this).find(".ch_name").text().toLowerCase();
             const chid = $(_this).attr("chid");
+            const grid = $(_this).attr("grid");
 
             if (power_user.fuzzy_search) {
-                return fuzzySearchResults.includes(parseInt(chid));
+                if (chid !== undefined) {
+                    return fuzzySearchCharactersResults.includes(parseInt(chid));
+                } else if (grid !== undefined) {
+                    return fuzzySearchGroupsResults.includes(String(grid));
+                } else {
+                    return false;
+                }
             }
             else {
                 return name.includes(searchValue);

@@ -40,6 +40,7 @@
     <script src="scripts/select2.min.js"></script>
     <script src="scripts/seedrandom.min.js"></script>
     <script src="scripts/droll.js"></script>
+    <script src="scripts/localforage.min.js"></script>
     <script type="module" src="scripts/eventemitter.js"></script>
     <script type="module" src="scripts/power-user.js"></script>
     <script type="module" src="scripts/swiped-events.js"></script>
@@ -48,7 +49,8 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <script>
         function applyLocale() {
-            var language = navigator.language || navigator.userLanguage;
+            const overrideLanguage = localStorage.getItem("language");
+            var language = overrideLanguage || navigator.language || navigator.userLanguage;
             language = language.toLowerCase();
             console.log(language)
             //load the appropriate language file
@@ -179,7 +181,7 @@
                                 </div>
                             </div>
                             <div id="textgenerationwebui_api-presets">
-                                <h3><span data-i18n="text gen webio(ooba)preset">Text Gen WebUI (ooba) presets</span>
+                                <h3><span data-i18n="Text Gen WebUI (ooba/Mancer) presets">Text Gen WebUI (ooba/Mancer) presets</span>
                                 </h3>
                                 <div class="preset_buttons">
                                     <select id="settings_preset_textgenerationwebui" data-preset-manager-for="textgenerationwebui">
@@ -192,6 +194,24 @@
                                 </div>
                             </div>
                             <hr>
+                        </div>
+
+                        <div id="ai_module_block_novel" class="width100p">
+                            <div class="range-block">
+                                <div class="range-block-title justifyLeft">
+                                    AI Module
+                                </div>
+                                <div class="toggle-description justifyLeft"
+                                    data-i18n="Changes the style of the generated text.">
+                                    Changes the style of the generated text.
+                                </div>
+                                <select id="nai_prefix">
+                                    <option value="vanilla" data-i18n="No Module">No Module</option>
+                                    <option value="special_instruct" data-i18n="Instruct">Instruct</option>
+                                    <option value="special_proseaugmenter" data-i18n="Prose Augmenter">Prose Augmenter</option>
+                                    <option value="theme_textadventure" data-i18n="Text Adventure">Text Adventure</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div id="common-gen-settings-block" class="width100p">
@@ -426,6 +446,19 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="range-block">
+                                    <div class="range-block-title" data-i18n="Phrase Repetition Penalty">
+                                        Phrase Repetition Penalty
+                                    </div>
+                                    <select id="phrase_rep_pen_novel">
+                                        <option value="off" data-i18n="Off">Off</option>
+                                        <option value="very_light" data-i18n="Very light">Very light</option>
+                                        <option value="light" data-i18n="Light">Light</option>
+                                        <option value="medium" data-i18n="Medium">Medium</option>
+                                        <option value="aggressive" data-i18n="Aggressive">Aggressive</option>
+                                        <option value="very_aggressive" data-i18n="Very aggressive">Very aggressive</option>
+                                    </select>
+                                </div>
                             </div>
                             <div id="range_block_textgenerationwebui">
                                 <div class="range-block">
@@ -434,7 +467,7 @@
                                     </div>
                                     <div class="range-block-range-and-counter">
                                         <div class="range-block-range">
-                                            <input type="range" id="temp_textgenerationwebui" name="volume" min="0.1" max="2.0" step="0.01">
+                                            <input type="range" id="temp_textgenerationwebui" name="volume" min="0.0" max="2.0" step="0.01">
                                         </div>
                                         <div class="range-block-counter">
                                             <div contenteditable="true" data-for="temp_textgenerationwebui" id="temp_counter_textgenerationwebui">
@@ -554,8 +587,9 @@
                                             Will be used as a password for the proxy instead of API key.<br>
                                         </span>
                                     </div>
-                                    <div class="wide100p">
-                                        <input id="openai_proxy_password" type="text" class="text_pole" placeholder="" maxlength="200" />
+                                    <div class="flex-container width100p">
+                                        <input id="openai_proxy_password" type="password" class="text_pole flex1" placeholder="" maxlength="200" />
+                                        <div id="openai_proxy_password_show" title="Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
                                     </div>
                                 </div>
                                 <div class="range-block" data-source="openai,claude">
@@ -836,21 +870,6 @@
                             </div>
                             <div id="novel_api-settings">
                                 <div class="range-block">
-                                    <div class="range-block-title justifyLeft">
-                                        AI Module
-                                    </div>
-                                    <div class="toggle-description justifyLeft" data-i18n="Change the style of the generated text. Set to Vanilla to use the default style.">
-                                        Change the style of the generated text. Set to Vanilla to use the default style.
-                                    </div>
-                                    <select id="nai_prefix">
-                                        <option value="" data-i18n="Auto-select">Auto-select</option>
-                                        <option value="vanilla" data-i18n="Vanilla">Vanilla</option>
-                                        <option value="special_instruct" data-i18n="Instruct">Instruct</option>
-                                        <option value="special_proseaugmenter" data-i18n="Prose Augmenter">Prose Augmenter</option>
-                                        <option value="theme_textadventure" data-i18n="Text Adventure">Text Adventure</option>
-                                    </select>
-                                </div>
-                                <div class="range-block">
                                     <div class="range-block-title openai_restorable">
                                         <span data-i18n="Preamble">Preamble</span>
                                         <div id="nai_preamble_restore" title="Restore default prompt" data-i18n="[title]Restore default prompt" class="right_menu_button">
@@ -862,6 +881,17 @@
                                     </div>
                                     <div class="wide100p">
                                         <textarea id="nai_preamble_textarea" class="text_pole textarea_compact" name="nai_preamble" rows="2" placeholder=""></textarea>
+                                    </div>
+                                </div>
+                                <div class="range-block">
+                                    <div class="range-block-title justifyLeft">
+                                        <span data-i18n="Banned Tokens">Banned Tokens</span>
+                                    </div>
+                                    <div class="toggle-description justifyLeft" data-i18n="Sequences you don't want to appear in the output. One per line.">
+                                        Sequences you don't want to appear in the output. One per line.
+                                    </div>
+                                    <div class="wide100p">
+                                        <textarea id="nai_banned_tokens" class="text_pole textarea_compact" name="nai_banned_tokens" rows="2" placeholder=""></textarea>
                                     </div>
                                 </div>
                                 <hr>
@@ -998,27 +1028,12 @@
                                     </div>
                                 </div>
                                 <div class="range-block">
-                                    <div class="range-block-title" data-i18n="Phrase Repetition Penalty">
-                                        Phrase Repetition Penalty
-                                    </div>
-                                    <div class="range-block-range-and-counter">
-                                        <div class="range-block-range">
-                                            <input type="range" id="phrase_rep_pen_novel" name="volume" min="0" max="5" step="1">
-                                        </div>
-                                        <div class="range-block-counter">
-                                            <div contenteditable="true" data-for="phrase_rep_pen_novel" id="phrase_rep_pen_counter_novel">
-                                                select
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="range-block">
                                     <div class="range-block-title" data-i18n="Min Length">
                                         Min Length
                                     </div>
                                     <div class="range-block-range-and-counter">
                                         <div class="range-block-range">
-                                            <input type="range" id="min_length_novel" name="volume" min="0" max="1024" step="1">
+                                            <input type="range" id="min_length_novel" name="volume" min="1" max="150" step="1">
                                         </div>
                                         <div class="range-block-counter">
                                             <div contenteditable="true" data-for="min_length_novel" id="min_length_counter_novel">
@@ -1173,6 +1188,33 @@
                                     </label>
                                 </div>
                                 <hr>
+                                <div class="range-block">
+                                    <h4 class="range-block-title justifyLeft" data-i18n="CFG Scale">
+                                        CFG Scale
+                                    </h4>
+                                    <div class="range-block-range-and-counter">
+                                        <div class="range-block-range">
+                                            <input type="range" id="guidance_scale_textgenerationwebui" name="volume" min="0.1" max="4" step="0.05">
+                                        </div>
+                                        <div class="range-block-counter">
+                                            <div contenteditable="true" data-for="guidance_scale_textgenerationwebui" id="guidance_scale_counter_textgenerationwebui">
+                                                select
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="range-block">
+                                    <div class="range-block-title justifyLeft">
+                                        <span data-i18n="Negative Prompt">Negative Prompt</span>
+                                    </div>
+                                    <div class="wide100p">
+                                        <textarea id="negative_prompt_textgenerationwebui" class="text_pole textarea_compact" name="negative_prompt" rows="2"  data-i18n="[placeholder]Add text here that would make the AI generate things you don't want in your outputs." placeholder="Add text here that would make the AI generate things you don't want in your outputs."></textarea>
+                                    </div>
+                                </div>
+                                <small class="margin-bot-10px" data-i18n="Used if CFG Scale is unset globally, per chat or character">
+                                    Used if CFG Scale is unset globally, per chat or character
+                                </small>
+                                <hr>
                                 <h4><span data-i18n="Beam search">Beam search</span></h4>
                                 <div class="range-block">
                                     <div class="range-block-title" data-i18n="Number of Beams">
@@ -1323,16 +1365,9 @@
                                             <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                                         </div>
                                         <div class="inline-drawer-content">
-                                            <div class="range-block m-t-1">
-                                                <div class="justifyLeft" data-i18n="Main">Main</div>
-                                                <div class="wide100p">
-                                                    <textarea id="main_prompt_quick_edit_textarea" class="text_pole textarea_compact" name="impersonation_prompt" rows="6" placeholder=""></textarea>
-                                                </div>
-                                            </div>
-                                            <div class="range-block m-t-1">
-                                                <div class="justifyLeft" data-i18n="Jailbreak">Jailbreak</div>
-                                                <div class="wide100p">
-                                                    <textarea id="jailbreak_prompt_quick_edit_textarea" class="text_pole textarea_compact" rows="6" placeholder=""></textarea>
+                                            <div id="quick-edit-container">
+                                                <div class="range-block">
+                                                    <span data-i18n="Select a character to show quick edit options.">Select a character to show quick edit options.</span>
                                                 </div>
                                             </div>
                                             <div class="range-block" data-source="claude">
@@ -1340,9 +1375,6 @@
                                                 <textarea id="claude_assistant_prefill" class="text_pole textarea_compact" name="assistant_prefill" rows="3" maxlength="5000" placeholder="Start Claude's answer with..."></textarea>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div class="range-block m-b-1">
-                                        <div id="completion_prompt_manager"></div>
                                     </div>
                                     <div class="inline-drawer wide100p">
                                         <div class="inline-drawer-toggle inline-drawer-header">
@@ -1504,6 +1536,9 @@
                                             <div class="openai_logit_bias_list"></div>
                                         </div>
                                     </div>
+                                </div>
+                                <div class="range-block m-b-1">
+                                    <div id="completion_prompt_manager"></div>
                                 </div>
                             </div>
                         </div>
@@ -1811,6 +1846,7 @@
                                         <option value="claude-v1.3-100k">claude-v1.3-100k</option>
                                         <option value="claude-v1.2">claude-v1.2</option>
                                         <option value="claude-v1.0">claude-v1.0</option>
+                                        <option value="claude-instant-1.2">claude-instant-1.2</option>
                                         <option value="claude-instant-v1.1">claude-instant-v1.1</option>
                                         <option value="claude-instant-v1.1-100k">claude-instant-v1.1-100k</option>
                                         <option value="claude-instant-v1.0">claude-instant-v1.0</option>
@@ -2449,6 +2485,19 @@
                                     </div>
                                 </div>
                             </div>
+                            <div id="UI-language-block" class="flex-container flexFlowColumn">
+                                <h4>
+                                    <span data-i18n="UI Language">UI Language</span>
+                                </h4>
+                                <div class="flex-container flexnowrap alignitemscenter">
+                                    <select id="ui_language_select" class="margin0 margin-r5">
+                                        <option value="" data-i18n="Browser default">
+                                            Browser default
+                                        </option>
+                                        <option value="en">en</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div id="UI-presets-block" class="flex-container flexFlowColumn">
                                 <h4>
                                     <span data-i18n="UI Theme Preset">UI Theme Preset</span>
@@ -2568,6 +2617,11 @@
                                 <label for="messageTimestampsEnabled" class="checkbox_label">
                                     <input id="messageTimestampsEnabled" type="checkbox" />
                                     <span data-i18n="Chat Timestamps">Chat Timestamps</span>
+                                </label>
+
+                                <label for="messageModelIconEnabled" class="checkbox_label">
+                                    <input id="messageModelIconEnabled" type="checkbox" />
+                                    <span data-i18n="Model Icon">Show Model Icons</span>
                                 </label>
 
                                 <label for="mesIDDisplayEnabled" class="checkbox_label">
@@ -4073,9 +4127,14 @@
                 <i class="fa-lg fa-solid fa-people-arrows"></i>
                 <span data-i18n="Convert to group">Convert to group</span>
             </a>
+            <hr>
             <a id="option_start_new_chat">
                 <i class="fa-lg fa-solid fa-comments"></i>
                 <span data-i18n="Start new chat">Start new chat</span>
+            </a>
+            <a id="option_close_chat">
+                <i class="fa-lg fa-solid fa-times"></i>
+                <span data-i18n="Close chat">Close chat</span>
             </a>
             <a id="option_select_chat">
                 <i class="fa-lg fa-solid fa-address-book"></i>
