@@ -336,7 +336,7 @@ function setOpenAIMessages(chat) {
         j++;
     }
 
-    // Add chat injections, 100 = maximum depth of injection. (Why would you ever need more?)
+    // Add chat injections, 100 = maximum depth of injection. ((Why would you ever need more?)) (Well... Yes, but no)
     for (let i = 0; i < 200; i++) {
         const anchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, i);
 
@@ -505,7 +505,7 @@ function populateChatHistory(prompts, chatCompletion, type = null, cyclePrompt =
     }
 
 
-	// Reserve budget for continue(why not?) nudge
+	// Reserve budget for lookaround in continue(why not?) nudge
     let lookaroundMessage = null;
     if (type === 'lookaround') {
         const continuePrompt = new Prompt({
@@ -658,8 +658,8 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
     if (prompts.has('summary')) chatCompletion.insert(Message.fromPrompt(prompts.get('summary')), 'main');
 
 
-    // Tavern Extras - rework later
-    //if (prompts.has('summary')) chatCompletion.insert(Message.fromPrompt(prompts.get('summary')), 'main');
+    // Tavern Extras - Nvkun
+    if (prompts.has('XMLpromptPush')) chatCompletion.insert(Message.fromPrompt(prompts.get('XMLpromptPush')), 'main');
 
     // Authors Note
     if (prompts.has('authorsNote')) {
@@ -747,19 +747,19 @@ function preparePromptsForChatCompletion(Scenario, charPersonality, name2, world
         { role: 'system', content: bias, identifier: 'bias' }
     ];
 
-    // Tavern Extras - Summary
+    // Tavern Extras - Summary NVfix
     const summary = extensionPrompts['1_memory'];
-    if (summary && summary.content) systemPrompts.push({
+    if (summary && summary.value) systemPrompts.push({
         role: 'system',
-        content: summary.content,
+        content: summary.value,
         identifier: 'summary'
     });
     //(Yep, XML prompt)
     const inject1 = extensionPrompts['Nvkun'];
-    if (inject1 && inject1.content) systemPrompts.push({
+    if (inject1 !== '') systemPrompts.push({
         role: 'system',
-        content: inject1.content,
-        identifier: 'inject1'
+        content: inject1.value,
+        identifier: 'XMLpromptPush'
     });
 
     // Authors Note
