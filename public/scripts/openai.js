@@ -756,12 +756,27 @@ function preparePromptsForChatCompletion(Scenario, charPersonality, name2, world
     });
     //(Yep, XML prompt)
     const inject1 = extensionPrompts['Nvkun'];
-    if (inject1 && inject1.value) systemPrompts.push({
-        role: 'system',
-        content: inject1.value,
-        identifier: 'XMLpromptPush'
-    });
-
+    switch (inject1){
+	
+	case undefined:
+	    if (extension_settings.Nvkun.Inputer_frozen == true && extension_settings.Nvkun.Inputer_prompt !== '') systemPrompts.push({
+            role: 'system',
+            content: extension_settings.Nvkun.Inputer_prompt,
+            identifier: 'XMLpromptPush'
+        });			
+	    break
+	
+	
+	
+	default:
+        if (inject1 && inject1.value) systemPrompts.push({
+            role: 'system',
+            content: inject1.value,
+            identifier: 'XMLpromptPush'
+        });
+        break
+	
+	}
     // Authors Note
     const authorsNote = extensionPrompts['2_floating_prompt'];
     if (authorsNote && authorsNote.value) systemPrompts.push({
