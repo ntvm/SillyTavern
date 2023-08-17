@@ -756,7 +756,7 @@ function preparePromptsForChatCompletion(Scenario, charPersonality, name2, world
     });
     //(Yep, XML prompt)
     const inject1 = extensionPrompts['Nvkun'];
-    if (inject1 !== '') systemPrompts.push({
+    if (inject1 && inject1.value) systemPrompts.push({
         role: 'system',
         content: inject1.value,
         identifier: 'XMLpromptPush'
