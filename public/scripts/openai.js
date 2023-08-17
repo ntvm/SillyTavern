@@ -655,11 +655,11 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
     if (bias && bias.trim().length) addToChatCompletion('bias');
 
     // Tavern Extras - Summary
-    if (prompts.has('summary')) chatCompletion.insert(Message.fromPrompt(prompts.get('summary')), 'main');
+    if (prompts.has('summary')) chatCompletion.insert(Message.fromPrompt(prompts.get('summary')), 'scenario');
 
 
     // Tavern Extras - Nvkun
-    if (prompts.has('XMLpromptPush')) chatCompletion.insert(Message.fromPrompt(prompts.get('XMLpromptPush')), 'main');
+    if (prompts.has('XMLpromptPush')) chatCompletion.insert(Message.fromPrompt(prompts.get('XMLpromptPush')), 'scenario');
 
     // Authors Note
     if (prompts.has('authorsNote')) {
@@ -756,7 +756,7 @@ function preparePromptsForChatCompletion(Scenario, charPersonality, name2, world
     });
     //(Yep, XML prompt)
     const inject1 = extensionPrompts['Nvkun'];
-    if (inject1 && inject1.value) systemPrompts.push({
+    if (summary && summary.value) systemPrompts.push({
         role: 'system',
         content: inject1.value,
         identifier: 'XMLpromptPush'
