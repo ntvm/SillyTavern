@@ -63,8 +63,8 @@ import {
     getCropPopup,
     system_avatar,
 } from "../script.js";
-import { appendTagToList, createTagMapFromList, getTagsList, applyTagsOnCharacterSelect, tag_map } from './tags.js';
-import { FilterHelper } from './filters.js';
+import { appendTagToList, createTagMapFromList, getTagsList, applyTagsOnCharacterSelect, tag_map, printTagFilters } from './tags.js';
+import { FILTER_TYPES, FilterHelper } from './filters.js';
 
 export {
     selected_group,
@@ -1234,9 +1234,7 @@ function updateFavButtonState(state) {
     $("#group_favorite_button").toggleClass('fav_off', !fav_grp_checked);
 }
 
-async function selectGroup() {
-    const groupId = $(this).data("id");
-
+export async function openGroupById(groupId) {
     if (!is_send_press && !is_group_generating) {
         if (selected_group !== groupId) {
             cancelTtsPlay();
@@ -1276,16 +1274,8 @@ function openCharacterDefinition(characterSelect) {
 }
 
 function filterGroupMembers() {
-    const searchValue = $(this).val().trim().toLowerCase();
-
-    if (!searchValue) {
-        $("#rm_group_add_members .group_member").removeClass('hiddenBySearch');
-    } else {
-        $("#rm_group_add_members .group_member").each(function () {
-            const isValidSearch = $(this).find(".ch_name").text().toLowerCase().includes(searchValue);
-            $(this).toggleClass('hiddenBySearch', !isValidSearch);
-        });
-    }
+    const searchValue = $(this).val().toLowerCase();
+    groupCandidatesFilter.setFilterData(FILTER_TYPES.SEARCH, searchValue);
 }
 
 async function createGroup() {
@@ -1556,7 +1546,10 @@ function doCurMemberListPopout() {
 }
 
 jQuery(() => {
-    $(document).on("click", ".group_select", selectGroup);
+    $(document).on("click", ".group_select", function () {
+        const groupId = $(this).data("id");
+        openGroupById(groupId);
+    });
     $("#rm_group_filter").on("input", filterGroupMembers);
     $("#rm_group_submit").on("click", createGroup);
     $("#rm_group_scenario").on("click", setScenarioOverride);
