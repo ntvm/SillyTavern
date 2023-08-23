@@ -30,6 +30,7 @@ secrets.json
 public/movingUI/
 public/QuickReplies/
 content.log
+public/scripts/extensions/third-party/
 cloudflared.exe
 stats.json
 public/notes/update.md
