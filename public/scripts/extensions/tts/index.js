@@ -4,7 +4,7 @@ import { escapeRegex, getStringHash } from '../../utils.js'
 import { EdgeTtsProvider } from './edge.js'
 import { ElevenLabsTtsProvider } from './elevenlabs.js'
 import { SileroTtsProvider } from './silerotts.js'
-import { CoquiTtsProvider } from './coquitts.js'
+import { CoquiTtsProvider } from './coqui.js'
 import { SystemTtsProvider } from './system.js'
 import { NovelTtsProvider } from './novel.js'
 import { power_user } from '../../power-user.js'
@@ -327,6 +327,7 @@ function onAudioControlClicked() {
     // Not pausing, doing a full stop to anything TTS is doing. Better UX as pause is not as useful
     if (!audioElement.paused || isTtsProcessing()) {
         resetTtsPlayback()
+        talkingAnimation(false);
     } else {
         // Default play behavior if not processing or playing is to play the last message.
         ttsJobQueue.push(context.chat[context.chat.length - 1])
@@ -651,7 +652,7 @@ function onTtsProviderSettingsInput() {
 
     // Persist changes to SillyTavern tts extension settings
 
-    extension_settings.tts[ttsProviderName] = ttsProvider.setttings
+    extension_settings.tts[ttsProviderName] = ttsProvider.settings
     saveSettingsDebounced()
     console.info(`Saved settings ${ttsProviderName} ${JSON.stringify(ttsProvider.settings)}`)
 }

@@ -1,3 +1,4 @@
+Автор не имеет доступа к всевозможным ключам и прочей информации с вашей копии.
 
 О Форке.
 Добавляю сюда интересные куски кода для Таверны которые встретил надваче или еще где-либо и адаптирую различные кустарные переделки в основной код. Вытягиваю обновления из основного SillyTavern 1-2 раза в день. Форк не должен подтягиваться на основную витку в исходном виде(И не будет), Однако, Вы можете попросить реализовать функции отсюда самого Cohee
@@ -318,7 +319,7 @@ You can find them archived here:
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.**
-
+ 
 * TAI Base by Humi: Unknown license
 * Cohee's modifications and derived code: AGPL v3
 * RossAscends' additions: AGPL v3

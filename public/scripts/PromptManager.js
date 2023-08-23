@@ -1,13 +1,33 @@
-import {callPopup, event_types, eventSource, main_api, substituteParams} from "../script.js";
-import {TokenHandler} from "./openai.js";
-import {power_user} from "./power-user.js";
-import { debounce } from "./utils.js";
+"use strict";
+
+import { callPopup, event_types, eventSource, is_send_press, main_api, substituteParams } from "../script.js";
+import { is_group_generating } from "./group-chats.js";
+import { TokenHandler } from "./openai.js";
+import { power_user } from "./power-user.js";
+import { debounce, waitUntilCondition } from "./utils.js";
+
+function debouncePromise(func, delay) {
+    let timeoutId;
+
+    return (...args) => {
+        clearTimeout(timeoutId);
+
+        return new Promise((resolve) => {
+            timeoutId = setTimeout(() => {
+                const result = func(...args);
+                resolve(result);
+            }, delay);
+        });
+    };
+}
 
 /**
  * Register migrations for the prompt manager when settings are loaded or an Open AI preset is loaded.
  */
 const registerPromptManagerMigration = () => {
     const migrate = (settings, savePreset = null, presetName = null) => {
+        if ('Default' === presetName) return;
+
         if (settings.main_prompt || settings.nsfw_prompt || settings.jailbreak_prompt) {
             console.log('Running prompt manager configuration migration');
             if (settings.prompts === undefined || settings.prompts.length === 0) settings.prompts = structuredClone(chatCompletionDefaultPrompts.prompts);
@@ -52,7 +72,7 @@ class Prompt {
      * @param {string} param0.name - The name of the prompt.
      * @param {boolean} param0.system_prompt - Indicates if the prompt is a system prompt.
      */
-    constructor({identifier, role, content, name, system_prompt} = {}) {
+    constructor({ identifier, role, content, name, system_prompt } = {}) {
         this.identifier = identifier;
         this.role = role;
         this.content = content;
@@ -83,8 +103,8 @@ class PromptCollection {
      * @throws Will throw an error if one or more instances are not of the Prompt class.
      */
     checkPromptInstance(...prompts) {
-        for(let prompt of prompts) {
-            if(!(prompt instanceof Prompt)) {
+        for (let prompt of prompts) {
+            if (!(prompt instanceof Prompt)) {
                 throw new Error('Only Prompt instances can be added to PromptCollection');
             }
         }
@@ -150,7 +170,11 @@ function PromptManagerModule() {
         listIdentifier: '',
         listItemTemplateIdentifier: '',
         toggleDisabled: [],
-        draggable: true,
+        promptOrder: {
+            strategy: 'global',
+            dummyId: 100000
+        },
+        sortableDelay: 30,
         warningTokenThreshold: 1500,
         dangerTokenThreshold: 500,
         defaultPrompts: {
@@ -158,7 +182,7 @@ function PromptManagerModule() {
             nsfw: '',
             jailbreak: '',
             enhanceDefinitions: ''
-        },
+        }
     };
 
     // Chatcompletion configuration object
@@ -228,7 +252,7 @@ function PromptManagerModule() {
     this.handleCharacterExport = () => { };
 
     /** Character reset button click*/
-    this.handleCharacterReset = () => {};
+    this.handleCharacterReset = () => { };
 
     /** Debounced version of render */
     this.renderDebounced = debounce(this.render.bind(this), 1000);
@@ -248,6 +272,8 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
     this.tokenHandler = this.tokenHandler || new TokenHandler();
     this.serviceSettings = serviceSettings;
     this.containerElement = document.getElementById(this.configuration.containerIdentifier);
+
+    if ('global' === this.configuration.promptOrder.strategy) this.activeCharacter = {id: this.configuration.promptOrder.dummyId};
 
     this.sanitizeServiceSettings();
 
@@ -302,38 +328,6 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
         this.saveServiceSettings().then(() => this.render());
     };
 
-    // Factory function for creating quick edit elements
-    const saveSettings = this.saveServiceSettings;
-    const createQuickEdit = function() {
-        return {
-            element: null,
-            prompt: null,
-
-            from(element, prompt) {
-                this.element = element;
-                element.value = prompt.content ?? '';
-                element.addEventListener('input', () => {
-                    prompt.content = element.value;
-                    saveSettings();
-                });
-
-                return this;
-            },
-
-            update(value) {
-                this.element.value = value;
-            }
-        }
-    }
-
-    const mainPrompt = this.getPromptById('main');
-    const mainPromptTextarea = document.getElementById('main_prompt_quick_edit_textarea');
-    const mainQuickEdit = createQuickEdit().from(mainPromptTextarea, mainPrompt);
-
-    const jailbreakPrompt = this.getPromptById('jailbreak');
-    const jailbreakPromptTextarea = document.getElementById('jailbreak_prompt_quick_edit_textarea');
-    const jailbreakQuickEdit = createQuickEdit().from(jailbreakPromptTextarea, jailbreakPrompt);
-
     // Save prompt edit form to settings and close form.
     this.handleSavePrompt = (event) => {
         const promptId = event.target.dataset.pmPrompt;
@@ -347,8 +341,9 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
             this.updatePromptWithPromptEditForm(prompt);
         }
 
-        if ('main' === promptId) mainQuickEdit.update(prompt.content)
-        if ('jailbreak' === promptId) jailbreakQuickEdit.update(prompt.content)
+        if ('main' === promptId) this.updateQuickEdit('main', prompt);
+        if ('nsfw' === promptId) this.updateQuickEdit('nsfw', prompt);
+        if ('jailbreak' === promptId) this.updateQuickEdit('jailbreak', prompt);
 
         this.log('Saved prompt: ' + promptId);
 
@@ -391,7 +386,7 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
         const promptID = document.getElementById(this.configuration.prefix + 'prompt_manager_footer_append_prompt').value;
         const prompt = this.getPromptById(promptID);
 
-        if (prompt){
+        if (prompt) {
             this.appendPrompt(prompt, this.activeCharacter);
             this.saveServiceSettings().then(() => this.render());
         }
@@ -399,7 +394,7 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
 
     // Delete selected prompt from list form and close edit form
     this.handleDeletePrompt = (event) => {
-        const promptID =  document.getElementById(this.configuration.prefix + 'prompt_manager_footer_append_prompt').value;
+        const promptID = document.getElementById(this.configuration.prefix + 'prompt_manager_footer_append_prompt').value;
         const prompt = this.getPromptById(promptID);
 
         if (prompt && true === this.isPromptDeletionAllowed(prompt)) {
@@ -429,12 +424,26 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
 
     // Export all user prompts
     this.handleFullExport = () => {
-        const exportPrompts = this.serviceSettings.prompts.reduce((userPrompts, prompt) => {
+        const prompts = this.serviceSettings.prompts.reduce((userPrompts, prompt) => {
             if (false === prompt.system_prompt && false === prompt.marker) userPrompts.push(prompt);
             return userPrompts;
         }, []);
 
-        this.export({prompts: exportPrompts}, 'full', 'st-prompts');
+        let promptOrder = [];
+        if ('global' === this.configuration.promptOrder.strategy) {
+            promptOrder = this.getPromptOrderForCharacter({ id: this.configuration.promptOrder.dummyId });
+        } else if ('character' === this.configuration.promptOrder.strategy) {
+            promptOrder = [];
+        } else {
+            throw new Error('Prompt order strategy not supported.')
+        }
+
+        const exportPrompts = {
+            prompts: prompts,
+            prompt_order: promptOrder
+        }
+
+        this.export(exportPrompts, 'full', 'st-prompts');
     }
 
     // Export user prompts and order for this character
@@ -485,10 +494,10 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
                     };
 
                     reader.readAsText(file);
-            });
+                });
 
-            fileOpener.click();
-        });
+                fileOpener.click();
+            });
     }
 
     // Restore default state of a characters prompt order
@@ -504,19 +513,52 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
             });
     }
 
+    // Fill quick edit fields for the first time
+    if ('global' === this.configuration.promptOrder.strategy) {
+        const handleQuickEditSave = (event) => {
+            const promptId = event.target.dataset.pmPrompt;
+            const prompt = this.getPromptById(promptId);
+
+            prompt.content = event.target.value;
+
+            // Update edit form if present
+            // @see https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/offsetParent
+            const popupEditFormPrompt = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt');
+            if (popupEditFormPrompt.offsetParent) {
+                popupEditFormPrompt.value = prompt.content;
+            }
+
+            this.log('Saved prompt: ' + promptId);
+            this.saveServiceSettings().then(() => this.render());
+        };
+
+        const mainPrompt = this.getPromptById('main');
+        const mainElementId = this.updateQuickEdit('main', mainPrompt);
+        document.getElementById(mainElementId).addEventListener('blur', handleQuickEditSave);
+
+        const nsfwPrompt = this.getPromptById('nsfw');
+        const nsfwElementId = this.updateQuickEdit('nsfw', nsfwPrompt);
+        document.getElementById(nsfwElementId).addEventListener('blur', handleQuickEditSave);
+
+        const jailbreakPrompt = this.getPromptById('jailbreak');
+        const jailbreakElementId = this.updateQuickEdit('jailbreak', jailbreakPrompt);
+        document.getElementById(jailbreakElementId).addEventListener('blur', handleQuickEditSave);
+    }
+
     // Re-render when chat history changes.
     eventSource.on(event_types.MESSAGE_DELETED, () => this.renderDebounced());
     eventSource.on(event_types.MESSAGE_EDITED, () => this.renderDebounced());
     eventSource.on(event_types.MESSAGE_RECEIVED, () => this.renderDebounced());
 
     // Re-render when chatcompletion settings change
-    eventSource.on(event_types.CHATCOMPLETION_SOURCE_CHANGED, () => this.render());
-    eventSource.on(event_types.CHATCOMPLETION_MODEL_CHANGED, () => this.render());
+    eventSource.on(event_types.CHATCOMPLETION_SOURCE_CHANGED, () => this.renderDebounced());
+
+    eventSource.on(event_types.CHATCOMPLETION_MODEL_CHANGED, () => this.renderDebounced());
 
     // Re-render when the character changes.
     eventSource.on('chatLoaded', (event) => {
         this.handleCharacterSelected(event)
-        this.saveServiceSettings().then(() => this.render());
+        this.saveServiceSettings().then(() => this.renderDebounced());
     });
 
     // Re-render when the character gets edited.
@@ -528,13 +570,13 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
     // Re-render when the group changes.
     eventSource.on('groupSelected', (event) => {
         this.handleGroupSelected(event)
-        this.saveServiceSettings().then(() => this.render());
+        this.saveServiceSettings().then(() => this.renderDebounced());
     });
 
     // Sanitize settings after character has been deleted.
     eventSource.on('characterDeleted', (event) => {
         this.handleCharacterDeleted(event)
-        this.saveServiceSettings().then(() => this.render());
+        this.saveServiceSettings().then(() => this.renderDebounced());
     });
 
     // Trigger re-render when token settings are changed
@@ -551,7 +593,7 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
     document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_save').addEventListener('click', this.handleSavePrompt);
     document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_reset').addEventListener('click', this.handleResetPrompt);
 
-    const closeAndClearPopup = () =>  {
+    const closeAndClearPopup = () => {
         this.hidePopup();
         this.clearEditForm();
         this.clearInspectForm();
@@ -562,12 +604,22 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
     document.getElementById(this.configuration.prefix + 'prompt_manager_popup_close_button').addEventListener('click', closeAndClearPopup);
 
     // Re-render prompt manager on openai preset change
-    eventSource.on(event_types.OAI_PRESET_CHANGED, settings => this.render());
+    eventSource.on(event_types.OAI_PRESET_CHANGED, settings => {
+        // Save configuration and wrap everything up.
+        this.saveServiceSettings().then(() => {
+            this.hidePopup();
+            this.clearEditForm();
+            this.renderDebounced();
 
-    // Close popup on preset change
-    eventSource.on(event_types.OAI_PRESET_CHANGED, () => {
-        this.hidePopup();
-        this.clearEditForm();
+            const mainPrompt = this.getPromptById('main');
+            this.updateQuickEdit('main', mainPrompt);
+
+            const nsfwPrompt = this.getPromptById('nsfw');
+            this.updateQuickEdit('nsfw', nsfwPrompt);
+
+            const jailbreakPrompt = this.getPromptById('jailbreak');
+            this.updateQuickEdit('jailbreak', jailbreakPrompt);
+        });
     });
 
     // Re-render prompt manager on world settings update
@@ -584,28 +636,38 @@ PromptManagerModule.prototype.init = function (moduleConfiguration, serviceSetti
 PromptManagerModule.prototype.render = function (afterTryGenerate = true) {
     if (main_api !== 'openai') return;
 
-    if (null === this.activeCharacter) return;
+    if ('character' === this.configuration.promptOrder.strategy && null === this.activeCharacter) return;
     this.error = null;
 
-    if (true === afterTryGenerate) {
-        // Executed during dry-run for determining context composition
-        this.profileStart('filling context');
-        this.tryGenerate().then(() => {
-            this.profileEnd('filling context');
+    waitUntilCondition(() => !is_send_press && !is_group_generating, 1024 * 1024, 100).then(() => {
+        if (true === afterTryGenerate) {
+            // Executed during dry-run for determining context composition
+            this.profileStart('filling context');
+            this.tryGenerate().then(() => {
+                this.profileEnd('filling context');
+                this.profileStart('render');
+                this.renderPromptManager();
+                this.renderPromptManagerListItems()
+                this.makeDraggable();
+                this.profileEnd('render');
+            }).catch(error => {
+                this.profileEnd('filling context');
+                this.log('Error caught during render: ' + error);
+                this.renderPromptManager();
+                this.renderPromptManagerListItems()
+                this.makeDraggable();
+            });
+        } else {
+            // Executed during live communication
             this.profileStart('render');
             this.renderPromptManager();
             this.renderPromptManagerListItems()
             this.makeDraggable();
             this.profileEnd('render');
-        });
-    } else {
-        // Executed during live communication
-        this.profileStart('render');
-        this.renderPromptManager();
-        this.renderPromptManagerListItems()
-        this.makeDraggable();
-        this.profileEnd('render');
-    }
+        }
+    }).catch(() => {
+        console.log('Timeout while waiting for send press to be false');
+    });
 }
 
 /**
@@ -642,7 +704,7 @@ PromptManagerModule.prototype.updatePrompts = function (prompts) {
     })
 }
 
-PromptManagerModule.prototype.getTokenHandler = function() {
+PromptManagerModule.prototype.getTokenHandler = function () {
     return this.tokenHandler;
 }
 
@@ -656,7 +718,7 @@ PromptManagerModule.prototype.appendPrompt = function (prompt, character) {
     const promptOrder = this.getPromptOrderForCharacter(character);
     const index = promptOrder.findIndex(entry => entry.identifier === prompt.identifier);
 
-    if (-1 === index) promptOrder.push({identifier: prompt.identifier, enabled: false});
+    if (-1 === index) promptOrder.push({ identifier: prompt.identifier, enabled: false });
 }
 
 /**
@@ -702,6 +764,13 @@ PromptManagerModule.prototype.sanitizeServiceSettings = function () {
     this.serviceSettings.prompts = this.serviceSettings.prompts ?? [];
     this.serviceSettings.prompt_order = this.serviceSettings.prompt_order ?? [];
 
+    if ('global' === this.configuration.promptOrder.strategy) {
+        const dummyCharacter = { id: this.configuration.promptOrder.dummyId };
+        const promptOrder = this.getPromptOrderForCharacter(dummyCharacter);
+
+        if (0 === promptOrder.length) this.addPromptOrderForCharacter(dummyCharacter, promptManagerDefaultPromptOrder);
+    }
+
     // Check whether the referenced prompts are present.
     this.serviceSettings.prompts.length === 0
         ? this.setPrompts(chatCompletionDefaultPrompts.prompts)
@@ -712,11 +781,11 @@ PromptManagerModule.prototype.sanitizeServiceSettings = function () {
 
     if (this.activeCharacter) {
         const promptReferences = this.getPromptOrderForCharacter(this.activeCharacter);
-        for(let i = promptReferences.length - 1; i >= 0; i--) {
-            const reference =  promptReferences[i];
-            if(-1 === this.serviceSettings.prompts.findIndex(prompt => prompt.identifier === reference.identifier)) {
+        for (let i = promptReferences.length - 1; i >= 0; i--) {
+            const reference = promptReferences[i];
+            if (-1 === this.serviceSettings.prompts.findIndex(prompt => prompt.identifier === reference.identifier)) {
                 promptReferences.splice(i, 1);
-                this.log('Removed unused reference: ' +  reference.identifier);
+                this.log('Removed unused reference: ' + reference.identifier);
             }
         }
     }
@@ -728,11 +797,11 @@ PromptManagerModule.prototype.sanitizeServiceSettings = function () {
  *
  * @param prompts
  */
-PromptManagerModule.prototype.checkForMissingPrompts = function(prompts) {
-    const defaultPromptIdentifiers = chatCompletionDefaultPrompts.prompts.reduce((list, prompt) => { list.push(prompt.identifier); return list;}, []);
+PromptManagerModule.prototype.checkForMissingPrompts = function (prompts) {
+    const defaultPromptIdentifiers = chatCompletionDefaultPrompts.prompts.reduce((list, prompt) => { list.push(prompt.identifier); return list; }, []);
 
     const missingIdentifiers = defaultPromptIdentifiers.filter(identifier =>
-        !prompts.some(prompt =>prompt.identifier === identifier)
+        !prompts.some(prompt => prompt.identifier === identifier)
     );
 
     missingIdentifiers.forEach(identifier => {
@@ -783,9 +852,10 @@ PromptManagerModule.prototype.isPromptToggleAllowed = function (prompt) {
 /**
  * Handle the deletion of a character by removing their prompt list and nullifying the active character if it was the one deleted.
  * @param {object} event - The event object containing the character's ID.
- * @returns boolean
+ * @returns void
  */
 PromptManagerModule.prototype.handleCharacterDeleted = function (event) {
+    if ('global' === this.configuration.promptOrder.strategy) return;
     this.removePromptOrderForCharacter(this.activeCharacter);
     if (this.activeCharacter.id === event.detail.id) this.activeCharacter = null;
 }
@@ -796,12 +866,19 @@ PromptManagerModule.prototype.handleCharacterDeleted = function (event) {
  * @returns {void}
  */
 PromptManagerModule.prototype.handleCharacterSelected = function (event) {
-    this.activeCharacter = {id: event.detail.id, ...event.detail.character};
-    const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
+    if ('global' === this.configuration.promptOrder.strategy) {
+        this.activeCharacter = { id: this.configuration.promptOrder.dummyId };
+    } else if ('character' === this.configuration.promptOrder.strategy) {
+        console.log('FOO')
+        this.activeCharacter = { id: event.detail.id, ...event.detail.character };
+        const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
 
-    // ToDo: These should be passed as parameter or attached to the manager as a set of default options.
-    // Set default prompts and order for character.
-    if (0 === promptOrder.length) this.addPromptOrderForCharacter(this.activeCharacter, promptManagerDefaultPromptOrder);
+        // ToDo: These should be passed as parameter or attached to the manager as a set of default options.
+        // Set default prompts and order for character.
+        if (0 === promptOrder.length) this.addPromptOrderForCharacter(this.activeCharacter, promptManagerDefaultPromptOrder);
+    } else {
+        throw new Error('Unsupported prompt order mode.');
+    }
 }
 
 /**
@@ -810,7 +887,13 @@ PromptManagerModule.prototype.handleCharacterSelected = function (event) {
  * @param event
  */
 PromptManagerModule.prototype.handleCharacterUpdated = function (event) {
-    this.activeCharacter = {id: event.detail.id, ...event.detail.character};
+    if ('global' === this.configuration.promptOrder.strategy) {
+        this.activeCharacter = { id: this.configuration.promptOrder.dummyId };
+    } else if ('character' === this.configuration.promptOrder.strategy) {
+        this.activeCharacter = { id: event.detail.id, ...event.detail.character };
+    } else {
+        throw new Error('Prompt order strategy not supported.')
+    }
 }
 
 /**
@@ -819,11 +902,17 @@ PromptManagerModule.prototype.handleCharacterUpdated = function (event) {
  * @param event
  */
 PromptManagerModule.prototype.handleGroupSelected = function (event) {
-    const characterDummy = {id: event.detail.id, group: event.detail.group};
-    this.activeCharacter = characterDummy;
-    const promptOrder = this.getPromptOrderForCharacter(characterDummy);
+    if ('global' === this.configuration.promptOrder.strategy) {
+        this.activeCharacter = { id: this.configuration.promptOrder.dummyId };
+    } else if ('character' === this.configuration.promptOrder.strategy) {
+        const characterDummy = { id: event.detail.id, group: event.detail.group };
+        this.activeCharacter = characterDummy;
+        const promptOrder = this.getPromptOrderForCharacter(characterDummy);
 
-    if (0 === promptOrder.length) this.addPromptOrderForCharacter(characterDummy, promptManagerDefaultPromptOrder)
+        if (0 === promptOrder.length) this.addPromptOrderForCharacter(characterDummy, promptManagerDefaultPromptOrder)
+    } else {
+        throw new Error('Prompt order strategy not supported.')
+    }
 }
 
 /**
@@ -831,9 +920,9 @@ PromptManagerModule.prototype.handleGroupSelected = function (event) {
  *
  * @returns {string[]}
  */
-PromptManagerModule.prototype.getActiveGroupCharacters = function() {
+PromptManagerModule.prototype.getActiveGroupCharacters = function () {
     // ToDo: Ideally, this should return the actual characters.
-    return (this.activeCharacter?.group?.members || []).map(member => member.substring(0, member.lastIndexOf('.')));
+    return (this.activeCharacter?.group?.members || []).map(member => member && member.substring(0, member.lastIndexOf('.')));
 }
 
 /**
@@ -939,19 +1028,58 @@ PromptManagerModule.prototype.preparePrompt = function (prompt, original = null)
 }
 
 /**
+ * Factory function for creating a QuickEdit object associated with a prompt element.
+ *
+ * The QuickEdit object provides methods to synchronize an input element's value with a prompt's content
+ * and handle input events to update the prompt content.
+ *
+ */
+PromptManagerModule.prototype.createQuickEdit = function (identifier, title) {
+    const prompt = this.getPromptById(identifier);
+    const textareaIdentifier = `${identifier}_prompt_quick_edit_textarea`;
+    const html = `<div class="range-block m-t-1">
+                    <div class="justifyLeft" data-i18n="${title}">${title}</div>
+                    <div class="wide100p">
+                        <textarea id="${textareaIdentifier}" class="text_pole textarea_compact" rows="6" placeholder="">${prompt.content}</textarea>
+                    </div>
+                </div>`;
+
+    const quickEditContainer = document.getElementById('quick-edit-container');
+    quickEditContainer.insertAdjacentHTML('afterbegin', html);
+
+    const debouncedSaveServiceSettings = debouncePromise(() => this.saveServiceSettings(), 300);
+
+    const textarea = document.getElementById(textareaIdentifier);
+    textarea.addEventListener('blur', () => {
+        prompt.content = textarea.value;
+        this.updatePromptByIdentifier(identifier, prompt);
+        debouncedSaveServiceSettings().then(() => this.render());
+    });
+
+}
+
+PromptManagerModule.prototype.updateQuickEdit = function (identifier, prompt) {
+    const elementId = `${identifier}_prompt_quick_edit_textarea`;
+    const textarea = document.getElementById(elementId);
+    textarea.value = prompt.content;
+
+    return elementId;
+}
+
+/**
  * Checks if a given name is accepted by OpenAi API
  * @link https://platform.openai.com/docs/api-reference/chat/create
  *
  * @param name
  * @returns {boolean}
  */
-PromptManagerModule.prototype.isValidName = function(name) {
+PromptManagerModule.prototype.isValidName = function (name) {
     const regex = /^[a-zA-Z0-9_]{1,64}$/;
 
     return regex.test(name);
 }
 
-PromptManagerModule.prototype.sanitizeName = function(name) {
+PromptManagerModule.prototype.sanitizeName = function (name) {
     return name.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 64);
 }
 
@@ -1038,7 +1166,7 @@ PromptManagerModule.prototype.clearEditForm = function () {
     roleField.disabled = false;
 }
 
-PromptManagerModule.prototype.clearInspectForm = function() {
+PromptManagerModule.prototype.clearInspectForm = function () {
     const inspectArea = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_inspect');
     inspectArea.style.display = 'none';
     const messageList = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_inspect_list');
@@ -1077,12 +1205,11 @@ PromptManagerModule.prototype.setMessages = function (messages) {
  *
  * @param {ChatCompletion} chatCompletion
  */
-PromptManagerModule.prototype.setChatCompletion = function(chatCompletion) {
+PromptManagerModule.prototype.setChatCompletion = function (chatCompletion) {
     const messages = chatCompletion.getMessages();
 
     this.setMessages(messages);
     this.populateTokenCounts(messages);
-    this.populateLegacyTokenCounts(messages);
 }
 
 /**
@@ -1090,7 +1217,7 @@ PromptManagerModule.prototype.setChatCompletion = function(chatCompletion) {
  *
  * @param {MessageCollection} messages
  */
-PromptManagerModule.prototype.populateTokenCounts = function(messages) {
+PromptManagerModule.prototype.populateTokenCounts = function (messages) {
     this.tokenHandler.resetCounts();
     const counts = this.tokenHandler.getCounts();
     messages.getCollection().forEach(message => {
@@ -1109,10 +1236,10 @@ PromptManagerModule.prototype.populateTokenCounts = function(messages) {
  *
  * @param {MessageCollection} messages
  */
-PromptManagerModule.prototype.populateLegacyTokenCounts = function(messages) {
+PromptManagerModule.prototype.populateLegacyTokenCounts = function (messages) {
     // Update general token counts
     const chatHistory = messages.getItemByIdentifier('chatHistory');
-    const startChat = chatHistory?.getCollection()[0].getTokens() || 0;
+    const startChat = chatHistory?.getCollection()[0]?.getTokens() || 0;
     const continueNudge = chatHistory?.getCollection().find(message => message.identifier === 'continueNudge')?.getTokens() || 0;
 
     this.tokenHandler.counts = {
@@ -1173,8 +1300,8 @@ PromptManagerModule.prototype.renderPromptManager = function () {
                 </select>
                 <a class="menu_button fa-chain fa-solid" title="Insert prompt" data-i18n="Insert"></a>
                 <a class="caution menu_button fa-x fa-solid" title="Delete prompt" data-i18n="Delete"></a>
-                <a class="menu_button fa-file-arrow-down fa-solid" id="prompt-manager-export" title="Export this prompt list" data-i18n="Export"></a>
-                <a class="menu_button fa-file-arrow-up fa-solid" id="prompt-manager-import" title="Import a prompt list" data-i18n="Import"></a>
+                <a class="menu_button fa-file-import fa-solid" id="prompt-manager-import" title="Import a prompt list" data-i18n="Import"></a>
+                <a class="menu_button fa-file-export fa-solid" id="prompt-manager-export" title="Export this prompt list" data-i18n="Export"></a>
                 <a class="menu_button fa-undo fa-solid" id="prompt-manager-reset-character" title="Reset current character" data-i18n="Reset current character"></a>
                 <a class="menu_button fa-plus-square fa-solid" title="New prompt" data-i18n="New"></a>
             </div>
@@ -1197,10 +1324,14 @@ PromptManagerModule.prototype.renderPromptManager = function () {
                             <a class="export-promptmanager-prompts-full list-group-item" data-i18n="Export all">Export all</a>
                             <span class="tooltip fa-solid fa-info-circle" title="Export all your prompts to a file"></span>
                         </div>
-                        <div class="row">
-                            <a class="export-promptmanager-prompts-character list-group-item" data-i18n="Export for character">Export for character</a>
-                            <span class="tooltip fa-solid fa-info-circle" title="Export prompts for this character, including their order."></span>
-                        </div>
+                        ${'global' === this.configuration.promptOrder.strategy
+                ? ''
+                : `<div class="row">
+                                <a class="export-promptmanager-prompts-character list-group-item" data-i18n="Export for character">Export
+                                    for character</a>
+                                <span class="tooltip fa-solid fa-info-circle"
+                                      title="Export prompts for this character, including their order."></span>
+                              </div>` }
                     </div>
                </div>
             `;
@@ -1210,7 +1341,7 @@ PromptManagerModule.prototype.renderPromptManager = function () {
         let exportPopper = Popper.createPopper(
             document.getElementById('prompt-manager-export'),
             document.getElementById('prompt-manager-export-format-popup'),
-            {placement: 'bottom'}
+            { placement: 'bottom' }
         );
 
         const showExportSelection = () => {
@@ -1226,7 +1357,7 @@ PromptManagerModule.prototype.renderPromptManager = function () {
         footerDiv.querySelector('#prompt-manager-import').addEventListener('click', this.handleImport);
         footerDiv.querySelector('#prompt-manager-export').addEventListener('click', showExportSelection);
         rangeBlockDiv.querySelector('.export-promptmanager-prompts-full').addEventListener('click', this.handleFullExport);
-        rangeBlockDiv.querySelector('.export-promptmanager-prompts-character').addEventListener('click', this.handleCharacterExport);
+        rangeBlockDiv.querySelector('.export-promptmanager-prompts-character')?.addEventListener('click', this.handleCharacterExport);
     }
 };
 
@@ -1239,7 +1370,7 @@ PromptManagerModule.prototype.renderPromptManagerListItems = function () {
     const promptManagerList = this.listElement;
     promptManagerList.innerHTML = '';
 
-    const {prefix} = this.configuration;
+    const { prefix } = this.configuration;
 
     let listItemHtml = `
         <li class="${prefix}prompt_manager_list_head">
@@ -1266,7 +1397,7 @@ PromptManagerModule.prototype.renderPromptManagerListItems = function () {
         let warningTitle = '';
 
         const tokenBudget = this.serviceSettings.openai_max_context - this.serviceSettings.openai_max_tokens;
-        if ( this.tokenUsage > tokenBudget * 0.8 &&
+        if (this.tokenUsage > tokenBudget * 0.8 &&
             'chatHistory' === prompt.identifier) {
             const warningThreshold = this.configuration.warningTokenThreshold;
             const dangerThreshold = this.configuration.dangerTokenThreshold;
@@ -1315,7 +1446,7 @@ PromptManagerModule.prototype.renderPromptManagerListItems = function () {
                     ${prompt.marker ? '<span class="fa-solid fa-thumb-tack" title="Marker"></span>' : ''}
                     ${!prompt.marker && prompt.system_prompt ? '<span class="fa-solid fa-square-poll-horizontal" title="Global Prompt"></span>' : ''}
                     ${!prompt.marker && !prompt.system_prompt ? '<span class="fa-solid fa-user" title="User Prompt"></span>' : ''}
-                    ${this.isPromptInspectionAllowed(prompt) ? `<a class="prompt-manager-inspect-action">${prompt.name}</a>` : prompt.name }
+                    ${this.isPromptInspectionAllowed(prompt) ? `<a class="prompt-manager-inspect-action">${prompt.name}</a>` : prompt.name}
                 </span>
                 <span>
                         <span class="prompt_manager_prompt_controls">
@@ -1365,7 +1496,7 @@ PromptManagerModule.prototype.export = function (data, type, name = 'export') {
     };
 
     const serializedObject = JSON.stringify(promptExport);
-    const blob = new Blob([serializedObject], {type: "application/json"});
+    const blob = new Blob([serializedObject], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const downloadLink = document.createElement('a');
     downloadLink.href = url;
@@ -1416,10 +1547,19 @@ PromptManagerModule.prototype.import = function (importData) {
     this.setPrompts(prompts);
     this.log('Prompt import succeeded');
 
-    if ('character' === importData.type) {
-        const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
+    let promptOrder = [];
+    if ('global' === this.configuration.promptOrder.strategy) {
+        const promptOrder = this.getPromptOrderForCharacter({ id: this.configuration.promptOrder.dummyId });
         Object.assign(promptOrder, importData.data.prompt_order);
-        this.log(`Prompt order import for character ${this.activeCharacter.name} completed`);
+        this.log(`Prompt order import succeeded`);
+    } else if ('character' === this.configuration.promptOrder.strategy) {
+        if ('character' === importData.type) {
+            const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
+            Object.assign(promptOrder, importData.data.prompt_order);
+            this.log(`Prompt order import for character ${this.activeCharacter.name} succeeded`);
+        }
+    } else {
+        throw new Error('Prompt order strategy not supported.')
     }
 
     toastr.success('Prompt import complete.');
@@ -1433,7 +1573,7 @@ PromptManagerModule.prototype.import = function (importData) {
  * @param object
  * @returns {boolean}
  */
-PromptManagerModule.prototype.validateObject = function(controlObj, object) {
+PromptManagerModule.prototype.validateObject = function (controlObj, object) {
     for (let key in controlObj) {
         if (!object.hasOwnProperty(key)) {
             if (controlObj[key] === null) continue;
@@ -1456,7 +1596,7 @@ PromptManagerModule.prototype.validateObject = function(controlObj, object) {
  *
  * @returns {`${string}_${string}_${string}`}
  */
-PromptManagerModule.prototype.getFormattedDate = function() {
+PromptManagerModule.prototype.getFormattedDate = function () {
     const date = new Date();
     let month = String(date.getMonth() + 1);
     let day = String(date.getDate());
@@ -1476,10 +1616,11 @@ PromptManagerModule.prototype.getFormattedDate = function() {
  */
 PromptManagerModule.prototype.makeDraggable = function () {
     $(`#${this.configuration.prefix}prompt_manager_list`).sortable({
+        delay: this.configuration.sortableDelay,
         items: `.${this.configuration.prefix}prompt_manager_prompt_draggable`,
-        update: ( event, ui ) => {
+        update: (event, ui) => {
             const promptOrder = this.getPromptOrderForCharacter(this.activeCharacter);
-            const promptListElement = $(`#${this.configuration.prefix}prompt_manager_list`).sortable('toArray', {attribute: 'data-pm-identifier'});
+            const promptListElement = $(`#${this.configuration.prefix}prompt_manager_list`).sortable('toArray', { attribute: 'data-pm-identifier' });
             const idToObjectMap = new Map(promptOrder.map(prompt => [prompt.identifier, prompt]));
             const updatedPromptOrder = promptListElement.map(identifier => idToObjectMap.get(identifier));
 
@@ -1489,7 +1630,8 @@ PromptManagerModule.prototype.makeDraggable = function () {
             this.log(`Prompt order updated for ${this.activeCharacter.name}.`);
 
             this.saveServiceSettings();
-        }});
+        }
+    });
 };
 
 /**
@@ -1500,7 +1642,7 @@ PromptManagerModule.prototype.showPopup = function (area = 'edit') {
     const areaElement = document.getElementById(this.configuration.prefix + 'prompt_manager_popup_' + area);
     areaElement.style.display = 'block';
 
-    $('#'+this.configuration.prefix +'prompt_manager_popup').first()
+    $('#' + this.configuration.prefix + 'prompt_manager_popup').first()
         .slideDown(200, "swing")
         .addClass('openDrawer');
 }
@@ -1510,7 +1652,7 @@ PromptManagerModule.prototype.showPopup = function (area = 'edit') {
  * @returns {void}
  */
 PromptManagerModule.prototype.hidePopup = function () {
-    $('#'+this.configuration.prefix +'prompt_manager_popup').first()
+    $('#' + this.configuration.prefix + 'prompt_manager_popup').first()
         .slideUp(200, "swing")
         .removeClass('openDrawer');
 }
