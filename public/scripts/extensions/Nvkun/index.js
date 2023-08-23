@@ -37,7 +37,8 @@ const defaultSettings = {
     position: extension_prompt_types.AFTER_SCENARIO,
     depth: 2,
 	AlwaysCharnames: true,
-    selectedPreset: ''
+    selectedPreset: '',
+    exclude_Prefill: false
 };
 
 
@@ -57,6 +58,7 @@ function loadSettings() {
     $('#AlwaysCharnames').val(extension_settings.Nvkun.AlwaysCharnames).trigger('change');
     $('#Inputer_frozen').prop('checked', extension_settings.Nvkun.Inputer_frozen).trigger('input');
     $('#Inputer_prompt').val(extension_settings.Nvkun.Inputer_prompt).trigger('input');
+    $('#exclude_Prefill').prop('checked', extension_settings.Nvkun.exclude_Prefill).trigger('input');
 }
 
 
@@ -78,6 +80,11 @@ function onInputerFrozenInput() {
     saveSettingsDebounced();
 }
 
+function onExclude_Prefill() {
+    const value = Boolean($(this).prop('checked'));
+    extension_settings.Nvkun.exclude_Prefill = value;
+    saveSettingsDebounced();
+}
 
 function onInputerPromptInput() {
     const value = $(this).val();
@@ -137,6 +144,7 @@ const NvPreset = {
     position: extension_settings.Nvkun.position,
     depth: extension_settings.Nvkun.depth,
 	AlwaysCharnames: extension_settings.Nvkun.AlwaysCharnames,
+    exclude_Prefill: extension_settings.Nvkun.exclude_Prefill,
 }
 
 const response = await fetch('/saveNv', {
@@ -240,7 +248,10 @@ jQuery(function () {
                     <div class="Inputer_contents_controls">
                     </div>
                     <div>
-                        <label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />activate insertion</label>
+                        <label for="exclude_Prefill"><input id="exclude_Prefill" type="checkbox" />Disable Claude prefill</label>
+                    </div>
+                    <div>
+                        <label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />Activate AfterScenario</label>
                     </div>
                     <div>
                         <select id="NvPresets" name="preset">
@@ -253,6 +264,7 @@ jQuery(function () {
         `;
         $('#extensions_settings2').append(settingsHtml);
         $('#Inputer_frozen').on('input', onInputerFrozenInput);
+        $('#exclude_Prefill').on('input', onExclude_Prefill);
         $('#AlwaysCharnames').on('change', onAlwaysCharnamesChange);
         $('#Inputer_prompt').on('input', onInputerPromptInput);
         $("#PresetSaveButton").on('click', savePreset);

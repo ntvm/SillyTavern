@@ -1240,7 +1240,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['exclude_assistant'] = oai_settings.exclude_assistant;
         // Don't add a prefill on quiet gens (summarization)
-        if (!isQuiet && !oai_settings.exclude_assistant) {
+        if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill) {
             generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
         }
     }
