@@ -93,25 +93,24 @@ function setInputerContext(value, saveToMessage) {
 		case true:
 			break
 		default:
+			if (value == undefined) {
+			extension_settings.Nvkun.Inputer_prompt = value;}
+			
 			var formatMemoryValue = (value) => value ? `\n${value.trim()}` : '';
-			var context = getContext();
 			context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.AFTER_SCENARIO, extension_settings.Nvkun.depth);
 			$('#Inputer_prompt').val(value);
 			console.log('After Scenario injected');
 			console.debug('Position: ' + extension_settings.Nvkun.position);
 			console.debug('Depth: ' + extension_settings.Nvkun.depth);
 
-			if (saveToMessage && context.chat.length) {
-				const idx = context.chat.length - 2;
-				const mes = context.chat[idx < 0 ? 0 : idx];
 
-				if (!mes.extra) {
-				mes.extra = {};
-				}
-
-			    mes.extra.Nvkun = value;
-			    saveSettingsDebounced();
+			if (!mes.extra) {
+			mes.extra = {};
 			}
+
+			mes.extra.Nvkun = value;
+			saveSettingsDebounced();
+			
 			break
 		}
 }
