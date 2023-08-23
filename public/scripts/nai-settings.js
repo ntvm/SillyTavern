@@ -1,14 +1,14 @@
 import {
     getRequestHeaders,
     getStoppingStrings,
-    getTextTokens,
     max_context,
     novelai_setting_names,
     saveSettingsDebounced,
     setGenerationParamsFromPreset
 } from "../script.js";
-import { getCfg } from "./extensions/cfg/util.js";
-import { MAX_CONTEXT_DEFAULT, tokenizers } from "./power-user.js";
+import { getCfgPrompt } from "./extensions/cfg/util.js";
+import { MAX_CONTEXT_DEFAULT } from "./power-user.js";
+import { getTextTokens, tokenizers } from "./tokenizers.js";
 import {
     getSortableDelay,
     getStringHash,
@@ -128,8 +128,8 @@ function loadNovelPreset(preset) {
 function loadNovelSettings(settings) {
     //load the rest of the Novel settings without any checks
     nai_settings.model_novel = settings.model_novel;
-    $(`#model_novel_select option[value=${nai_settings.model_novel}]`).attr("selected", true);
     $('#model_novel_select').val(nai_settings.model_novel);
+    $(`#model_novel_select option[value=${nai_settings.model_novel}]`).attr("selected", true);
 
     if (settings.nai_preamble !== undefined) {
         nai_settings.preamble = settings.nai_preamble;
@@ -395,7 +395,11 @@ function getBadWordPermutations(text) {
     return result;
 }
 
-export function getNovelGenerationData(finalPrompt, this_settings, this_amount_gen, isImpersonate) {
+export function getNovelGenerationData(finalPrompt, this_settings, this_amount_gen, isImpersonate, cfgValues) {
+    if (cfgValues.guidanceScale && cfgValues.guidanceScale?.value !== 1) {
+        cfgValues.negativePrompt = (getCfgPrompt(cfgValues.guidanceScale, true))?.value;
+    }
+
     const clio = nai_settings.model_novel.includes('clio');
     const kayra = nai_settings.model_novel.includes('kayra');
 
@@ -410,7 +414,6 @@ export function getNovelGenerationData(finalPrompt, this_settings, this_amount_g
         : undefined;
 
     const prefix = selectPrefix(nai_settings.prefix, finalPrompt);
-    const cfgSettings = getCfg();
 
     let logitBias = [];
     if (tokenizerType !== tokenizers.NONE && Array.isArray(nai_settings.logit_bias) && nai_settings.logit_bias.length) {
@@ -437,8 +440,8 @@ export function getNovelGenerationData(finalPrompt, this_settings, this_amount_g
         "typical_p": parseFloat(nai_settings.typical_p),
         "mirostat_lr": parseFloat(nai_settings.mirostat_lr),
         "mirostat_tau": parseFloat(nai_settings.mirostat_tau),
-        "cfg_scale": cfgSettings?.guidanceScale ?? parseFloat(nai_settings.cfg_scale),
-        "cfg_uc": cfgSettings?.negativePrompt ?? nai_settings.cfg_uc ?? "",
+        "cfg_scale": cfgValues?.guidanceScale?.value ?? parseFloat(nai_settings.cfg_scale),
+        "cfg_uc": cfgValues?.negativePrompt ?? nai_settings.cfg_uc ?? "",
         "phrase_rep_pen": nai_settings.phrase_rep_pen,
         "stop_sequences": stopSequences,
         "bad_words_ids": badWordIds,
@@ -578,7 +581,7 @@ function calculateLogitBias() {
 }
 
 /**
- * Transforms instruction into compatible format for Novel AI.
+ * Transforms instruction into compatible format for Novel AI if Novel AI instruct format not already detected.
  * 1. Instruction must begin and end with curly braces followed and preceded by a space.
  * 2. Instruction must not contain square brackets as it serves different purpose in NAI.
  * @param {string} prompt Original instruction prompt
@@ -586,7 +589,10 @@ function calculateLogitBias() {
  */
 export function adjustNovelInstructionPrompt(prompt) {
     const stripedPrompt = prompt.replace(/[\[\]]/g, '').trim();
-    return `{ ${stripedPrompt} }`;
+    if (!stripedPrompt.includes('{ ')) {
+        return `{ ${stripedPrompt} }`;
+    }
+    return stripedPrompt;
 }
 
 export async function generateNovelWithStreaming(generate_data, signal) {

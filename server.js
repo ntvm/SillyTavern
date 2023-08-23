@@ -297,6 +297,8 @@ const baseRequestArgs = { headers: { "Content-Type": "application/json" } };
 const directories = {
     worlds: 'public/worlds/',
     avatars: 'public/User Avatars',
+    images: 'public/img/',
+    userImages: 'public/user/images/',
     groups: 'public/groups/',
     groupChats: 'public/group chats',
     chats: 'public/chats/',
@@ -600,7 +602,7 @@ app.post("/generate_textgenerationwebui", jsonParser, async function (request, r
         });
 
         async function* readWebsocket() {
-            const streamingUrl = request.header('X-Streaming-URL');
+            const streamingUrl = request.header('X-Streaming-URL').replace("localhost", "127.0.0.1");
             const websocket = new WebSocket(streamingUrl);
 
             websocket.on('open', async function () {
@@ -2625,6 +2627,73 @@ app.post('/uploaduseravatar', urlencodedParser, async (request, response) => {
     }
 });
 
+
+/**
+ * Ensure the directory for the provided file path exists.
+ * If not, it will recursively create the directory.
+ *
+ * @param {string} filePath - The full path of the file for which the directory should be ensured.
+ */
+function ensureDirectoryExistence(filePath) {
+    const dirname = path.dirname(filePath);
+    if (fs.existsSync(dirname)) {
+        return true;
+    }
+    ensureDirectoryExistence(dirname);
+    fs.mkdirSync(dirname);
+}
+
+/**
+ * Endpoint to handle image uploads.
+ * The image should be provided in the request body in base64 format.
+ * Optionally, a character name can be provided to save the image in a sub-folder.
+ *
+ * @route POST /uploadimage
+ * @param {Object} request.body - The request payload.
+ * @param {string} request.body.image - The base64 encoded image data.
+ * @param {string} [request.body.ch_name] - Optional character name to determine the sub-directory.
+ * @returns {Object} response - The response object containing the path where the image was saved.
+ */
+app.post('/uploadimage', jsonParser, async (request, response) => {
+    // Check for image data
+    if (!request.body || !request.body.image) {
+        return response.status(400).send({ error: "No image data provided" });
+    }
+
+    // Extracting the base64 data and the image format
+    const match = request.body.image.match(/^data:image\/(png|jpg|webp);base64,(.+)$/);
+    if (!match) {
+        return response.status(400).send({ error: "Invalid image format" });
+    }
+
+    const [, format, base64Data] = match;
+
+    // Constructing filename and path
+    let filename = `${Date.now()}.${format}`;
+    if (request.body.filename) {
+        filename = `${request.body.filename}.${format}`;
+    }
+
+    // if character is defined, save to a sub folder for that character
+    let pathToNewFile = path.join(directories.userImages, filename);
+    if (request.body.ch_name) {
+        pathToNewFile = path.join(directories.userImages, request.body.ch_name, filename);
+    }
+
+    try {
+        ensureDirectoryExistence(pathToNewFile);
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+        await fs.promises.writeFile(pathToNewFile, imageBuffer);
+        // send the path to the image, relative to the client folder, which means removing the first folder from the path which is 'public'
+        pathToNewFile = pathToNewFile.split(path.sep).slice(1).join(path.sep);
+        response.send({ path: pathToNewFile });
+    } catch (error) {
+        console.log(error);
+        response.status(500).send({ error: "Failed to save the image" });
+    }
+});
+
+
 app.post('/getgroups', jsonParser, (_, response) => {
     const groups = [];
 
@@ -2673,7 +2742,7 @@ app.post('/creategroup', jsonParser, (request, response) => {
         return response.sendStatus(400);
     }
 
-    const id = Date.now();
+    const id = String(Date.now());
     const groupMetadata = {
         id: id,
         name: request.body.name ?? 'New Group',
@@ -3276,6 +3345,72 @@ async function sendScaleRequest(request, response) {
     }
 }
 
+app.post("/generate_altscale", jsonParser, function (request, response_generate_scale) {
+    if (!request.body) return response_generate_scale.sendStatus(400);
+
+    fetch('https://dashboard.scale.com/spellbook/api/trpc/v2.variant.run', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'cookie': `_jwt=${readSecret(SECRET_KEYS.SCALE_COOKIE)}`,
+        },
+        body: JSON.stringify({
+            json: {
+                variant: {
+                    name: 'New Variant',
+                    appId: '',
+                    taxonomy: null
+                },
+                prompt: {
+                    id: '',
+                    template: '{{input}}\n',
+                    exampleVariables: {},
+                    variablesSourceDataId: null,
+                    systemMessage: request.body.sysprompt
+                },
+                modelParameters: {
+                    id: '',
+                    modelId: 'GPT4',
+                    modelType: 'OpenAi',
+                    maxTokens: request.body.max_tokens,
+                    temperature: request.body.temp,
+                    stop: "user:",
+                    suffix: null,
+                    topP: request.body.top_p,
+                    logprobs: null,
+                    logitBias: request.body.logit_bias
+                },
+                inputs: [
+                    {
+                        index: '-1',
+                        valueByName: {
+                            input: request.body.prompt
+                        }
+                    }
+                ]
+            },
+            meta: {
+                values: {
+                    'variant.taxonomy': ['undefined'],
+                    'prompt.variablesSourceDataId': ['undefined'],
+                    'modelParameters.suffix': ['undefined'],
+                    'modelParameters.logprobs': ['undefined'],
+                }
+            }
+        })
+    })
+        .then(response => response.json())
+        .then(data => {
+            console.log(data.result.data.json.outputs[0])
+            return response_generate_scale.send({ output: data.result.data.json.outputs[0] });
+        })
+        .catch((error) => {
+            console.error('Error:', error)
+            return response_generate_scale.send({ error: true })
+        });
+
+});
+
 async function sendClaudeRequest(request, response) {
     const fetch = require('node-fetch').default;
 
@@ -3293,9 +3428,9 @@ async function sendClaudeRequest(request, response) {
             controller.abort();
         });
 
-        let requestPrompt = convertClaudePrompt(request.body.messages, true, true);
+        let requestPrompt = convertClaudePrompt(request.body.messages, true, !request.body.exclude_assistant);
 
-        if (request.body.assistant_prefill) {
+        if (request.body.assistant_prefill && !request.body.exclude_assistant) {
             requestPrompt += request.body.assistant_prefill;
         }
 
@@ -3436,7 +3571,7 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
         config.responseType = 'stream';
     }
 
-    async function makeRequest(config, response_generate_openai, request, retries = 5, timeout = 1000) {
+    async function makeRequest(config, response_generate_openai, request, retries = 5, timeout = 5000) {
         try {
             const response = await axios(config);
 
@@ -3458,7 +3593,7 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
             }
         } catch (error) {
             if (error.response && error.response.status === 429 && retries > 0) {
-                console.log('Out of quota, retrying...');
+                console.log(`Out of quota, retrying in ${Math.round(timeout / 1000)}s`);
                 setTimeout(() => {
                     makeRequest(config, response_generate_openai, request, retries - 1);
                 }, timeout);
@@ -3655,14 +3790,14 @@ app.post("/save_preset", jsonParser, function (request, response) {
         return response.sendStatus(400);
     }
 
-    const filename = `${name}.settings`;
-    const directory = getPresetFolderByApiId(request.body.apiId);
+    const settings = getPresetSettingsByAPI(request.body.apiId);
+    const filename = name + settings.extension;
 
-    if (!directory) {
+    if (!settings.folder) {
         return response.sendStatus(400);
     }
 
-    const fullpath = path.join(directory, filename);
+    const fullpath = path.join(settings.folder, filename);
     writeFileAtomicSync(fullpath, JSON.stringify(request.body.preset, null, 4), 'utf-8');
     return response.send({ name });
 });
@@ -3673,16 +3808,16 @@ app.post("/delete_preset", jsonParser, function (request, response) {
         return response.sendStatus(400);
     }
 
-    const filename = `${name}.settings`;
-    const directory = getPresetFolderByApiId(request.body.apiId);
+    const settings = getPresetSettingsByAPI(request.body.apiId);
+    const filename = name + settings.extension;
 
-    if (!directory) {
+    if (!settings.folder) {
         return response.sendStatus(400);
     }
 
-    const fullpath = path.join(directory, filename);
+    const fullpath = path.join(settings.folder, filename);
 
-    if (fs.existsSync) {
+    if (fs.existsSync(fullpath)) {
         fs.unlinkSync(fullpath);
         return response.sendStatus(200);
     } else {
@@ -3702,17 +3837,19 @@ app.post("/savepreset_openai", jsonParser, function (request, response) {
     return response.send({ name });
 });
 
-function getPresetFolderByApiId(apiId) {
+function getPresetSettingsByAPI(apiId) {
     switch (apiId) {
         case 'kobold':
         case 'koboldhorde':
-            return directories.koboldAI_Settings;
+            return { folder: directories.koboldAI_Settings, extension: '.settings' };
         case 'novel':
-            return directories.novelAI_Settings;
+            return { folder: directories.novelAI_Settings, extension: '.settings' };
         case 'textgenerationwebui':
-            return directories.textGen_Settings;
+            return { folder: directories.textGen_Settings, extension: '.settings' };
+        case 'instruct':
+            return { folder: directories.instruct, extension: '.json' };
         default:
-            return null;
+            return { folder: null, extension: null };
     }
 }
 
@@ -3962,7 +4099,8 @@ const SECRET_KEYS = {
     DEEPL: 'deepl',
     OPENROUTER: 'api_key_openrouter',
     SCALE: 'api_key_scale',
-    AI21: 'api_key_ai21'
+    AI21: 'api_key_ai21',
+    SCALE_COOKIE: 'scale_cookie',
 }
 
 function migrateSecrets() {
