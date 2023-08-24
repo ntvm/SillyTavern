@@ -243,7 +243,7 @@ jQuery(function () {
                         <option value="true">true</option>
                         <option value="false">false</option>
                     </select>
-                	<label for="Inputer_prompt">Current XMLK AfterScenario: </label>
+                	<label for="Inputer_prompt">Current AfterScenario prompt: </label>
                     <textarea id="Inputer_prompt" class="text_pole textarea_compact" rows="6" placeholder="Put there things, what supposed be in author's notes here..."></textarea>
                     <div class="Inputer_contents_controls">
                     </div>
@@ -251,7 +251,7 @@ jQuery(function () {
                         <label for="exclude_Prefill"><input id="exclude_Prefill" type="checkbox" />Disable Claude prefill</label>
                     </div>
                     <div>
-                        <label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />Activate AfterScenario</label>
+                        <label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />Activate AfterScenario prompt</label>
                     </div>
                     <div>
                         <select id="NvPresets" name="preset">
