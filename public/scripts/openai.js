@@ -180,6 +180,7 @@ const default_settings = {
     ai21_model: 'j2-ultra',
     windowai_model: '',
     openrouter_model: openrouter_website_model,
+    openrouter_use_fallback: true,
     jailbreak_system: false,
     reverse_proxy: '',
     legacy_streaming: false,
@@ -229,6 +230,7 @@ const oai_settings = {
     ai21_model: 'j2-ultra',
     windowai_model: '',
     openrouter_model: openrouter_website_model,
+    openrouter_use_fallback: true,
     jailbreak_system: false,
     reverse_proxy: '',
     legacy_streaming: false,
@@ -372,7 +374,7 @@ function setupChatCompletionPromptManager(openAiSettings) {
         },
         promptOrder: {
             strategy: 'global',
-            dummyId: 100000
+            dummyId: 100001
         },
     };
 
@@ -630,6 +632,7 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
     addToChatCompletion('charDescription');
     addToChatCompletion('charPersonality');
     addToChatCompletion('scenario');
+    addToChatCompletion('personaDescription')
 
     // Collection of control prompts that will always be positioned last
     const controlPrompts = new MessageCollection('controlPrompts');
@@ -683,34 +686,6 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
         if (true === afterScenario) chatCompletion.insert(authorsNote, 'scenario');
     }
 
-    // Persona Description
-    if (power_user.persona_description) {
-        const personaDescription = Message.fromPrompt(prompts.get('personaDescription'));
-
-        try {
-            switch (power_user.persona_description_position) {
-                case persona_description_positions.BEFORE_CHAR:
-                    chatCompletion.insertAtStart(personaDescription, 'charDescription');
-                    break;
-                case persona_description_positions.AFTER_CHAR:
-                    chatCompletion.insertAtEnd(personaDescription, 'charDescription');
-                    break;
-                case persona_description_positions.TOP_AN:
-                    chatCompletion.insertAtStart(personaDescription, 'authorsNote');
-                    break;
-                case persona_description_positions.BOTTOM_AN:
-                    chatCompletion.insertAtEnd(personaDescription, 'authorsNote');
-                    break;
-            }
-        } catch (error) {
-            if (error instanceof IdentifierNotFoundError) {
-                // Error is acceptable in this context
-            } else {
-                throw error;
-            }
-        }
-    }
-
     // Decide whether dialogue examples should always be added
     if (power_user.pin_examples) {
         populateDialogueExamples(prompts, chatCompletion);
@@ -736,10 +711,12 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
  * @param {string} quietPrompt - The quiet prompt to be used in the conversation.
  * @param {string} bias - The bias to be added in the conversation.
  * @param {Object} extensionPrompts - An object containing additional prompts.
- *
+ * @param {string} systemPromptOverride
+ * @param {string} jailbreakPromptOverride
+ * @param {string} personaDescription
  * @returns {Object} prompts - The prepared and merged system and user-defined prompts.
  */
-function preparePromptsForChatCompletion(Scenario, charPersonality, name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts, systemPromptOverride, jailbreakPromptOverride) {
+function preparePromptsForChatCompletion({Scenario, charPersonality, name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts, systemPromptOverride, jailbreakPromptOverride, personaDescription} = {}) {
     const scenarioText = Scenario ? `[Circumstances and context of the dialogue: ${Scenario}]` : '';
     const charPersonalityText = charPersonality ? `[${name2}'s personality: ${charPersonality}]` : ''
     const groupNudge = `[Write the next reply only as ${name2}]`;
@@ -752,6 +729,7 @@ function preparePromptsForChatCompletion(Scenario, charPersonality, name2, world
         { role: 'system', content: charDescription, identifier: 'charDescription' },
         { role: 'system', content: charPersonalityText, identifier: 'charPersonality' },
         { role: 'system', content: scenarioText, identifier: 'scenario' },
+        { role: 'system', content: personaDescription, identifier: 'personaDescription' },
         // Unordered prompts without marker
         { role: 'system', content: oai_settings.nsfw_avoidance_prompt, identifier: 'nsfwAvoidance' },
         { role: 'system', content: oai_settings.impersonation_prompt, identifier: 'impersonate' },
@@ -872,6 +850,7 @@ function prepareOpenAIMessages({
     cyclePrompt,
     systemPromptOverride,
     jailbreakPromptOverride,
+    personaDescription
 } = {}, dryRun) {
     // Without a character selected, there is no way to accurately calculate tokens
     if (!promptManager.activeCharacter && dryRun) return [null, false];
@@ -884,7 +863,19 @@ function prepareOpenAIMessages({
 
     try {
         // Merge markers and ordered user prompts with system prompts
-        const prompts = preparePromptsForChatCompletion(Scenario, charPersonality, name2, worldInfoBefore, worldInfoAfter, charDescription, quietPrompt, bias, extensionPrompts, systemPromptOverride, jailbreakPromptOverride);
+        const prompts = preparePromptsForChatCompletion({
+            Scenario,
+            charPersonality,
+            name2,
+            worldInfoBefore,
+            worldInfoAfter,
+            charDescription,
+            quietPrompt,
+            bias,
+            extensionPrompts,
+            systemPromptOverride,
+            jailbreakPromptOverride,
+            personaDescription});
 
         // Fill the chat completion with as much context as the budget allows
         populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, type, cyclePrompt });
@@ -1240,7 +1231,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['exclude_assistant'] = oai_settings.exclude_assistant;
         // Don't add a prefill on quiet gens (summarization)
-        if (!isQuiet && !oai_settings.exclude_assistant) {
+        if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill) {
             generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
         }
     }
@@ -1248,6 +1239,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
     if (isOpenRouter) {
         generate_data['use_openrouter'] = true;
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
+        generate_data['use_fallback'] = oai_settings.openrouter_use_fallback;
     }
 
     if (isScale) {
@@ -1932,6 +1924,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.claude_model = settings.claude_model ?? default_settings.claude_model;
     oai_settings.windowai_model = settings.windowai_model ?? default_settings.windowai_model;
     oai_settings.openrouter_model = settings.openrouter_model ?? default_settings.openrouter_model;
+    oai_settings.openrouter_use_fallback = settings.openrouter_use_fallback ?? default_settings.openrouter_use_fallback;
     oai_settings.ai21_model = settings.ai21_model ?? default_settings.ai21_model;
     oai_settings.chat_completion_source = settings.chat_completion_source ?? default_settings.chat_completion_source;
     oai_settings.api_url_scale = settings.api_url_scale ?? default_settings.api_url_scale;
@@ -1982,6 +1975,7 @@ function loadOpenAISettings(data, settings) {
     $('#use_ai21_tokenizer').prop('checked', oai_settings.use_ai21_tokenizer);
     $('#exclude_assistant').prop('checked', oai_settings.exclude_assistant);
     $('#scale-alt').prop('checked', oai_settings.use_alt_scale);
+    $('#openrouter_use_fallback').prop('checked', oai_settings.openrouter_use_fallback);
     if (settings.impersonation_prompt !== undefined) oai_settings.impersonation_prompt = settings.impersonation_prompt;
 
     $('#impersonation_prompt_textarea').val(oai_settings.impersonation_prompt);
@@ -2147,6 +2141,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         claude_model: settings.claude_model,
         windowai_model: settings.windowai_model,
         openrouter_model: settings.openrouter_model,
+        openrouter_use_fallback: settings.openrouter_use_fallback,
         ai21_model: settings.ai21_model,
         temperature: settings.temp_openai,
         frequency_penalty: settings.freq_pen_openai,
@@ -2506,6 +2501,7 @@ function onSettingsPresetChange() {
         claude_model: ['#model_claude_select', 'claude_model', false],
         windowai_model: ['#model_windowai_select', 'windowai_model', false],
         openrouter_model: ['#model_openrouter_select', 'openrouter_model', false],
+        openrouter_use_fallback: ['#openrouter_use_fallback', 'openrouter_use_fallback', true],
         ai21_model: ['#model_ai21_select', 'ai21_model', false],
         openai_max_context: ['#openai_max_context', 'openai_max_context', false],
         openai_max_tokens: ['#openai_max_tokens', 'openai_max_tokens', false],
@@ -2631,7 +2627,7 @@ function getMaxContextWindowAI(value) {
 
 async function onModelChange() {
     biasCache = undefined;
-    let value = String($(this).val());
+    let value = String($(this).val() || '');
 
     if ($(this).is('#model_claude_select')) {
         console.log('Claude model changed to', value);
@@ -3227,6 +3223,11 @@ $(document).ready(async function () {
 
     $('#claude_assistant_prefill').on('input', function () {
         oai_settings.assistant_prefill = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#openrouter_use_fallback').on('input', function () {
+        oai_settings.openrouter_use_fallback = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 

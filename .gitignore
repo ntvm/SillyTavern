@@ -14,7 +14,6 @@ public/KoboldAI Settings/
 public/NovelAI Settings/
 public/TextGen Settings/
 public/instruct/
-public/scripts/extensions/third-party/
 public/stats.json
 /uploads/
 *.jsonl
@@ -31,4 +30,13 @@ secrets.json
 public/movingUI/
 public/QuickReplies/
 content.log
+public/scripts/extensions/third-party/
 cloudflared.exe
+stats.json
+public/notes/update.md
+public/notes/readme.md.html
+public/notes/2.png
+public/notes/1.png
+public/notes/content.md
+public/notes/faq.md.html
+public/notes/update.html
