@@ -3,7 +3,7 @@ name: Build and Publish Release (Release)
 on:
   push:
     branches:
-      - release
+      - ReleaseV2
 
 jobs:
   build_and_publish:
