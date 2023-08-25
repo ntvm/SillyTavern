@@ -632,7 +632,6 @@ jQuery(function () {
                         <input id="memory_restore" class="menu_button" type="button" value="Restore previous state" />
                         <label for="memory_frozen"><input id="memory_frozen" type="checkbox" />Pause summarization</label>
                     </div>
-
                     <div data-source="main" class="memory_contents_controls">
                     </div>
                     <div data-source="main">

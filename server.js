@@ -319,6 +319,7 @@ const directories = {
     backups: 'backups/',
     NvSettings: 'public/NvSettings',	
     quickreplies: 'public/QuickReplies',
+    assets: 'public/assets',
 };
 
 // CSRF Protection //
@@ -3887,11 +3888,19 @@ app.post("/tokenize_via_api", jsonParser, async function (request, response) {
 
         if (main_api == 'textgenerationwebui' && request.body.use_mancer) {
             args.headers = Object.assign(args.headers, get_mancer_headers());
+            const data = await postAsync(api_server + "/v1/token-count", args);
+            return response.send({ count: data['results'][0]['tokens'] });
         }
 
-        const data = await postAsync(api_server + "/v1/token-count", args);
-        console.log(data);
-        return response.send({ count: data['results'][0]['tokens'] });
+        else if (main_api == 'kobold') {
+            const data = await postAsync(api_server + "/extra/tokencount", args);
+            const count = data['value'];
+            return response.send({ count: count });
+        }
+
+        else {
+            return response.send({ error: true });
+        }
     } catch (error) {
         console.log(error);
         return response.send({ error: true });
@@ -5046,5 +5055,244 @@ app.post('/delete_extension', jsonParser, async (request, response) => {
     } catch (error) {
         console.log('Deleting custom content failed', error);
         return response.status(500).send(`Server Error: ${error.message}`);
+    }
+});
+
+
+/**
+ * HTTP POST handler function to retrieve name of all files of a given folder path.
+ *
+ * @param {Object} request - HTTP Request object. Require folder path in query
+ * @param {Object} response - HTTP Response object will contain a list of file path.
+ *
+ * @returns {void}
+ */
+app.post('/get_assets', jsonParser, async (request, response) => {
+    const folderPath = path.join(directories.assets);
+    let output = {}
+    //console.info("Checking files into",folderPath);
+
+    try {
+        if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
+            const folders = fs.readdirSync(folderPath)
+                .filter(filename => {
+                    return fs.statSync(path.join(folderPath, filename)).isDirectory();
+                });
+
+            for (const folder of folders) {
+                if (folder == "temp")
+                    continue;
+                const files = fs.readdirSync(path.join(folderPath, folder))
+                    .filter(filename => {
+                        return filename != ".placeholder";
+                    });
+                output[folder] = [];
+                for (const file of files) {
+                    output[folder].push(path.join("assets", folder, file));
+                }
+            }
+        }
+    }
+    catch (err) {
+        console.log(err);
+    }
+    finally {
+        return response.send(output);
+    }
+});
+
+
+function checkAssetFileName(inputFilename) {
+    // Sanitize filename
+    if (inputFilename.indexOf('\0') !== -1) {
+        console.debug("Bad request: poisong null bytes in filename.");
+        return '';
+    }
+
+    if (!/^[a-zA-Z0-9_\-\.]+$/.test(inputFilename)) {
+        console.debug("Bad request: illegal character in filename, only alphanumeric, '_', '-' are accepted.");
+        return '';
+    }
+
+    if (contentManager.unsafeExtensions.some(ext => inputFilename.toLowerCase().endsWith(ext))) {
+        console.debug("Bad request: forbidden file extension.");
+        return '';
+    }
+
+    if (inputFilename.startsWith('.')) {
+        console.debug("Bad request: filename cannot start with '.'");
+        return '';
+    }
+
+    return path.normalize(inputFilename).replace(/^(\.\.(\/|\\|$))+/, '');;
+}
+
+/**
+ * HTTP POST handler function to download the requested asset.
+ *
+ * @param {Object} request - HTTP Request object, expects a url, a category and a filename.
+ * @param {Object} response - HTTP Response only gives status.
+ *
+ * @returns {void}
+ */
+app.post('/asset_download', jsonParser, async (request, response) => {
+    const { Readable } = require('stream');
+    const { finished } = require('stream/promises');
+    const url = request.body.url;
+    const inputCategory = request.body.category;
+    const inputFilename = sanitize(request.body.filename);
+    const validCategories = ["bgm", "ambient"];
+
+    // Check category
+    let category = null;
+    for (i of validCategories)
+        if (i == inputCategory)
+            category = i;
+
+    if (category === null) {
+        console.debug("Bad request: unsuported asset category.");
+        return response.sendStatus(400);
+    }
+
+    // Sanitize filename
+    const safe_input = checkAssetFileName(inputFilename);
+    if (safe_input == '')
+        return response.sendFile(400);
+
+    const temp_path = path.join(directories.assets, "temp", safe_input)
+    const file_path = path.join(directories.assets, category, safe_input)
+    console.debug("Request received to download", url, "to", file_path);
+
+    try {
+        // Download to temp
+        const downloadFile = (async (url, temp_path) => {
+            const res = await fetch(url);
+            if (!res.ok) {
+                throw new Error(`Unexpected response ${res.statusText}`);
+            }
+            const destination = path.resolve(temp_path);
+            // Delete if previous download failed
+            if (fs.existsSync(temp_path)) {
+                fs.unlink(temp_path, (err) => {
+                    if (err) throw err;
+                });
+            }
+            const fileStream = fs.createWriteStream(destination, { flags: 'wx' });
+            await finished(Readable.fromWeb(res.body).pipe(fileStream));
+        });
+
+        await downloadFile(url, temp_path);
+
+        // Move into asset place
+        console.debug("Download finished, moving file from", temp_path, "to", file_path);
+        fs.renameSync(temp_path, file_path);
+        response.sendStatus(200);
+    }
+    catch (error) {
+        console.log(error);
+        response.sendStatus(500);
+    }
+});
+
+/**
+ * HTTP POST handler function to delete the requested asset.
+ *
+ * @param {Object} request - HTTP Request object, expects a category and a filename
+ * @param {Object} response - HTTP Response only gives stats.
+ *
+ * @returns {void}
+ */
+app.post('/asset_delete', jsonParser, async (request, response) => {
+    const { Readable } = require('stream');
+    const { finished } = require('stream/promises');
+    const inputCategory = request.body.category;
+    const inputFilename = sanitize(request.body.filename);
+    const validCategories = ["bgm", "ambient"];
+
+    // Check category
+    let category = null;
+    for (i of validCategories)
+        if (i == inputCategory)
+            category = i;
+
+    if (category === null) {
+        console.debug("Bad request: unsuported asset category.");
+        return response.sendStatus(400);
+    }
+
+    // Sanitize filename
+    const safe_input = checkAssetFileName(inputFilename);
+    if (safe_input == '')
+        return response.sendFile(400);
+
+    const file_path = path.join(directories.assets, category, safe_input)
+    console.debug("Request received to delete", category, file_path);
+
+    try {
+        // Delete if previous download failed
+        if (fs.existsSync(file_path)) {
+            fs.unlink(file_path, (err) => {
+                if (err) throw err;
+            });
+            console.debug("Asset deleted.");
+        }
+        else {
+            console.debug("Asset not found.");
+            response.sendStatus(400);
+        }
+        // Move into asset place
+        response.sendStatus(200);
+    }
+    catch (error) {
+        console.log(error);
+        response.sendStatus(500);
+    }
+});
+
+
+///////////////////////////////
+/**
+ * HTTP POST handler function to retrieve a character background music list.
+ *
+ * @param {Object} request - HTTP Request object, expects a character name in the query.
+ * @param {Object} response - HTTP Response object will contain a list of audio file path.
+ *
+ * @returns {void}
+ */
+app.post('/get_character_assets_list', jsonParser, async (request, response) => {
+    const name = sanitize(request.query.name);
+    const inputCategory = request.query.category;
+    const validCategories = ["bgm", "ambient"]
+
+    // Check category
+    let category = null
+    for (i of validCategories)
+        if (i == inputCategory)
+            category = i
+
+    if (category === null) {
+        console.debug("Bad request: unsuported asset category.");
+        return response.sendStatus(400);
+    }
+
+    const folderPath = path.join(directories.characters, name, category);
+
+    let output = [];
+    try {
+        if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
+            const files = fs.readdirSync(folderPath)
+                .filter(filename => {
+                    return filename != ".placeholder";
+                });
+
+            for (i of files)
+                output.push(`/characters/${name}/${category}/${i}`);
+
+        }
+        return response.send(output);
+    }
+    catch (err) {
+        console.log(err);
+        return response.sendStatus(500);
     }
 });
