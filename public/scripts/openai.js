@@ -784,11 +784,11 @@ function preparePromptsForChatCompletion({Scenario, charPersonality, name2, worl
     });
 
     //(Multicharacters descriptions in prompt (On case if I'll would add that function. Low probably through))
-    //if (inject1 && Inject1.MulChar) systemPrompts.push({
-    //    role: 'system',
-    //    content: Inject1.MulChar,
-    //    identifier: 'GroupchatPush'
-    //});
+    /*if (inject1 && Inject1.MulChar) systemPrompts.push({
+        role: 'system',
+        content: Inject1.MulChar,
+        identifier: 'GroupchatPush'
+    });*/
 
     // Persona Description
     if (power_user.persona_description) {
