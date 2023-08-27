@@ -1,7 +1,7 @@
 import { getStringHash, debounce, waitUntilCondition, extractAllWords } from "../../utils.js";
 import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules } from "../../extensions.js";
-import { eventSource, event_types, extension_prompt_types, generateQuietPrompt, callPopup, getRequestHeaders, is_send_press, saveSettingsDebounced, saveSettings, substituteParams } from "../../../script.js";
-import { is_group_generating, selected_group } from "../../group-chats.js";
+import { eventSource, event_types, extension_prompt_types, generateQuietPrompt, callPopup, getRequestHeaders, is_send_press, saveSettingsDebounced, saveSettings, substituteParams, getCharacterBlock  } from "../../../script.js";
+import { is_group_generating, selected_group, getGroupChatNames } from "../../group-chats.js";
 import { oai_settings } from "../../openai.js";
 
 
@@ -38,7 +38,9 @@ const defaultSettings = {
     depth: 2,
 	AlwaysCharnames: true,
     selectedPreset: '',
-    exclude_Prefill: false
+    exclude_Prefill: false,
+    CurrentGroup: selected_group,
+    MulChar: ''
 };
 
 
@@ -100,6 +102,7 @@ function setInputerContext(value, saveToMessage) {
 		case true:
 			break
 		default:
+            var context = getContext();
 			if (value == undefined) {
 			extension_settings.Nvkun.Inputer_prompt = value;}
 			
@@ -109,12 +112,14 @@ function setInputerContext(value, saveToMessage) {
 			console.log('After Scenario injected');
 			console.debug('Position: ' + extension_settings.Nvkun.position);
 			console.debug('Depth: ' + extension_settings.Nvkun.depth);
-
+            const idx = context.chat.length - 2;
+			const mes = context.chat[idx < 0 ? 0 : idx];
 
 			if (!mes.extra) {
 			mes.extra = {};
 			}
-
+            
+			
 			mes.extra.Nvkun = value;
 			saveSettingsDebounced();
 			
@@ -122,12 +127,41 @@ function setInputerContext(value, saveToMessage) {
 		}
 }
 
+/*
+var PushPrompts = true
+
+    switch (PushPrompts) {
+        default: 
+            break
+    case true:
+	    var 
+		var Names = GetCharsName();
+        console.log('' + Names);
+		break
+}
+
+*/
+
 async function onChatEvent() {
     // Chat/character/group changed
+
 	var value = extension_settings.Nvkun.Inputer_prompt ;
 	setInputerContext(value, true);
     return;
 }
+
+
+
+    
+function GetCharsName() {
+const GId = CurrentGroup
+getGroupChatNames(GId)
+}
+
+//GroupchatPush
+
+
+
 
 //Savesets	
 

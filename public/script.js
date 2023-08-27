@@ -175,6 +175,7 @@ import { getTokenCount, getTokenizerModel, saveTokenCache } from "./scripts/toke
 
 //exporting functions and vars for mods
 export {
+    getCharacterBlock,
     Generate,
     getSettings,
     saveSettings,
