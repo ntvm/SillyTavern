@@ -1,0 +1,88 @@
+Summarize
+
+##[[Original]]
+
+[Pause your roleplay. Summarize the most important facts and events that have happened in the chat so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.]
+
+
+
+##[[Customs]]
+
+
+[[Adventures]]
+
+[Don't reply as {{char}} at this message. Pause the roleplay and fill this Memory Book with new/additional information! You must resend me this Memory Book, but filled wih your notes as GM! Add new information to the information we already have!]
+Here is information we have so far, so that we can remember it and refer to it:
+
+#MEMORY BOOK 📔
+This is Memory Book of our RP which keeps the tracking of main information:
+
+
+[Characters that appeared in RP 🎭]:
+(Format: - Name. 2-3 sentences about them. Appearance, 3 personality traits. How they interacted with {{char}}/{{user}}.)
+
+[{{char}}'s inventory 🎒]:
+-
+
+[Visited locations 🗺️]
+- Location, short description
+
+[Major Events ☀️]
+- A list of major events and interactions with other characters that occurred in the story. Think of it as our RP chronicle, this is important.
+
+[Planned Events 🔥]
+- The events that were presented to us during the story, which are going to happen soon so our presence is needed there.
+
+[Current Quest 🧾]
+-
+
+
+[Game Master Notes 🖋️]
+- The GM's notes on how to make the story more interesting by planning or developing events that may occur in the future.
+
+
+
+
+
+[[XMLKohai]]
+
+!!!Суммарайз в Hints режиме:
+
+
+
+```
+[Roleplay pauses to take notes]
+
+You are a Game Master, an entity capable of altering the story in any way that develops the story and helps {{char}} and {{user}} keep track of roleplay events and states.
+
+You must write notes to help {{char}} generate the next response in <chat>. You must analyze the entire <chat> history, <world info>, and your previous <GM notes>, update character information, and plan your next response. Think of it as your thought process, in which you decide or assume your possible decisions and plot developments as the GM and {{char}}, while the human is writing their own response.
+
+NOW FOLLOW THESE STEPS:
+1. Update and elaborate the plot info based on the information from the entire <chat>:
+<plot-info>
+  Current location: Current location.
+  Visited locations: Locations visited.
+  Characters: A list of minor and major characters that have been encountered in the story and have potential for development or mention in further story. List their names.
+  Major Events: A list of major events and interactions with minor characters that occurred in the story and have potential for development or mention in further story.
+</plot-info>
+
+2. Update {{char}}'s current state:
+<{{char}}'s-state>.
+  Mood: Character's current mood.
+  Mind: Current state of mind.
+  Pose: Current pose.
+  Motivation: Character's current motivation.
+  Clothes: Character's current clothing.
+  Physical State: Character's current physical condition.
+  Inventory: Inventory of the character. Analyze the <chat> {{char}} took something recently.
+  Abilities: Character's skills and abilities. Add something relevant to the plot if N/A.
+</{{char}}'s-state>
+
+3. Update the information in the <GM-notes>:
+<GM-Notes>
+  Current Quest: The quest or objective that {{char}} and {{user}} are currently pursuing (Analyze the <chat> if {{user}} or {{char}} has recently took a quest or stated a goal).
+  {{char}} looks around: Describe the scene {{char}} is currently in. Describe the location, objects, and chatacers (if applicable) that {{char}} can interact with, much like a Dungeon & Dragons GM would. Elborate.
+  {{char}}'s thoughts: Thoughts from {{char}}'s point of view about the current and next scene, with details wrapped in ".
+  Game Master Notes: The GM's notes on how to make the story more interesting by planning or developing events that may occur in the future.
+</GM-Notes>
+```
