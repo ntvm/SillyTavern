@@ -767,7 +767,7 @@ function preparePromptsForChatCompletion({Scenario, charPersonality, name2, worl
 	
 	
 	default:
-        if (inject1 && inject1.value) systemPrompts.push({
+        if (inject1 && inject1.value && extension_settings.Nvkun.Inputer_frozen == true) systemPrompts.push({
             role: 'system',
             content: inject1.value,
             identifier: 'XMLpromptPush'
