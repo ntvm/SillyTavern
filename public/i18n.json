@@ -1817,7 +1817,7 @@
         "Wrap Sequences with Newline": "Отделять последовательности красной строкой",
         "Include Names": "Показывать имена",
         "System Prompt": "Системная инструкция для локальных LLM",
-        "Instruct Mode Sequences": "Последовательности Instruct режима",
+        "Instruct Mode Sequences": "Переменные Instruct режима",
         "Input Sequence": "Вставка последовательностей",
         "First Output Sequence": "Первая выходная последовательность",
         "Last Output Sequence": "Последняя выходная последовательность",
