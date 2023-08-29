@@ -1817,7 +1817,7 @@
         "Sentencepiece (LLaMA)": "Sentencepiece（LLaMA）",
         "Token Padding": "Заполнение токенов",
         "Always add character's name to prompt": "Всегда добавлять имя персонажа в контекст локальных LLM",
-        "Keep Example Messages in Prompt": "Сохранять примеры сообщений в инструкции",
+        "Keep Example Messages in Prompt": "Держать примеры диалога в контексте",
         "Remove Empty New Lines from Output": "Удалять пустые строчки из вывода",
         "Pygmalion Formatting": "Форматирование Pygmalion",
         "Disabled for all models": "Выключено для всех моделей",
