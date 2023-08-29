@@ -1706,7 +1706,7 @@
         "Min Length": "Минимальная длина ответа",
         "OpenAI Reverse Proxy": "OpenAI Прокси",
         "Alternative server URL (leave empty to use the default value).": "Альтернативный URL (оставьте пустым для стандартного значения)",
-        "Remove your real OAI API Key from the API panel BEFORE typing anything into this box": "Удалите свой личный OAI API Key из панели API прежде, чем вносить сюда ЧТО УГОДНО",
+        "Remove your real OAI API Key from the API panel BEFORE typing anything into this box": "Удалите свой личный OAI API ключ из панели API прежде, чем вносить сюда ЧТО УГОДНО",
         "We cannot provide support for problems encountered while using an unofficial OpenAI proxy": "Мы не сможем предоставить помощь с проблемами, с которыми вы столкнетесь при использовании неофициальных прокси для OpenAI",
         "Legacy Streaming Processing": "Старый способ стриминга текста",
         "Enable this if the streaming doesn't work with your proxy": "Включите это, если стриминг текста не работает с вашим прокси",
@@ -2293,9 +2293,10 @@
         "In Story String / Prompt Manager":"В Промпт Менеджере",
         "Your Persona":"Выбранная персона",
         "Blank":"Пустышка",
-        "":"",
-        "":"",
-        "":""
+        "Chat Scenario Override":"Приоритетный сценарий",
+        "Unique to this chat.":"Уникальный для каждого чата.",
+        "The following scenario text will":"Указанный сценарий будет использоваться вместо указанного в карточке.",
+		"Bookmarks inherit the scenario":"Закладки наследуют приоритетный сценарий от родительского чата, но могут быть изменены индивидуально."
 	},
 	"it-it": {
         "clickslidertips": "consigli per gli slider",
