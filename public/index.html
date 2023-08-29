@@ -1465,7 +1465,7 @@
                                     </div>
                                     <div class="inline-drawer wide100p">
                                         <div class="inline-drawer-toggle inline-drawer-header">
-                                            <b>Utility Prompts</b>
+                                            <b data-i18n="Utility Prompts">Utility Prompts</b>
                                             <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                                         </div>
                                         <div class="inline-drawer-content">
@@ -1485,12 +1485,12 @@
                                             </div>
                                             <div class="range-block m-t-1">
                                                 <div class="range-block-title openai_restorable">
-                                                    <span>World Info format template</span>
+                                                    <span data-i18n="World Info format template">World Info format template</span>
                                                     <div id="wi_format_restore" title="Restore default format" class="right_menu_button">
                                                         <div class="fa-solid fa-clock-rotate-left"></div>
                                                     </div>
                                                 </div>
-                                                <div class="toggle-description justifyLeft">
+                                                <div class="toggle-description justifyLeft" data-i18n="Wraps activated World Info entries before inserting into the prompt. Use {0} to mark a place where the content is inserted.">
                                                     Wraps activated World Info entries before inserting into the prompt. Use
                                                     <tt>{0}</tt> to mark a place where the content is inserted.
                                                 </div>
@@ -1501,12 +1501,12 @@
                                             <div class="range-block m-t-1">
                                                 <div class="range-block">
                                                     <div class="range-block-title openai_restorable">
-                                                        <span>NSFW avoidance prompt</span>
+                                                        <span data-i18n="NSFW avoidance prompt">NSFW avoidance prompt</span>
                                                         <div id="nsfw_avoidance_prompt_restore" title="Restore default prompt" data-i18n="[title]Restore default prompt" class="right_menu_button">
                                                             <div class="fa-solid fa-clock-rotate-left"></div>
                                                         </div>
                                                     </div>
-                                                    <div class="toggle-description justifyLeft" data-i18n="Prompt that is used when the NSFW toggle is O">
+                                                    <div class="toggle-description justifyLeft" data-i18n="Prompt that is used when the NSFW toggle is off">
                                                         Prompt that is used when the NSFW toggle is OFF
                                                     </div>
                                                     <div class="wide100p">
@@ -1516,7 +1516,7 @@
                                             </div>
                                             <div class="range-block m-t-1">
                                                 <div class="range-block-title openai_restorable">
-                                                    <span>New Chat</span>
+                                                    <span data-i18n="New Chat">New Chat</span>
                                                     <div id="newchat_prompt_restore" title="Restore new chat prompt" class="right_menu_button">
                                                         <div class="fa-solid fa-clock-rotate-left"></div>
                                                     </div>
@@ -1532,7 +1532,7 @@
                                             </div>
                                             <div class="range-block m-t-1">
                                                 <div class="range-block-title openai_restorable">
-                                                    <span>New Group Chat</span>
+                                                    <span data-i18n="New Group Chat">New Group Chat</span>
                                                     <div id="newgroupchat_prompt_restore" title="Restore default prompt" data-i18n="[title]Restore new group chat prompt" class="right_menu_button">
                                                         <div class="fa-solid fa-clock-rotate-left"></div>
                                                     </div>
@@ -1548,7 +1548,7 @@
                                             </div>
                                             <div class="range-block m-t-1">
                                                 <div class="range-block-title openai_restorable">
-                                                    <span>New Example Chat</span>
+                                                    <span data-i18n="New Example Chat">New Example Chat</span>
                                                     <div id="newexamplechat_prompt_restore" title="Restore new example chat prompt" data-i18n="[title]Restore default prompt" class="right_menu_button">
                                                         <div class="fa-solid fa-clock-rotate-left"></div>
                                                     </div>
@@ -1564,13 +1564,13 @@
                                             </div>
                                             <div class="range-block m-t-1">
                                                 <div class="range-block-title openai_restorable">
-                                                    <span>Continue nudge</span>
+                                                    <span data-i18n="Continue nudge">Continue nudge</span>
                                                     <div id="continue_nudge_prompt_restore" title="Restore new chat prompt" class="right_menu_button">
                                                         <div class="fa-solid fa-clock-rotate-left"></div>
                                                     </div>
                                                 </div>
                                                 <div class="toggle-description justifyLeft">
-                                                    <span data-i18n="Set at the beginning of the chat history to indicate that a new chat is about to start.">
+                                                    <span data-i18n="Set at the end of the chat history when the continue button is pressed.">
                                                         Set at the end of the chat history when the continue button is pressed.
                                                     </span>
                                                 </div>
@@ -1579,7 +1579,7 @@
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
-                                                <div class="range-block-title justifyLeft">
+                                                <div class="range-block-title justifyLeft"  data-i18n="Replace empty message">
                                                     Replace empty message
                                                 </div>
                                                 <div class="toggle-description justifyLeft">
@@ -1867,7 +1867,7 @@
                                     Use "Proxy password" field instead. This input will be ignored.
                                 </b>
                             </div>
-                            <div data-for="api_key_openai" class="neutral_warning">
+                            <div data-for="api_key_openai" class="neutral_warning" data-i18n="PrivacyAPI">
                                 For privacy reasons, your API key will be hidden after you reload the page.
                             </div>
                             <div>
@@ -1906,12 +1906,12 @@
                             </div>
                         </form>
                         <form id="claude_form" data-source="claude" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                            <h4>Claude API Key</h4>
+                            <h4 data-i18n="CAK">Claude API Key</h4>
                             <div>
-                                Get your key from <a target="_blank" href="https://console.anthropic.com/account/keys">Anthropic's developer console</a>.
+                                <span data-i18n="GetykfAnt">Get your key from<span> <a target="_blank" href="https://console.anthropic.com/account/keys">Anthropic's developer console</a>.
                             </div>
                             <div>
-                                <b>
+                                <b data-i18n="SlackW">
                                     Slack and Poe cookies will not work here, do not bother trying.
                                 </b>
                             </div>
@@ -1919,7 +1919,7 @@
                                 <input id="api_key_claude" name="api_key_claude" class="text_pole flex1" maxlength="500" value="" type="text" autocomplete="off">
                                 <div title="Clear your API key" data-i18n="[title]Clear your API key" class="menu_button fa-solid fa-circle-xmark clear-api-key" data-key="api_key_claude"></div>
                             </div>
-                            <div data-for="api_key_claude" class="neutral_warning">
+                            <div data-for="api_key_claude" class="neutral_warning" data-i18n="PrivacyAPI">
                                 For privacy reasons, your API key will be hidden after you reload the page.
                             </div>
                             <div>
@@ -1997,7 +1997,7 @@
                                 <input id="api_key_openrouter" name="api_key_openrouter" class="text_pole flex1" maxlength="500" value="" type="text" autocomplete="off">
                                 <div title="Clear your API key" data-i18n="[title]Clear your API key" class="menu_button fa-solid fa-circle-xmark clear-api-key" data-key="api_key_openrouter"></div>
                             </div>
-                            <div data-for="api_key_openrouter" class="neutral_warning">
+                            <div data-for="api_key_openrouter" class="neutral_warning" data-i18n="PrivacyAPI">
                                 For privacy reasons, your API key will be hidden after you reload the page.
                             </div>
                         </form>
@@ -2009,7 +2009,7 @@
                                     <input id="api_key_scale" name="api_key_scale" class="text_pole flex1" maxlength="500" value="" autocomplete="off">
                                     <div title="Clear your API key" data-i18n="[title]Clear your API key" class="menu_button fa-solid fa-circle-xmark clear-api-key" data-key="api_key_scale"></div>
                                 </div>
-                                <div data-for="api_key_scale" class="neutral_warning">
+                                <div data-for="api_key_scale" class="neutral_warning" data-i18n="PrivacyAPI">
                                     For privacy reasons, your API key will be hidden after you reload the page.
                                 </div>
                                 <h4>Scale API URL</h4>
@@ -2021,7 +2021,7 @@
                                     <input id="scale_cookie" name="scale_cookie" class="text_pole flex1" maxlength="500" value="" autocomplete="off">
                                     <div title="Clear your cookie" data-i18n="[title]Clear your cookie" class="menu_button fa-solid fa-circle-xmark clear-api-key" data-key="scale_cookie"></div>
                                 </div>
-                                <div data-for="scale_cookie" class="neutral_warning">
+                                <div data-for="scale_cookie" class="neutral_warning" data-i18n="PrivacyAPIC">
                                     For privacy reasons, your cookie will be hidden after you reload the page.
                                 </div>
                             </div>
@@ -2039,7 +2039,7 @@
                                 <input id="api_key_ai21" name="api_key_ai21" class="text_pole flex1" maxlength="500" value="" type="text" autocomplete="off">
                                 <div title="Clear your API key" data-i18n="[title]Clear your API key" class="menu_button fa-solid fa-circle-xmark clear-api-key" data-key="api_key_ai21"></div>
                             </div>
-                            <div data-for="api_key_ai21" class="neutral_warning">
+                            <div data-for="api_key_ai21" class="neutral_warning" data-i18n="">
                                 For privacy reasons, your API key will be hidden after you reload the page.
                             </div>
                             <div>
@@ -2739,7 +2739,7 @@
                             <div class="range-block">
                                 <div class="range-block-title">
                                     <span data-i18n="Lazy Chat Loading">Lazy Chat Loading</span><br>
-                                    <small># of messages (0 = disabled)</small>
+                                    <small data-i18n="Lazy Chatl"># of messages (0 = disabled)</small>
                                 </div>
                                 <div class="range-block-range-and-counter">
                                     <div class="range-block-range">
@@ -3074,7 +3074,7 @@
                             <div class="range-block">
                                 <label for="persona_show_notifications" class="checkbox_label">
                                     <input id="persona_show_notifications" type="checkbox" />
-                                    <span data-i18n="Show Notifications Show notifications on switching personas">
+                                    <span data-i18n="Show notifications on switching personas">
                                         Show notifications on switching personas
                                     </span>
                                 </label>
