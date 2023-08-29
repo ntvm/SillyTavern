@@ -38,6 +38,7 @@ import {
 } from "./PromptManager.js";
 
 import {
+    getCustomStoppingStrings,
     persona_description_positions,
     power_user,
 } from "./power-user.js";
@@ -53,6 +54,7 @@ import {
     download,
     getFileText, getSortableDelay,
     parseJsonFile,
+    resetScrollHeight,
     stringFormat,
 } from "./utils.js";
 import { countTokensOpenAI } from "./tokenizers.js";
@@ -125,6 +127,7 @@ const j2_max_topk = 10.0;
 const j2_max_freq = 5.0;
 const j2_max_pres = 5.0;
 const openrouter_website_model = 'OR_Website';
+const openai_max_stop_strings = 4;
 
 let biasCache = undefined;
 let model_list = [];
@@ -180,7 +183,7 @@ const default_settings = {
     ai21_model: 'j2-ultra',
     windowai_model: '',
     openrouter_model: openrouter_website_model,
-    openrouter_use_fallback: true,
+    openrouter_use_fallback: false,
     jailbreak_system: false,
     reverse_proxy: '',
     legacy_streaming: false,
@@ -230,7 +233,7 @@ const oai_settings = {
     ai21_model: 'j2-ultra',
     windowai_model: '',
     openrouter_model: openrouter_website_model,
-    openrouter_use_fallback: true,
+    openrouter_use_fallback: false,
     jailbreak_system: false,
     reverse_proxy: '',
     legacy_streaming: false,
@@ -327,11 +330,11 @@ function setOpenAIMessages(chat) {
     }
 
     // Add chat injections, 100 = maximum depth of injection. ((Why would you ever need more?)) (Well... Yes, but no)
-    for (let i = 0; i < 200; i++) {
+    for (let i = 200; i >= 0; i--) {
         const anchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, i);
 
         if (anchor && anchor.length) {
-            openai_msgs.splice(i, 0, { "role": 'system', 'content': anchor.trim() })
+            openai_msgs.splice(i, 0, { "role": 'system', 'content': anchor.trim() });
         }
     }
 }
@@ -1231,6 +1234,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
         "max_tokens": oai_settings.openai_max_tokens,
         "stream": stream,
         "logit_bias": logit_bias,
+        "stop": getCustomStoppingStrings(openai_max_stop_strings),
     };
 
     // Proxy is only supported for Claude and OpenAI
@@ -1244,6 +1248,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
         generate_data['use_claude'] = true;
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['exclude_assistant'] = oai_settings.exclude_assistant;
+        generate_data['stop'] = getCustomStoppingStrings(); // Claude shouldn't have limits on stop strings.
         // Don't add a prefill on quiet gens (summarization)
         if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill) {
             generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
@@ -3243,6 +3248,10 @@ $(document).ready(async function () {
     $('#openrouter_use_fallback').on('input', function () {
         oai_settings.openrouter_use_fallback = !!$(this).prop('checked');
         saveSettingsDebounced();
+    });
+
+    $(document).on('input', '#openai_settings .autoSetHeight', function () {
+        resetScrollHeight($(this));
     });
 
     $("#api_button_openai").on("click", onConnectButtonClick);

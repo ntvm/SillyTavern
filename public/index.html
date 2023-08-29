@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, viewport-fit=cover, initial-scale=1, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="darkreader-lock">
+    <meta name="robots" content="noindex, nofollow" />
     <link href="webfonts/NotoSans/stylesheet.css" rel="stylesheet">
     <!-- fontawesome webfonts-->
     <link href="css/fontawesome.css" rel="stylesheet">
@@ -45,6 +46,7 @@
     <script src="lib/pagination.js"></script>
     <script src="lib/toolcool-color-picker.js"></script>
     <script src="lib/svg-inject.js"></script>
+    <script type="module" src="lib/structured-clone/monkey-patch.js"></script>
     <script type="module" src="lib/swiped-events.js"></script>
     <script type="module" src="lib/eventemitter.js"></script>
     <script type="module" src="scripts/power-user.js"></script>
@@ -80,6 +82,7 @@
     <script type="module" src="scripts/authors-note.js"></script>
     <script type="module" src="scripts/preset-manager.js"></script>
     <script type="module" src="scripts/filters.js"></script>
+    <script type="module" src="scripts/personas.js"></script>
 
     <title>SillyTavern</title>
 </head>
@@ -366,7 +369,7 @@
                                     </div>
                                     <div class="range-block-range-and-counter">
                                         <div class="range-block-range">
-                                            <input type="range" id="rep_pen_size_novel" name="volume" min="0" max="2048" step="1">
+                                            <input type="range" id="rep_pen_size_novel" name="volume" min="0" max="8192" step="1">
                                         </div>
                                         <div class="range-block-counter">
                                             <div contenteditable="true" data-for="rep_pen_size_novel" id="rep_pen_size_counter_novel">
@@ -577,7 +580,7 @@
                                         </span>
                                     </div>
                                     <div class="flex-container width100p">
-                                        <input id="openai_proxy_password" type="password" class="text_pole flex1" placeholder="" maxlength="200" />
+                                        <input id="openai_proxy_password" type="password" class="text_pole flex1" placeholder="" maxlength="200" form="openai_form" />
                                         <div id="openai_proxy_password_show" title="Peek a password" class="menu_button fa-solid fa-eye-slash fa-fw"></div>
                                     </div>
                                 </div>
@@ -1411,7 +1414,7 @@
                                             <input id="names_in_completion" type="checkbox" /><span data-i18n="Add character names">Add character names</span>
                                         </label>
                                         <div class="toggle-description justifyLeft">
-                                            <span data-i18n="May help the model to understand context. Names must only contain letters or numbers.">Helps the model to associate messages in group chats. Names must only contain letters or numbers without whitespaces.</span>
+                                            <span data-i18n="Send names in the ChatML objects.">Send names in the ChatML objects. Helps the model to associate messages with characters.</span>
                                         </div>
                                     </div>
                                     <div class="range-block" data-source="ai21">
@@ -1439,24 +1442,24 @@
                                             <div class="range-block m-t-1">
                                                 <div class="justifyLeft" data-i18n="Main">Main</div>
                                                 <div class="wide100p">
-                                                    <textarea id="main_prompt_quick_edit_textarea" class="text_pole textarea_compact" rows="6" placeholder="" data-pm-prompt="main"></textarea>
+                                                    <textarea id="main_prompt_quick_edit_textarea" class="text_pole textarea_compact autoSetHeight" rows="6" placeholder="&mdash;" data-pm-prompt="main"></textarea>
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
                                                 <div class="justifyLeft" data-i18n="NSFW">NSFW</div>
                                                 <div class="wide100p">
-                                                    <textarea id="nsfw_prompt_quick_edit_textarea" class="text_pole textarea_compact" rows="6" placeholder="" data-pm-prompt="nsfw"></textarea>
+                                                    <textarea id="nsfw_prompt_quick_edit_textarea" class="text_pole textarea_compact autoSetHeight" rows="6" placeholder="&mdash;" data-pm-prompt="nsfw"></textarea>
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
                                                 <div class="justifyLeft" data-i18n="Jailbreak">Jailbreak</div>
                                                 <div class="wide100p">
-                                                    <textarea id="jailbreak_prompt_quick_edit_textarea" class="text_pole textarea_compact" rows="6" placeholder="" data-pm-prompt="jailbreak"></textarea>
+                                                    <textarea id="jailbreak_prompt_quick_edit_textarea" class="text_pole textarea_compact autoSetHeight" rows="6" placeholder="&mdash;" data-pm-prompt="jailbreak"></textarea>
                                                 </div>
                                             </div>
                                             <div id="claude_assistant_prefill_block" data-source="claude" class="range-block">
                                                 <span id="claude_assistant_prefill_text" data-i18n="Assistant Prefill">Assistant Prefill</span>
-                                                <textarea id="claude_assistant_prefill" class="text_pole textarea_compact" name="assistant_prefill" rows="3" maxlength="5000" placeholder="Start Claude's answer with..."></textarea>
+                                                <textarea id="claude_assistant_prefill" class="text_pole textarea_compact" name="assistant_prefill autoSetHeight" rows="3" maxlength="5000" placeholder="Start Claude's answer with..."></textarea>
                                             </div>
                                         </div>
                                     </div>
@@ -1477,7 +1480,7 @@
                                                     Prompt that is used for Impersonation function
                                                 </div>
                                                 <div class="wide100p">
-                                                    <textarea id="impersonation_prompt_textarea" class="text_pole textarea_compact" name="impersonation_prompt" rows="3" placeholder=""></textarea>
+                                                    <textarea id="impersonation_prompt_textarea" class="text_pole textarea_compact autoSetHeight" name="impersonation_prompt" rows="3" placeholder="&mdash;"></textarea>
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
@@ -1492,7 +1495,7 @@
                                                     <tt>{0}</tt> to mark a place where the content is inserted.
                                                 </div>
                                                 <div class="wide100p">
-                                                    <textarea id="wi_format_textarea" class="text_pole textarea_compact" rows="3" placeholder=""></textarea>
+                                                    <textarea id="wi_format_textarea" class="text_pole textarea_compact autoSetHeight" rows="3" placeholder="&mdash;"></textarea>
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
@@ -1507,7 +1510,7 @@
                                                         Prompt that is used when the NSFW toggle is OFF
                                                     </div>
                                                     <div class="wide100p">
-                                                        <textarea id="nsfw_avoidance_prompt_textarea" class="text_pole textarea_compact" name="nsfw_prompt" rows="3" placeholder=""></textarea>
+                                                        <textarea id="nsfw_avoidance_prompt_textarea" class="text_pole textarea_compact autoSetHeight" name="nsfw_prompt" rows="3" placeholder="&mdash;"></textarea>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1524,7 +1527,7 @@
                                                     </span>
                                                 </div>
                                                 <div class="wide100p">
-                                                    <textarea id="newchat_prompt_textarea" class="text_pole textarea_compact" name="new_chat" rows="3" placeholder=""></textarea>
+                                                    <textarea id="newchat_prompt_textarea" class="text_pole textarea_compact autoSetHeight" name="new_chat" rows="3" placeholder="&mdash;"></textarea>
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
@@ -1540,7 +1543,7 @@
                                                     </span>
                                                 </div>
                                                 <div class="wide100p">
-                                                    <textarea id="newgroupchat_prompt_textarea" class="text_pole textarea_compact" name="new_group_chat" rows="3" placeholder=""></textarea>
+                                                    <textarea id="newgroupchat_prompt_textarea" class="text_pole textarea_compact autoSetHeight" name="new_group_chat" rows="3" placeholder="&mdash;"></textarea>
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
@@ -1556,7 +1559,7 @@
                                                     </span>
                                                 </div>
                                                 <div class="wide100p">
-                                                    <textarea id="newexamplechat_prompt_textarea" class="text_pole textarea_compact" name="new_example_chat" rows="3" placeholder=""></textarea>
+                                                    <textarea id="newexamplechat_prompt_textarea" class="text_pole textarea_compact autoSetHeight" name="new_example_chat" rows="3" placeholder="&mdash;"></textarea>
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
@@ -1572,7 +1575,7 @@
                                                     </span>
                                                 </div>
                                                 <div class="wide100p">
-                                                    <textarea id="continue_nudge_prompt_textarea" class="text_pole textarea_compact" name="continue_nudge" rows="3" placeholder=""></textarea>
+                                                    <textarea id="continue_nudge_prompt_textarea" class="text_pole textarea_compact autoSetHeight" name="continue_nudge" rows="3" placeholder="&mdash;"></textarea>
                                                 </div>
                                             </div>
                                             <div class="range-block m-t-1">
@@ -1585,7 +1588,7 @@
                                                     </span>
                                                 </div>
                                                 <div class="wide100p">
-                                                    <textarea id="send_if_empty_textarea" class="text_pole textarea_compact" name="send_if_empty" rows="3" placeholder=""></textarea>
+                                                    <textarea id="send_if_empty_textarea" class="text_pole textarea_compact autoSetHeight" name="send_if_empty" rows="3" placeholder="&mdash;"></textarea>
                                                 </div>
                                             </div>
                                         </div>
@@ -2061,7 +2064,6 @@
                             <div class="online_status_indicator4"></div>
                             <div class="online_status_text4">No connection...</div>
                         </div>
-                        <br>
                     </div>
                 </div>
                 <div class="flex-container alignitemscenter spaceBetween wide100p">
@@ -2089,22 +2091,28 @@
                             <h4 data-i18n="Context Template">
                                 Context Template
                             </h4>
-                            <div class="flex-container flexGap5">
-                                <select id="context_presets" class="flex1 margin0">
-                                </select>
+                            <div class="preset_buttons">
+                                <select id="context_presets" data-preset-manager-for="context" class="flex1"></select>
+                                <input type="file" hidden data-preset-manager-file="context" accept=".json, .settings">
+                                <i id="context_set_default" class="menu_button fa-solid fa-heart" title="Auto-select this preset for Instruct Mode."></i>
+                                <i data-preset-manager-update="context" class="menu_button fa-solid fa-save" title="Update current preset" data-i18n="[title]Update current preset"></i>
+                                <i data-preset-manager-new="context" class="menu_button fa-solid fa-plus" title="Create new preset" data-i18n="[title]Create new preset"></i>
+                                <i data-preset-manager-import="context" class="menu_button fa-solid fa-file-import" title="Import preset" data-i18n="[title]Import preset"></i>
+                                <i data-preset-manager-export="context" class="menu_button fa-solid fa-file-export" title="Export preset" data-i18n="[title]Export preset"></i>
+                                <i id="context_delete_preset" data-preset-manager-delete="context" class="menu_button fa-solid fa-trash-can" title="Delete the preset" data-i18n="[title]Delete the preset"></i>
                             </div>
                             <div>
                                 <label for="context_story_string">
                                     <small data-i18n="Story String">Story String</small>
                                 </label>
-                                <textarea id="context_story_string" class="text_pole textarea_compact" rows="6"></textarea>
+                                <textarea id="context_story_string" class="text_pole textarea_compact autoSetHeight" rows="1"></textarea>
                                 <div class="flex-container">
                                     <div class="flex1">
                                         <label for="context_example_separator">
                                             <small data-i18n="Example Separator">Example Separator</small>
                                         </label>
                                         <div>
-                                            <textarea id="context_example_separator" class="text_pole textarea_compact" maxlength="500" rows="2"></textarea>
+                                            <textarea id="context_example_separator" class="text_pole textarea_compact autoSetHeight" maxlength="500" rows="1"></textarea>
                                         </div>
                                     </div>
                                     <div class="flex1">
@@ -2112,7 +2120,7 @@
                                             <small data-i18n="Chat Start">Chat Start</small>
                                         </label>
                                         <div>
-                                            <textarea id="context_chat_start" class="text_pole textarea_compact" maxlength="500" rows="2"></textarea>
+                                            <textarea id="context_chat_start" class="text_pole textarea_compact autoSetHeight" maxlength="500" rows="1"></textarea>
                                         </div>
                                     </div>
                                 </div>
@@ -2129,7 +2137,6 @@
                                     <input id="instruct_enabled" type="checkbox" />
                                     <span data-i18n="Enabled">Enabled</span>
                                 </label>
-                            </div>
                             </div>
                             <label for="instruct_presets">
                                 <span data-i18n="Presets">Presets</span>
@@ -2150,7 +2157,7 @@
                                 </small>
                             </label>
                             <div>
-                                <textarea id="instruct_activation_regex" class="text_pole textarea_compact" maxlength="5000" rows="1"></textarea>
+                                <textarea id="instruct_activation_regex" class="text_pole textarea_compact autoSetHeight" maxlength="5000" rows="1"></textarea>
                             </div>
                             <div>
                                 <label for="instruct_wrap" class="checkbox_label">
@@ -2169,65 +2176,96 @@
                                     <input id="instruct_names_force_groups" type="checkbox" />
                                     <span data-i18n="Force for Groups and Personas">Force for Groups and Personas</span>
                                 </label>
+                            </div>
                             <label>
                                 <small data-i18n="System Prompt">System Prompt</small>
                             </label>
                             <div class="prompt_overridden">
                                 Overridden by the Character Definitions.
                             </div>
-                            <textarea id="instruct_system_prompt" class="text_pole textarea_compact" rows="4"></textarea>
-                            <div class="flex-container">
-                                <div class="flex1">
-                                    <label for="instruct_input_sequence">
-                                        <small data-i18n="Input Sequence">Input Sequence</small>
-                                    </label>
-                                    <div>
-                                        <textarea id="instruct_input_sequence" class="text_pole textarea_compact" maxlength="500" rows="2"></textarea>
-                                    </div>
+                            <textarea id="instruct_system_prompt" class="text_pole textarea_compact autoSetHeight" rows="1"></textarea>
+
+                            <div class="inline-drawer wide100p flexFlowColumn">
+                                <div class="inline-drawer-toggle inline-drawer-header">
+                                    <b><span data-i18n="Instruct Mode Sequences">Instruct Mode Sequences</span></b>
+                                    <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                                 </div>
-                                <div class="flex1">
-                                    <label for="instruct_output_sequence">
-                                        <small data-i18n="Output Sequence">Output Sequence</small>
-                                    </label>
-                                    <div>
-                                        <textarea id="instruct_output_sequence" class="text_pole wide100p textarea_compact" maxlength="500" rows="2"></textarea>
+                                <div class="inline-drawer-content">
+                                    <div class="flex-container">
+                                        <div class="flex1">
+                                            <label for="instruct_input_sequence">
+                                                <small data-i18n="Input Sequence">Input Sequence</small>
+                                            </label>
+                                            <div>
+                                                <textarea id="instruct_input_sequence" class="text_pole textarea_compact autoSetHeight" maxlength="500" placeholder="&mdash;" rows="1"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="flex1">
+                                            <label for="instruct_output_sequence">
+                                                <small data-i18n="Output Sequence">Output Sequence</small>
+                                            </label>
+                                            <div>
+                                                <textarea id="instruct_output_sequence" class="text_pole wide100p textarea_compact autoSetHeight" maxlength="500" placeholder="&mdash;" rows="1"></textarea>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="flex1">
-                                    <label for="instruct_last_output_sequence">
-                                        <small data-i18n="Last Sequence">Last Sequence</small>
-                                    </label>
-                                    <div>
-                                        <textarea id="instruct_last_output_sequence" class="text_pole wide100p textarea_compact" maxlength="500" rows="2"></textarea>
+                                    <div class="flex-container">
+                                        <div class="flex1">
+                                            <label for="instruct_first_output_sequence">
+                                                <small data-i18n="First Output Sequence">First Output Sequence</small>
+                                            </label>
+                                            <div>
+                                                <textarea id="instruct_first_output_sequence" class="text_pole textarea_compact autoSetHeight" maxlength="500" placeholder="&mdash;" rows="1"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="flex1">
+                                            <label for="instruct_last_output_sequence">
+                                                <small data-i18n="Last Output Sequence">Last Output Sequence</small>
+                                            </label>
+                                            <div>
+                                                <textarea id="instruct_last_output_sequence" class="text_pole wide100p textarea_compact autoSetHeight" maxlength="500" placeholder="&mdash;" rows="1"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex-container">
+                                        <div class="flex1">
+                                            <label for="instruct_system_sequence_prefix">
+                                                <small data-i18n="System Sequence Prefix">System Sequence Prefix</small>
+                                            </label>
+                                            <div>
+                                                <textarea id="instruct_system_sequence_prefix" class="text_pole textarea_compact autoSetHeight" maxlength="500" placeholder="&mdash;" rows="1"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="flex1">
+                                            <label for="instruct_system_sequence_suffix">
+                                                <small data-i18n="System Sequence Suffix">System Sequence Suffix</small>
+                                            </label>
+                                            <div>
+                                                <textarea id="instruct_system_sequence_suffix" class="text_pole wide100p textarea_compact autoSetHeight" maxlength="500" placeholder="&mdash;" rows="1"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex-container">
+                                        <div class="flex1">
+                                            <label for="instruct_stop_sequence">
+                                                <small data-i18n="Stop Sequence">Stop Sequence</small>
+                                            </label>
+                                            <div>
+                                                <textarea id="instruct_stop_sequence" class="text_pole textarea_compact autoSetHeight" maxlength="500" placeholder="&mdash;" rows="1"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="flex1">
+                                            <label for="instruct_separator_sequence">
+                                                <small data-i18n="Separator">Separator</small>
+                                            </label>
+                                            <div>
+                                                <textarea id="instruct_separator_sequence" class="text_pole wide100p textarea_compact autoSetHeight" maxlength="500" placeholder="&mdash;" rows="1"></textarea>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="flex-container">
-                                <div class="flex1">
-                                    <label for="instruct_system_sequence">
-                                        <small data-i18n="System Sequence">System Sequence</small>
-                                    </label>
-                                    <div>
-                                        <textarea id="instruct_system_sequence" class="text_pole textarea_compact" maxlength="500" rows="2"></textarea>
-                                    </div>
-                                </div>
-                                <div class="flex1">
-                                    <label for="instruct_stop_sequence">
-                                        <small data-i18n="Stop Sequence">Stop Sequence</small>
-                                    </label>
-                                    <div>
-                                        <textarea id="instruct_stop_sequence" class="text_pole wide100p textarea_compact" maxlength="500" rows="2"></textarea>
-                                    </div>
-                                </div>
-                                <div class="flex1">
-                                    <label for="instruct_separator_sequence">
-                                        <small data-i18n="Separator">Separator</small>
-                                    </label>
-                                    <div>
-                                        <textarea id="instruct_separator_sequence" class="text_pole wide100p textarea_compact" maxlength="500" rows="2"></textarea>
-                                    </div>
-                                </div>
-                            </div>
+
                         </div>
                     </div>
                     <div name="ContextFormatting" class="flex1">
@@ -2240,8 +2278,8 @@
                             <select id="tokenizer">
                                 <option value="99">Best match (recommended)</option>
                                 <option value="0">None / Estimated</option>
-                                <option value="1">GPT-3 (OpenAI)</option>
-                                <option value="2">GPT-3 (Alternative / Classic)</option>
+                                <option value="1">GPT-2</option>
+                                <!-- Option #2 was a legacy GPT-2/3 tokenizer -->
                                 <option value="3">Sentencepiece (LLaMA)</option>
                                 <option value="4">NerdStash (NovelAI Clio)</option>
                                 <option value="5">NerdStash v2 (NovelAI Kayra)</option>
@@ -2314,9 +2352,14 @@
                                 </div>
                             </div>
                             <h4>
-                                <span data-i18n="Custom Stopping Strings">
-                                    Custom Stopping Strings (KoboldAI/TextGen/NovelAI)
-                                </span>
+                                <div class="range-block-title justifyLeft">
+                                    <span data-i18n="Custom Stopping Strings">
+                                        Custom Stopping Strings
+                                    </span>
+                                    <a href="https://docs.sillytavern.app/usage/core-concepts/advancedformatting/#custom-stopping-strings" class="notes-link" target="_blank">
+                                        <span class="note-link-span">?</span>
+                                    </a>
+                                </div>
                                 <div>
                                     <small>
                                         <span data-i18n="JSON serialized array of strings">JSON serialized array of strings, for example:</span><br>
@@ -2467,7 +2510,7 @@
                                     </div>
                                     <div class="range-block-range-and-counter ">
                                         <div class="range-block-range paddingLeftRight5">
-                                            <input type="range" id="world_info_budget_cap" name="volume" min="0" max="8192" step="256">
+                                            <input type="range" id="world_info_budget_cap" name="volume" min="0" max="8192" step="1">
                                         </div>
                                         <div class="range-block-counter margin0">
                                             <div contenteditable="true" data-for="world_info_budget_cap" id="world_info_budget_cap_counter">
@@ -2920,8 +2963,14 @@
                                 </div>
                             </div>
 
-                            <div id="reload_chat" class="menu_button whitespacenowrap" data-i18n="Reload Chat">
-                                Reload Chat
+                            <div class="flex-container">
+                                <div id="reload_chat" class="menu_button whitespacenowrap" data-i18n="Reload Chat">
+                                    Reload Chat
+                                </div>
+
+                                <div id="debug_menu" class="menu_button whitespacenowrap" data-i18n="Debug Menu">
+                                    Debug Menu
+                                </div>
                             </div>
                         </div>
 
@@ -3017,8 +3066,7 @@
                                 </div>
                                 <label for="persona_description_position" data-i18n="Position:">Position:</label>
                                 <select id="persona_description_position">
-                                    <option value="0" data-i18n="In Story String / Chat Completion: Before Character Card">In Story String / Chat Completion: Before Character Card</option>
-                                    <option value="1" data-i18n="In Story String / Chat Completion: After Character Card">In Story String / Chat Completion: After Character Card</option>
+                                    <option value="0" data-i18n="In Story String / Prompt Manager">In Story String / Prompt Manager</option>
                                     <option value="2" data-i18n="Top of Author's Note">Top of Author's Note</option>
                                     <option value="3" data-i18n="Bottom of Author's Note">Bottom of Author's Note</option>
                                 </select>
@@ -3149,6 +3197,9 @@
                                                     </option>
                                                     <option id="set_chat_scenario" data-i18n="Scenario Override">
                                                         Scenario Override
+                                                    </option>
+                                                    <option id="convert_to_persona" data-i18n="Convert to Persona">
+                                                        Convert to Persona
                                                     </option>
                                                     <option id="renameCharButton" data-i18n="Rename">
                                                         Rename

@@ -139,8 +139,10 @@
             "system_prompt": "Avoid repetition, don't loop. Develop the plot slowly, always stay in character. Describe all actions in full, elaborate, explicit, graphic, and vivid detail. Mention all relevant sensory perceptions.",
             "input_sequence": "\n### Instruction:",
             "output_sequence": "\n### Response:",
+            "first_output_sequence": "",
             "last_output_sequence": "\n### Response (2 paragraphs, engaging, natural, authentic, descriptive, creative):",
-            "system_sequence": "",
+            "system_sequence_prefix": "",
+            "system_sequence_suffix": "",
             "stop_sequence": "",
             "separator_sequence": "",
             "wrap": true,
@@ -149,6 +151,7 @@
             "names_force_groups": true,
             "activation_regex": ""
         },
+        "default_context": "Default",
         "context": {
             "preset": "Default",
             "story_string": "{{#if system}}{{system}}\n{{/if}}{{#if wiBefore}}{{wiBefore}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if personality}}{{char}}'s personality: {{personality}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if wiAfter}}{{wiAfter}}\n{{/if}}{{#if persona}}{{persona}}\n{{/if}}",

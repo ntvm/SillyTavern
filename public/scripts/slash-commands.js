@@ -1,6 +1,5 @@
 import {
     addOneMessage,
-    autoSelectPersona,
     characters,
     chat,
     chat_metadata,
@@ -26,6 +25,7 @@ import { getMessageTimeStamp } from "./RossAscends-mods.js";
 import { resetSelectedGroup } from "./group-chats.js";
 import { getRegexedString, regex_placement } from "./extensions/regex/engine.js";
 import { chat_styles, power_user } from "./power-user.js";
+import { autoSelectPersona } from "./personas.js";
 export {
     executeSlashCommands,
     registerSlashCommand,
@@ -133,7 +133,7 @@ parser.addCommand('send', sendUserMessageCallback, ['add'], '<span class="monosp
 
 const NARRATOR_NAME_KEY = 'narrator_name';
 const NARRATOR_NAME_DEFAULT = 'System';
-const COMMENT_NAME_DEFAULT = 'Note';
+export const COMMENT_NAME_DEFAULT = 'Note';
 
 async function sendUserMessageCallback(_, text) {
     if (!text) {
