@@ -2551,6 +2551,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
         let examplesString = '';
         let chatString = '';
+        let cyclePrompt = '';
+
         function getMessagesTokenCount() {
             const encodeString = [
                 storyString,
@@ -2558,6 +2560,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                 chatString,
                 allAnchors,
                 quiet_prompt,
+                cyclePrompt,
             ].join('').replace(/\r/gm, '');
             return getTokenCount(encodeString, power_user.token_padding);
         }
@@ -2568,7 +2571,6 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             pinExmString = examplesString = mesExamplesArray.join('');
         }
 
-        let cyclePrompt = '';
         if (isContinue) {
             cyclePrompt = chat2.shift();
         }
