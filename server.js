@@ -32,7 +32,6 @@ const multer = require("multer");
 const responseTime = require('response-time');
 
 // net related library imports
-const axios = require('axios');
 const DeviceDetector = require("device-detector-js");
 const fetch = require('node-fetch').default;
 const ipaddr = require('ipaddr.js');
@@ -186,7 +185,14 @@ function get_mancer_headers() {
     return api_key_mancer ? { "X-API-KEY": api_key_mancer } : {};
 }
 
-
+function getOverrideHeaders(urlHost) {
+    const overrideHeaders = config.requestOverrides?.find((e) => e.hosts?.includes(urlHost))?.headers;
+    if (overrideHeaders && urlHost) {
+        return overrideHeaders;
+    } else {
+        return {};
+    }
+}
 
 //RossAscends: Added function to format dates used in files and chat timestamps to a humanized format.
 //Mostly I wanted this to be for file names, but couldn't figure out exactly where the filename save code was as everything seemed to be connected.
@@ -542,7 +548,10 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
     console.log(this_settings);
     const args = {
         body: JSON.stringify(this_settings),
-        headers: { "Content-Type": "application/json" },
+        headers: Object.assign(
+            { "Content-Type": "application/json" },
+            getOverrideHeaders((new URL(api_server))?.host)
+        ),
         signal: controller.signal,
     };
 
@@ -632,11 +641,19 @@ app.post("/generate_textgenerationwebui", jsonParser, async function (request, r
         });
 
         async function* readWebsocket() {
+            const streamingUrlString = request.header('X-Streaming-URL').replace("localhost", "127.0.0.1");
+            const streamingUrl = new URL(streamingUrlString);
             const websocket = new WebSocket(streamingUrl);
 
             websocket.on('open', async function () {
                 console.log('WebSocket opened');
-                const combined_args = Object.assign(request.body.use_mancer ? get_mancer_headers() : {}, request.body);
+                const combined_args = Object.assign(
+                    {},
+                    request.body.use_mancer ? get_mancer_headers() : getOverrideHeaders(streamingUrl?.host),
+                    request.body
+                );
+                console.log(combined_args);
+
                 websocket.send(JSON.stringify(combined_args));
             });
 
@@ -718,6 +735,8 @@ app.post("/generate_textgenerationwebui", jsonParser, async function (request, r
 
         if (request.body.use_mancer) {
             args.headers = Object.assign(args.headers, get_mancer_headers());
+        } else {
+            args.headers = Object.assign(args.headers, getOverrideHeaders((new URL(api_server))?.host));
         }
 
         try {
@@ -785,6 +804,7 @@ app.post("/getchat", jsonParser, function (request, response) {
     }
 });
 
+// Only called for kobold and ooba/mancer
 app.post("/getstatus", jsonParser, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
     api_server = request.body.api_server;
@@ -799,6 +819,8 @@ app.post("/getstatus", jsonParser, async function (request, response) {
 
     if (main_api == 'textgenerationwebui' && request.body.use_mancer) {
         args.headers = Object.assign(args.headers, get_mancer_headers());
+    } else {
+        args.headers = Object.assign(args.headers, getOverrideHeaders((new URL(api_server))?.host));
     }
 
     const url = api_server + "/v1/model";
@@ -3130,7 +3152,7 @@ app.get('/thumbnail', jsonParser, async function (request, response) {
     }
 
     if (config.disableThumbnails == true) {
-        let folder = getOriginalFolder(file)
+        let folder = getOriginalFolder(type);
         if (folder === undefined) return response.sendStatus(400);
         const pathToOriginalFile = path.join(folder, file);
         return response.sendFile(pathToOriginalFile, { root: process.cwd() });
@@ -3612,15 +3634,15 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
         controller.abort();
     });
 
+    /** @type {import('node-fetch').RequestInit} */
     const config = {
         method: 'post',
-        url: endpointUrl,
         headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + api_key_openai,
             ...headers,
         },
-        data: {
+        body: JSON.stringify({
             "messages": isTextCompletion === false ? request.body.messages : undefined,
             "prompt": isTextCompletion === true ? textPrompt : undefined,
             "model": request.body.model,
@@ -3634,75 +3656,62 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
             "stop": request.body.stop,
             "logit_bias": request.body.logit_bias,
             ...bodyParams,
-        },
+        }),
         signal: controller.signal,
+        timeout: 0,
     };
 
-    console.log(config.data);
+    console.log(JSON.parse(String(config.body)));
 
-    if (request.body.stream) {
-        config.responseType = 'stream';
-    }
+    makeRequest(config, response_generate_openai, request);
 
+    /**
+     *
+     * @param {*} config
+     * @param {express.Response} response_generate_openai
+     * @param {express.Request} request
+     * @param {Number} retries
+     * @param {Number} timeout
+     */
     async function makeRequest(config, response_generate_openai, request, retries = 5, timeout = 5000) {
         try {
-            // @ts-ignore - axios typings are wrong, this is actually callable https://github.com/axios/axios/issues/5213
-            const response = await axios(config);
+            const fetchResponse = await fetch(endpointUrl, config)
 
-            if (response.status <= 299) {
+            if (fetchResponse.ok) {
                 if (request.body.stream) {
                     console.log('Streaming request in progress');
-                    response.data.pipe(response_generate_openai);
-                    response.data.on('end', () => {
+                    fetchResponse.body.pipe(response_generate_openai);
+                    fetchResponse.body.on('end', () => {
                         console.log('Streaming request finished');
                         response_generate_openai.end();
                     });
                 } else {
-                    response_generate_openai.send(response.data);
-                    console.log(response.data);
-                    console.log(response.data?.choices[0]?.message);
+                    let json = await fetchResponse.json()
+                    response_generate_openai.send(json);
+                    console.log(json);
+                    console.log(json?.choices[0]?.message);
                 }
-            } else {
-                handleErrorResponse(response, response_generate_openai, request);
-            }
-        } catch (error) {
-            if (error.response && error.response.status === 429 && retries > 0) {
+            } else if (fetchResponse.status === 429 && retries > 0) {
                 console.log(`Out of quota, retrying in ${Math.round(timeout / 1000)}s`);
                 setTimeout(() => {
                     makeRequest(config, response_generate_openai, request, retries - 1);
                 }, timeout);
             } else {
-                let errorData = error?.response?.data;
-
-                if (request.body.stream) {
-                    try {
-                        const chunks = await readAllChunks(errorData);
-                        const blob = new Blob(chunks, { type: 'application/json' });
-                        const text = await blob.text();
-                        errorData = JSON.parse(text);
-                    } catch {
-                        console.warn('Error parsing streaming response');
-                    }
-                } else {
-                    errorData = typeof errorData === 'string' ? tryParse(errorData) : errorData;
-                }
-
-                handleError(error, response_generate_openai, errorData);
+                await handleErrorResponse(fetchResponse);
+            }
+        } catch (error) {
+            console.log('Generation failed', error);
+            if (!response_generate_openai.headersSent) {
+                response_generate_openai.send({ error: true });
+            } else {
+                response_generate_openai.end();
             }
         }
     }
 
-    function handleErrorResponse(response, response_generate_openai, request) {
-        if (response.status >= 400 && response.status <= 504) {
-            console.log('Error occurred:', response.status, response.data);
-            response_generate_openai.send({ error: true });
-        }
-    }
-
-    function handleError(error, response_generate_openai, errorData) {
-        console.error('Error:', error?.message);
-
-        let message = error?.response?.statusText;
+    async function handleErrorResponse(response) {
+        const responseText = await response.text();
+        const errorData = tryParse(responseText);
 
         const statusMessages = {
             400: 'Bad request',
@@ -3712,24 +3721,21 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
             404: 'Not found',
             429: 'Too many requests',
             451: 'Unavailable for legal reasons',
+            502: 'Bad gateway',
         };
 
-        const status = error?.response?.status;
-        if (statusMessages.hasOwnProperty(status)) {
-            message = errorData?.error?.message || statusMessages[status];
-            console.log(message);
-        }
+        const message = errorData?.error?.message || statusMessages[response.status] || 'Unknown error occurred';
+        const quota_error = response.status === 429 && errorData?.error?.type === 'insufficient_quota';
+        console.log(message);
 
-        const quota_error = error?.response?.status === 429 && errorData?.error?.type === 'insufficient_quota';
-        const response = { error: { message }, quota_error: quota_error }
         if (!response_generate_openai.headersSent) {
-            response_generate_openai.send(response);
+            response_generate_openai.send({ error: { message }, quota_error: quota_error });
         } else if (!response_generate_openai.writableEnded) {
             response_generate_openai.write(response);
+        } else {
+            response_generate_openai.end();
         }
     }
-
-    makeRequest(config, response_generate_openai, request);
 });
 
 app.post("/tokenize_openai", jsonParser, function (request, response_tokenize_openai) {
@@ -3840,7 +3846,7 @@ async function sendAI21Request(request, response) {
 
 }
 
-app.post("/tokenize_ai21", jsonParser, function (request, response_tokenize_ai21) {
+app.post("/tokenize_ai21", jsonParser, async function (request, response_tokenize_ai21) {
     if (!request.body) return response_tokenize_ai21.sendStatus(400);
     const options = {
         method: 'POST',
@@ -3852,10 +3858,14 @@ app.post("/tokenize_ai21", jsonParser, function (request, response_tokenize_ai21
         body: JSON.stringify({ text: request.body[0].content })
     };
 
-    fetch('https://api.ai21.com/studio/v1/tokenize', options)
-        .then(response => response.json())
-        .then(response => response_tokenize_ai21.send({ "token_count": response.tokens.length }))
-        .catch(err => console.error(err));
+    try {
+        const response = await fetch('https://api.ai21.com/studio/v1/tokenize', options);
+        const data = await response.json();
+        return response_tokenize_ai21.send({ "token_count": data?.tokens?.length || 0 });
+    } catch (err) {
+        console.error(err);
+        return response_tokenize_ai21.send({ "token_count": 0 });
+    }
 });
 
 app.post("/save_preset", jsonParser, function (request, response) {
