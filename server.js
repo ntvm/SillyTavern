@@ -1453,7 +1453,16 @@ app.post("/updatestats", jsonParser, function (request, response) {
     return response.sendStatus(200);
 });
 
+/*
+app.post("/getUpdate", jsonParser, function (request, response) {
+const { exec } = require('child_process');
 
+const parentDir = __dirname; 
+const updateBatPath = `${parentDir}/../update.bat`;
+
+exec(`start ${updateBatPath}`);
+});
+*/
 
 app.post("/getbackgrounds", jsonParser, function (request, response) {
     var images = getImages("public/backgrounds");
