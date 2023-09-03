@@ -129,6 +129,7 @@ parser.addCommand('go', goToCharacterCallback, ['char'], '<span class="monospace
 parser.addCommand('sysgen', generateSystemMessage, [], '<span class="monospace">(prompt)</span> – generates a system message using a specified prompt', true, true);
 parser.addCommand('lookaround', lookChatCallback, ['look'], ' – Look around, and behold beauty of this world', true, true);
 parser.addCommand('UpdateST', Getupdate, [], '<span class="monospace">(text)</span> – Update Silly Tavern', true, true);
+parser.addCommand('RebootST', Getreboot, [], '<span class="monospace">(text)</span> – Reboot Silly Tavern', true, true);
 parser.addCommand('delname', deleteMessagesByNameCallback, ['cancel'], '<span class="monospace">(name)</span> – deletes all messages attributed to a specified name', true, true);
 parser.addCommand('send', sendUserMessageCallback, ['add'], '<span class="monospace">(text)</span> – adds a user message to the chat log without triggering a generation', true, true);
 
@@ -305,6 +306,15 @@ async function Getupdate (){
         headers: getRequestHeaders(),
         body: ''
     });    
+} 
+
+async function Getreboot (){
+    const response = await fetch('/getReboot', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: ''
+    });    
+
 } 
 
 async function sendMessageAs(_, text) {

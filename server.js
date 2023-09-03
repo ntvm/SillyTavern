@@ -1485,7 +1485,17 @@ const updateBatPath = `${parentDir}/update.bat`;
 exec(`start ${updateBatPath}`);
 });
 
+/*
+app.post("/getReboot", jsonParser, function (request, response) {
+    const { exec } = require('child_process');
+    
+    const parentDir = __dirname;
+    const StartBatPath = `${parentDir}/Start.bat`;
+    exec(`start /B cmd.exe /C "${StartBatPath}"`);
+//    exec(`taskkill /IM node.exe /F`);
 
+});
+*/
 app.post("/getbackgrounds", jsonParser, function (request, response) {
     var images = getImages("public/backgrounds");
     response.send(JSON.stringify(images));
