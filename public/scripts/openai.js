@@ -686,12 +686,20 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
         if (true === afterScenario) chatCompletion.insert(authorsNote, 'scenario');
     }
 
+
     //(Multicharacters descriptions in prompt (On case if I'll would add that function. Low probably through))
     //if (prompts.has('GroupchatPush')) ChatCompletion.insert(Message.fromPrompt(prompts.get('GroupchatPush')), 'enhanceDefinitions')
     //OR
     //if (prompts.has('GroupchatPush') {
     //    addToChatCompletion('MultiCards');
 	//}
+
+    // Vectors Memory
+    if (prompts.has('vectorsMemory')) {
+        const vectorsMemory = Message.fromPrompt(prompts.get('vectorsMemory'));
+        chatCompletion.insert(vectorsMemory, 'main');
+    }
+
     // Decide whether dialogue examples should always be added
     if (power_user.pin_examples) {
         populateDialogueExamples(prompts, chatCompletion);
@@ -782,12 +790,21 @@ function preparePromptsForChatCompletion({Scenario, charPersonality, name2, worl
         identifier: 'authorsNote'
     });
 
+
     //(Multicharacters descriptions in prompt (On case if I'll would add that function. Low probably through))
     /*if (inject1 && Inject1.MulChar) systemPrompts.push({
         role: 'system',
         content: Inject1.MulChar,
         identifier: 'GroupchatPush'
     });*/
+
+    // Vectors Memory
+    const vectorsMemory = extensionPrompts['3_vectors'];
+    if (vectorsMemory && vectorsMemory.value) systemPrompts.push({
+        role: 'system',
+        content: vectorsMemory.value,
+        identifier: 'vectorsMemory',
+    });
 
     // Persona Description
     if (power_user.persona_description && power_user.persona_description_position === persona_description_positions.IN_PROMPT) {
