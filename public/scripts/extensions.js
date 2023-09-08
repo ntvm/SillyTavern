@@ -154,6 +154,8 @@ let extension_settings = {
     Nvkun: {},
     speech_recognition: {},
     rvc: {},
+    hypebot: {},
+    vectors: {},
 };
 
 let modules = [];

@@ -687,6 +687,7 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
     }
 
 
+
     //(Multicharacters descriptions in prompt (On case if I'll would add that function. Low probably through))
     //if (prompts.has('GroupchatPush')) ChatCompletion.insert(Message.fromPrompt(prompts.get('GroupchatPush')), 'enhanceDefinitions')
     //OR
@@ -789,7 +790,6 @@ function preparePromptsForChatCompletion({Scenario, charPersonality, name2, worl
         content: authorsNote.value,
         identifier: 'authorsNote'
     });
-
 
     //(Multicharacters descriptions in prompt (On case if I'll would add that function. Low probably through))
     /*if (inject1 && Inject1.MulChar) systemPrompts.push({

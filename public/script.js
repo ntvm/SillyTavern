@@ -383,10 +383,7 @@ const system_message_types = {
 };
 
 const extension_prompt_types = {
-    /**
-     * @deprecated Outdated term. In reality it's "after main prompt or story string"
-     */
-    AFTER_SCENARIO: 0,
+    IN_PROMPT: 0,
     IN_CHAT: 1
 };
 
@@ -1148,10 +1145,11 @@ async function replaceCurrentChat() {
     }
 }
 
-function printMessages() {
-    chat.forEach(function (item, i, arr) {
-        addOneMessage(item, { scroll: i === arr.length - 1 });
-    });
+async function printMessages() {
+    for (let i = 0; i < chat.length; i++) {
+        const item = chat[i];
+        addOneMessage(item, { scroll: i === chat.length - 1 });
+    }
 
     if (power_user.lazy_load > 0) {
         const height = $('#chat').height();
@@ -1194,7 +1192,7 @@ export async function reloadCurrentChat() {
     }
     else {
         resetChatState();
-        printMessages();
+        await printMessages();
     }
 
     await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
@@ -2539,7 +2537,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         addPersonaDescriptionExtensionPrompt();
         // Call combined AN into Generate
         let allAnchors = getAllExtensionPrompts();
-        const afterScenarioAnchor = getExtensionPrompt(extension_prompt_types.AFTER_SCENARIO);
+        const afterScenarioAnchor = getExtensionPrompt(extension_prompt_types.IN_PROMPT);
         let zeroDepthAnchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, 0, ' ');
 
         const storyStringParams = {
@@ -4458,7 +4456,7 @@ async function getChatResult() {
         chat.push(message);
         await saveChatConditional();
     }
-    printMessages();
+    await printMessages();
     select_selected_character(this_chid);
 
     await eventSource.emit(event_types.CHAT_CHANGED, (getCurrentChatId()));
@@ -5020,12 +5018,12 @@ async function saveSettings(type) {
         dataType: "json",
         contentType: "application/json",
         //processData: false,
-        success: function (data) {
+        success: async function (data) {
             //online_status = data.result;
             eventSource.emit(event_types.SETTINGS_UPDATED);
             if (type == "change_name") {
                 clearChat();
-                printMessages();
+                await printMessages();
             }
         },
         error: function (jqXHR, exception) {
@@ -5612,7 +5610,7 @@ function select_rm_characters() {
  * @param {number} position Insertion position. 0 is after story string, 1 is in-chat with custom depth.
  * @param {number} depth Insertion depth. 0 represets the last message in context. Expected values up to 100.
  */
-function setExtensionPrompt(key, value, position, depth) {
+export function setExtensionPrompt(key, value, position, depth) {
     extension_prompts[key] = { value: String(value), position: Number(position), depth: Number(depth) };
 }
 
@@ -6313,7 +6311,7 @@ async function createOrEditCharacter(e) {
 
                     await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1));
                     clearChat();
-                    printMessages();
+                    await printMessages();
                     await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, (chat.length - 1));
                     await saveChatConditional();
                 }
@@ -6942,7 +6940,7 @@ export async function deleteCharacter(name, avatar) {
     delete tag_map[avatar];
     await getCharacters();
     select_rm_info("char_delete", name);
-    printMessages();
+    await printMessages();
     saveSettingsDebounced();
 }
 

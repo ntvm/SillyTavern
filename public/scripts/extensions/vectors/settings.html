@@ -1,0 +1,34 @@
+<div class="vectors_settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>Vector Storage</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <label class="checkbox_label" for="vectors_enabled">
+                <input id="vectors_enabled" type="checkbox" class="checkbox">
+                Enabled
+            </label>
+            <label for="vectors_source">
+                Source
+            </label>
+            <select id="vectors_source" class="select">
+                <option value="local">Local</option>
+                <option value="openai">OpenAI</option>
+            </select>
+            <div>
+                Old messages are vectorized gradually as you chat.
+                To process all previous messages, click the button below.
+            </div>
+            <div id="vectors_vectorize_all" class="menu_button menu_button_icon">
+                Vectorize All
+            </div>
+            <div id="vectorize_progress" style="display: none;">
+                <small>
+                    Processed <span id="vectorize_progress_percent">0</span>% of messages.
+                    ETA: <span id="vectorize_progress_eta">...</span> seconds.
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
