@@ -34,7 +34,7 @@ const defaultSettings = {
     
     Inputer_frozen: false,
     Inputer_prompt: defaultPrompt,
-    position: extension_prompt_types.IN_PROMPT,
+    position: extension_prompt_types.AFTER_SCENARIO,
     depth: 2,
 	AlwaysCharnames: true,
     selectedPreset: '',
@@ -107,7 +107,7 @@ function setInputerContext(value, saveToMessage) {
 			extension_settings.Nvkun.Inputer_prompt = value;}
 			
 			var formatMemoryValue = (value) => value ? `\n${value.trim()}` : '';
-			context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.IN_PROMPT, extension_settings.Nvkun.depth);
+			context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.AFTER_SCENARIO, extension_settings.Nvkun.depth);
 			$('#Inputer_prompt').val(value);
 			console.log('After Scenario injected');
 			console.debug('Position: ' + extension_settings.Nvkun.position);

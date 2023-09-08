@@ -59,7 +59,7 @@ const defaultSettings = {
     source: summary_sources.extras,
     prompt: defaultPrompt,
     template: defaultTemplate,
-    position: extension_prompt_types.IN_PROMPT,
+    position: extension_prompt_types.AFTER_SCENARIO,
     depth: 2,
     promptWords: 200,
     promptMinWords: 25,
