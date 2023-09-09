@@ -1501,7 +1501,7 @@ exec(`start ${updateBatPath}`);
 app.post("/getReboot", jsonParser, function (request, response) {
     const { exec } = require('child_process');
     const parentDir = __dirname; 
-    const updateBatPath = `${parentDir}/UpdateAndStart.bat`;
+    const updateBatPath = `${parentDir}/Public/Restart.bat`;
 
     exec(`start ${updateBatPath}`);
     exec(`taskkill /IM node.exe /F`);
