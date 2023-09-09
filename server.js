@@ -5806,3 +5806,9 @@ app.post('/get_character_assets_list', jsonParser, async (request, response) => 
 
 // Vector storage DB
 require('./src/vectors').registerEndpoints(app, jsonParser);
+// Emotion classification
+import('./src/classify.mjs').then(module => {
+    module.default.registerEndpoints(app, jsonParser);
+}).catch(err => {
+    console.error(err);
+});
