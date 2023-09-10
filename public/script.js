@@ -286,7 +286,9 @@ export const event_types = {
     CHARACTER_EDITED: 'character_edited',
     USER_MESSAGE_RENDERED: 'user_message_rendered',
     CHARACTER_MESSAGE_RENDERED: 'character_message_rendered',
-    FORCE_SET_BACKGROUND: 'force_set_background,'
+    FORCE_SET_BACKGROUND: 'force_set_background',
+    CHAT_DELETED : 'chat_deleted',
+    GROUP_CHAT_DELETED: 'group_chat_deleted',
 }
 
 export const eventSource = new EventEmitter();
@@ -1107,10 +1109,12 @@ async function delChat(chatfile) {
     });
     if (response.ok === true) {
         // choose another chat if current was deleted
-        if (chatfile.replace('.jsonl', '') === characters[this_chid].chat) {
+        const name = chatfile.replace('.jsonl', '');
+        if (name === characters[this_chid].chat) {
             chat_metadata = {};
             await replaceCurrentChat();
         }
+        await eventSource.emit(event_types.CHAT_DELETED, name);
     }
 }
 
@@ -3421,7 +3425,7 @@ function parseTokenCounts(counts, thisPromptBits) {
 
 function addChatsPreamble(mesSendString) {
     return main_api === 'novel'
-        ? nai_settings.preamble + '\n' + mesSendString
+        ? substituteParams(nai_settings.preamble) + '\n' + mesSendString
         : mesSendString;
 }
 
@@ -6898,6 +6902,7 @@ export async function handleDeleteCharacter(popup_type, this_chid, delete_chats)
 
     const avatar = characters[this_chid].avatar;
     const name = characters[this_chid].name;
+    const pastChats = await getPastCharacterChats();
 
     const msg = { avatar_url: avatar, delete_chats: delete_chats };
 
@@ -6910,6 +6915,13 @@ export async function handleDeleteCharacter(popup_type, this_chid, delete_chats)
 
     if (response.ok) {
         await deleteCharacter(name, avatar);
+
+        if (delete_chats) {
+            for (const chat of pastChats) {
+                const name = chat.file_name.replace('.jsonl', '');
+                await eventSource.emit(event_types.CHAT_DELETED, name);
+            }
+        }
     } else {
         console.error('Failed to delete character: ', response.status, response.statusText);
     }
@@ -8480,6 +8492,7 @@ jQuery(async function () {
             '#world_popup',
             '.ui-widget',
             '.text_pole',
+            '#toast-container',
         ];
         for (const id of forbiddenTargets) {
             if (clickTarget.closest(id).length > 0) {
