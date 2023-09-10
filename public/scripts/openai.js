@@ -698,7 +698,7 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
     // Vectors Memory
     if (prompts.has('vectorsMemory')) {
         const vectorsMemory = Message.fromPrompt(prompts.get('vectorsMemory'));
-        chatCompletion.insert(vectorsMemory, 'main');
+        chatCompletion.insert(vectorsMemory, 'scenario');
     }
 
     // Decide whether dialogue examples should always be added
