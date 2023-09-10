@@ -800,7 +800,7 @@ function preparePromptsForChatCompletion({Scenario, charPersonality, name2, worl
 
     // Vectors Memory
     const vectorsMemory = extensionPrompts['3_vectors'];
-    if (vectorsMemory && vectorsMemory.value && extension_settings.vectorsMemory.position == "0") systemPrompts.push({
+    if (vectorsMemory && vectorsMemory.value && extension_settings.vectors.position == "0") systemPrompts.push({
         role: 'system',
         content: vectorsMemory.value,
         identifier: 'vectorsMemory',
