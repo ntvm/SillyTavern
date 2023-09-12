@@ -32,6 +32,8 @@ const multer = require("multer");
 const responseTime = require('response-time');
 
 // net related library imports
+const net = require("net");
+const dns = require('dns');
 const DeviceDetector = require("device-detector-js");
 const fetch = require('node-fetch').default;
 const ipaddr = require('ipaddr.js');
@@ -56,7 +58,10 @@ const { Tokenizer } = require('@agnai/web-tokenizers');
 
 // misc/other imports
 const _ = require('lodash');
-const { generateRequestUrl, normaliseResponse } = require('google-translate-api-browser');
+
+// Unrestrict console logs display limit
+util.inspect.defaultOptions.maxArrayLength = null;
+util.inspect.defaultOptions.maxStringLength = null;
 
 // Create files before running anything else
 createDefaultFiles();
@@ -68,6 +73,7 @@ const characterCardParser = require('./src/character-card-parser.js');
 const contentManager = require('./src/content-manager');
 const novelai = require('./src/novelai');
 const statsHelpers = require('./statsHelpers.js');
+const { writeSecret, readSecret, readSecretState, migrateSecrets, SECRET_KEYS, getAllSecrets } = require('./src/secrets');
 
 function createDefaultFiles() {
     const files = {
@@ -89,9 +95,16 @@ function createDefaultFiles() {
     }
 }
 
-const net = require("net");
-// @ts-ignore work around a node v20 bug: https://github.com/nodejs/node/issues/47822#issuecomment-1564708870
-if (net.setDefaultAutoSelectFamily) net.setDefaultAutoSelectFamily(false);
+// Work around a node v20.0.0, v20.1.0, and v20.2.0 bug. The issue was fixed in v20.3.0.
+// https://github.com/nodejs/node/issues/47822#issuecomment-1564708870
+// Safe to remove once support for Node v20 is dropped.
+if (process.versions && process.versions.node && process.versions.node.match(/20\.[0-2]\.0/)) {
+    // @ts-ignore
+    if (net.setDefaultAutoSelectFamily) net.setDefaultAutoSelectFamily(false);
+}
+
+// Set default DNS resolution order to IPv4 first
+dns.setDefaultResultOrder('ipv4first');
 
 const cliArguments = yargs(hideBin(process.argv))
     .option('disableCsrf', {
@@ -326,6 +339,7 @@ function humanizedISO8601DateTime(date) {
 var charactersPath = 'public/characters/';
 var chatsPath = 'public/chats/';
 const UPLOADS_PATH = './uploads';
+const SETTINGS_FILE = './public/settings.json';
 const AVATAR_WIDTH = 400;
 const AVATAR_HEIGHT = 600;
 const jsonParser = express.json({ limit: '100mb' });
@@ -809,6 +823,31 @@ app.post("/getchat", jsonParser, function (request, response) {
     } catch (error) {
         console.error(error);
         return response.send({});
+    }
+});
+
+app.post("/api/mancer/models", jsonParser, async function (_req, res) {
+    try {
+        const response = await fetch('https://mancer.tech/internal/api/models');
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.log('Mancer models endpoint is offline.');
+            return res.json([]);
+        }
+
+        if (!Array.isArray(data.models)) {
+            console.log('Mancer models response is not an array.')
+            return res.json([]);
+        }
+
+        const modelIds = data.models.map(x => x.id);
+        console.log('Mancer models available:', modelIds);
+
+        return res.json(data.models);
+    } catch (error) {
+        console.error(error);
+        return res.json([]);
     }
 });
 
@@ -1499,7 +1538,7 @@ exec(`start ${updateBatPath}`);
 app.post("/getReboot", jsonParser, function (request, response) {
     const { exec } = require('child_process');
     const parentDir = __dirname; 
-    const updateBatPath = `${parentDir}/UpdateAndStart.bat`;
+    const updateBatPath = `${parentDir}/Public/Restart.bat`;
 
     exec(`start ${updateBatPath}`);
     exec(`taskkill /IM node.exe /F`);
@@ -2183,6 +2222,7 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     importRisuSprites(jsonData);
                     unsetFavFlag(jsonData);
                     jsonData = readFromV2(jsonData);
+                    jsonData["create_date"] = humanizedISO8601DateTime();
                     png_name = getPngName(jsonData.data?.name || jsonData.name);
                     let char = JSON.stringify(jsonData);
                     charaWrite(defaultAvatarPath, char, png_name, response, { file_name: png_name });
@@ -4138,7 +4178,7 @@ const setupTasks = async function () {
     console.log(`SillyTavern ${version.pkgVersion}` + (version.gitBranch ? ` '${version.gitBranch}' (${version.gitRevision})` : ''));
 
     backupSettings();
-    migrateSecrets();
+    migrateSecrets(SETTINGS_FILE);
     ensurePublicDirectoriesExist();
     await ensureThumbnailCache();
     contentManager.checkForNewContent();
@@ -4289,69 +4329,6 @@ function ensurePublicDirectoriesExist() {
     }
 }
 
-const SECRETS_FILE = './secrets.json';
-const SETTINGS_FILE = './public/settings.json';
-const SECRET_KEYS = {
-    HORDE: 'api_key_horde',
-    MANCER: 'api_key_mancer',
-    OPENAI: 'api_key_openai',
-    NOVEL: 'api_key_novel',
-    CLAUDE: 'api_key_claude',
-    DEEPL: 'deepl',
-    LIBRE: 'libre',
-    LIBRE_URL: 'libre_url',
-    OPENROUTER: 'api_key_openrouter',
-    SCALE: 'api_key_scale',
-    AI21: 'api_key_ai21',
-    SCALE_COOKIE: 'scale_cookie',
-}
-
-function migrateSecrets() {
-    if (!fs.existsSync(SETTINGS_FILE)) {
-        console.log('Settings file does not exist');
-        return;
-    }
-
-    try {
-        let modified = false;
-        const fileContents = fs.readFileSync(SETTINGS_FILE, 'utf8');
-        const settings = JSON.parse(fileContents);
-        const oaiKey = settings?.api_key_openai;
-        const hordeKey = settings?.horde_settings?.api_key;
-        const novelKey = settings?.api_key_novel;
-
-        if (typeof oaiKey === 'string') {
-            console.log('Migrating OpenAI key...');
-            writeSecret(SECRET_KEYS.OPENAI, oaiKey);
-            delete settings.api_key_openai;
-            modified = true;
-        }
-
-        if (typeof hordeKey === 'string') {
-            console.log('Migrating Horde key...');
-            writeSecret(SECRET_KEYS.HORDE, hordeKey);
-            delete settings.horde_settings.api_key;
-            modified = true;
-        }
-
-        if (typeof novelKey === 'string') {
-            console.log('Migrating Novel key...');
-            writeSecret(SECRET_KEYS.NOVEL, novelKey);
-            delete settings.api_key_novel;
-            modified = true;
-        }
-
-        if (modified) {
-            console.log('Writing updated settings.json...');
-            const settingsContent = JSON.stringify(settings);
-            writeFileAtomicSync(SETTINGS_FILE, settingsContent, "utf-8");
-        }
-    }
-    catch (error) {
-        console.error('Could not migrate secrets file. Proceed with caution.');
-    }
-}
-
 app.post('/writesecret', jsonParser, (request, response) => {
     const key = request.body.key;
     const value = request.body.value;
@@ -4361,19 +4338,9 @@ app.post('/writesecret', jsonParser, (request, response) => {
 });
 
 app.post('/readsecretstate', jsonParser, (_, response) => {
-    if (!fs.existsSync(SECRETS_FILE)) {
-        return response.send({});
-    }
 
     try {
-        const fileContents = fs.readFileSync(SECRETS_FILE, 'utf8');
-        const secrets = JSON.parse(fileContents);
-        const state = {};
-
-        for (const key of Object.values(SECRET_KEYS)) {
-            state[key] = !!secrets[key]; // convert to boolean
-        }
-
+        const state = readSecretState();
         return response.send(state);
     } catch (error) {
         console.error(error);
@@ -4396,7 +4363,7 @@ app.post('/generate_horde', jsonParser, async (request, response) => {
     };
     if (request.header('Client-Agent') !== undefined) args.headers['Client-Agent'] = request.header('Client-Agent');
 
-    console.log(args.body);
+    console.log(request.body);
     try {
         const data = await postAsync(url, args);
         return response.send(data);
@@ -4419,14 +4386,13 @@ app.post('/viewsecrets', jsonParser, async (_, response) => {
         return response.sendStatus(403);
     }
 
-    if (!fs.existsSync(SECRETS_FILE)) {
-        console.error('secrets.json does not exist');
-        return response.sendStatus(404);
-    }
-
     try {
-        const fileContents = fs.readFileSync(SECRETS_FILE, 'utf-8');
-        const secrets = JSON.parse(fileContents);
+        const secrets = getAllSecrets();
+
+        if (!secrets) {
+            return response.sendStatus(404);
+        }
+
         return response.send(secrets);
     } catch (error) {
         console.error(error);
@@ -4861,122 +4827,6 @@ app.post('/api/sd/generate', jsonParser, async (request, response) => {
     }
 });
 
-app.post('/libre_translate', jsonParser, async (request, response) => {
-    const key = readSecret(SECRET_KEYS.LIBRE);
-    const url = readSecret(SECRET_KEYS.LIBRE_URL);
-
-    const text = request.body.text;
-    const lang = request.body.lang;
-
-    if (!text || !lang) {
-        return response.sendStatus(400);
-    }
-
-    console.log('Input text: ' + text);
-
-    try {
-        const result = await fetch(url, {
-            method: "POST",
-            body: JSON.stringify({
-                q: text,
-                source: "auto",
-                target: lang,
-                format: "text",
-                api_key: key
-            }),
-            headers: { "Content-Type": "application/json" }
-        });
-
-        if (!result.ok) {
-            return response.sendStatus(result.status);
-        }
-
-        const json = await result.json();
-        console.log('Translated text: ' + json.translatedText);
-
-        return response.send(json.translatedText);
-    } catch (error) {
-        console.log("Translation error: " + error.message);
-        return response.sendStatus(500);
-    }
-});
-
-app.post('/google_translate', jsonParser, async (request, response) => {
-    const text = request.body.text;
-    const lang = request.body.lang;
-
-    if (!text || !lang) {
-        return response.sendStatus(400);
-    }
-
-    console.log('Input text: ' + text);
-
-    const url = generateRequestUrl(text, { to: lang });
-
-    https.get(url, (resp) => {
-        let data = '';
-
-        resp.on('data', (chunk) => {
-            data += chunk;
-        });
-
-        resp.on('end', () => {
-            const result = normaliseResponse(JSON.parse(data));
-            console.log('Translated text: ' + result.text);
-            return response.send(result.text);
-        });
-    }).on("error", (err) => {
-        console.log("Translation error: " + err.message);
-        return response.sendStatus(500);
-    });
-});
-
-app.post('/deepl_translate', jsonParser, async (request, response) => {
-    const key = readSecret(SECRET_KEYS.DEEPL);
-
-    if (!key) {
-        return response.sendStatus(401);
-    }
-
-    const text = request.body.text;
-    const lang = request.body.lang;
-
-    if (!text || !lang) {
-        return response.sendStatus(400);
-    }
-
-    console.log('Input text: ' + text);
-
-    const params = new URLSearchParams();
-    params.append('text', text);
-    params.append('target_lang', lang);
-
-    try {
-        const result = await fetch('https://api-free.deepl.com/v2/translate', {
-            method: 'POST',
-            body: params,
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': `DeepL-Auth-Key ${key}`,
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            timeout: 0,
-        });
-
-        if (!result.ok) {
-            return response.sendStatus(result.status);
-        }
-
-        const json = await result.json();
-        console.log('Translated text: ' + json.translations[0].text);
-
-        return response.send(json.translations[0].text);
-    } catch (error) {
-        console.log("Translation error: " + error.message);
-        return response.sendStatus(500);
-    }
-});
-
 app.post('/novel_tts', jsonParser, async (request, response) => {
     const token = readSecret(SECRET_KEYS.NOVEL);
 
@@ -5360,27 +5210,6 @@ function importRisuSprites(data) {
     }
 }
 
-function writeSecret(key, value) {
-    if (!fs.existsSync(SECRETS_FILE)) {
-        const emptyFile = JSON.stringify({});
-        writeFileAtomicSync(SECRETS_FILE, emptyFile, "utf-8");
-    }
-
-    const fileContents = fs.readFileSync(SECRETS_FILE, 'utf-8');
-    const secrets = JSON.parse(fileContents);
-    secrets[key] = value;
-    writeFileAtomicSync(SECRETS_FILE, JSON.stringify(secrets), "utf-8");
-}
-
-function readSecret(key) {
-    if (!fs.existsSync(SECRETS_FILE)) {
-        return undefined;
-    }
-
-    const fileContents = fs.readFileSync(SECRETS_FILE, 'utf-8');
-    const secrets = JSON.parse(fileContents);
-    return secrets[key];
-}
 
 async function readAllChunks(readableStream) {
     return new Promise((resolve, reject) => {
@@ -5452,8 +5281,6 @@ async function getImageBuffers(zipFilePath) {
         });
     });
 }
-
-
 
 /**
  * This function extracts the extension information from the manifest file.
@@ -5892,4 +5719,21 @@ app.post('/get_character_assets_list', jsonParser, async (request, response) => 
         console.log(err);
         return response.sendStatus(500);
     }
+});
+
+// Vector storage DB
+require('./src/vectors').registerEndpoints(app, jsonParser);
+// Chat translation
+require('./src/translate').registerEndpoints(app, jsonParser);
+// Emotion classification
+import('./src/classify.mjs').then(module => {
+    module.default.registerEndpoints(app, jsonParser);
+}).catch(err => {
+    console.error(err);
+});
+// Image captioning
+import('./src/caption.mjs').then(module => {
+    module.default.registerEndpoints(app, jsonParser);
+}).catch(err => {
+    console.error(err);
 });

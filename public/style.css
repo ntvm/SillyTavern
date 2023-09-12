@@ -1172,7 +1172,7 @@ input[type="file"] {
 #rm_ch_create_block {
     display: none;
     overflow-y: auto;
-    padding: 0 5px;
+    padding: 5px;
     height: 100%;
 }
 
@@ -1209,6 +1209,7 @@ input[type="file"] {
 .radio_group {
     display: flex;
     flex-direction: column;
+    margin-top: 5px;
 }
 
 #extension_floating_counter {
@@ -1767,8 +1768,15 @@ grammarly-extension {
 #result_info {
     font-size: calc(var(--mainFontSize) * 0.9);
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 10px;
+}
+
+#result_info_text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+    text-align: right;
 }
 
 .rm_stats_button {
@@ -3406,7 +3414,8 @@ a {
     min-height: 100px;
     max-height: 90vh;
     max-width: 90vh;
-    width: calc((100vw - var(--sheldWidth)) /2);
+    width: clamp(100px, 400px, calc((100vw - var(--sheldWidth)) /2));
+    /* width: calc((100vw - var(--sheldWidth)) /2); */
     position: absolute;
     padding: 0;
     filter: drop-shadow(2px 2px 2px var(--grey7070a));
@@ -3570,6 +3579,15 @@ a {
 
 .onboarding>h3 {
     align-self: center;
+}
+
+#show_more_messages {
+    text-align: center;
+    margin: 10px 0;
+    font-weight: 500;
+    text-decoration: underline;
+    order: -1;
+    cursor: pointer;
 }
 
 #select_chat_search {

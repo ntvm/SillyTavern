@@ -629,6 +629,7 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
         chatCompletion.add(collection, index);
     };
 
+    chatCompletion.reserveBudget(3); // every reply is primed with <|start|>assistant<|message|>
     // Character and world information
     addToChatCompletion('worldInfoBefore');
     addToChatCompletion('main');
@@ -687,6 +688,7 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
     }
 
 
+
     //(Multicharacters descriptions in prompt (On case if I'll would add that function. Low probably through))
     //if (prompts.has('GroupchatPush')) ChatCompletion.insert(Message.fromPrompt(prompts.get('GroupchatPush')), 'enhanceDefinitions')
     //OR
@@ -697,7 +699,7 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
     // Vectors Memory
     if (prompts.has('vectorsMemory')) {
         const vectorsMemory = Message.fromPrompt(prompts.get('vectorsMemory'));
-        chatCompletion.insert(vectorsMemory, 'main');
+        chatCompletion.insert(vectorsMemory, 'scenario');
     }
 
     // Decide whether dialogue examples should always be added
@@ -790,7 +792,6 @@ function preparePromptsForChatCompletion({Scenario, charPersonality, name2, worl
         identifier: 'authorsNote'
     });
 
-
     //(Multicharacters descriptions in prompt (On case if I'll would add that function. Low probably through))
     /*if (inject1 && Inject1.MulChar) systemPrompts.push({
         role: 'system',
@@ -800,7 +801,7 @@ function preparePromptsForChatCompletion({Scenario, charPersonality, name2, worl
 
     // Vectors Memory
     const vectorsMemory = extensionPrompts['3_vectors'];
-    if (vectorsMemory && vectorsMemory.value) systemPrompts.push({
+    if (vectorsMemory && vectorsMemory.value && extension_settings.vectors.position == "0") systemPrompts.push({
         role: 'system',
         content: vectorsMemory.value,
         identifier: 'vectorsMemory',
@@ -1871,9 +1872,12 @@ class ChatCompletion {
     /**
      * Reserves the tokens required by the given message from the token budget.
      *
-     * @param {Message|MessageCollection} message - The message whose tokens to reserve.
+     * @param {Message|MessageCollection|number} message - The message whose tokens to reserve.
      */
-    reserveBudget(message) { this.decreaseTokenBudgetBy(message.getTokens()) };
+    reserveBudget(message) {
+        const tokens = typeof message === 'number' ? message : message.getTokens();
+        this.decreaseTokenBudgetBy(tokens);
+    };
 
     /**
      * Frees up the tokens used by the given message from the token budget.

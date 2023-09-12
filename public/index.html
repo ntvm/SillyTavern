@@ -39,6 +39,7 @@
     <script src="lib/toastr.min.js"></script>
     <script src="lib/fuse.js"></script>
     <script src="lib/select2.min.js"></script>
+    <script src="lib/select2-search-placeholder.js"></script>
     <script src="lib/seedrandom.min.js"></script>
     <script src="lib/droll.js"></script>
     <script src="lib/localforage.min.js"></script>
@@ -72,6 +73,7 @@
     <script type="module" src="scripts/group-chats.js"></script>
     <script type="module" src="scripts/kai-settings.js"></script>
     <script type="module" src="scripts/textgen-settings.js"></script>
+    <script type="module" src="scripts/mancer-settings.js"></script>
     <script type="module" src="scripts/bookmarks.js"></script>
     <script type="module" src="scripts/horde.js"></script>
     <script type="module" src="scripts/RossAscends-mods.js"></script>
@@ -83,6 +85,7 @@
     <script type="module" src="scripts/preset-manager.js"></script>
     <script type="module" src="scripts/filters.js"></script>
     <script type="module" src="scripts/personas.js"></script>
+    <script type="module" src="scripts/server-history.js"></script>
 
     <title>SillyTavern</title>
 </head>
@@ -1787,8 +1790,8 @@
                             <div id="kobold_api_block">
                                 <h4 data-i18n="API url">API url</h4>
                                 <small data-i18n="Example: http://127.0.0.1:5000/api ">Example: http://127.0.0.1:5000/api </small>
-                                <input id="api_url_text" name="api_url" class="text_pole" placeholder="http://127.0.0.1:5000/api" maxlength="500" value="" autocomplete="off">
-                                <div id="api_button" class="menu_button" type="submit" data-i18n="Connect">Connect</div>
+                                <input id="api_url_text" name="api_url" class="text_pole" placeholder="http://127.0.0.1:5000/api" maxlength="500" value="" autocomplete="off" data-server-history="kobold">
+                                <div id="api_button" class="menu_button" type="submit" data-i18n="Connect" data-server-connect="kobold">Connect</div>
                                 <div id="api_loading" class="api-load-icon fa-solid fa-hourglass fa-spin"></div>
                             </div>
                             <div id="online_status2">
@@ -1869,24 +1872,26 @@
                                         For privacy reasons, your API key will be hidden after you reload the page.
                                     </div>
                                     <div class="flex1">
-                                        <h4 data-i18n="Mancer API url">Mancer API url</h4>
-                                        <small data-i18n="Example: https://neuro.mancer.tech/webui/MODEL/api">Example: https://neuro.mancer.tech/webui/MODEL/api </small>
+                                        <h4>Mancer Model</h4>
+                                        <select id="mancer_model"></select>
+                                        <h4 data-i18n="Mancer API url">Mancer API URL</h4>
+                                        <small data-i18n="Example: https://neuro.mancer.tech/webui/MODEL/api">Example: https://neuro.mancer.tech/webui/MODEL/api</small>
                                         <input id="mancer_api_url_text" name="mancer_api_url" class="text_pole wide100p" maxlength="500" value="" autocomplete="off">
                                     </div>
                                 </div>
                                 <div id="tgwebui_api_subpanel" class="flex-container flexFlowColumn">
                                     <div class="flex1">
-                                        <h4 data-i18n="Blocking API url">Blocking API url</h4>
+                                        <h4 data-i18n="Blocking API url">Blocking API URL</h4>
                                         <small data-i18n="Example: http://127.0.0.1:5000/api ">Example: http://127.0.0.1:5000/api </small>
-                                        <input id="textgenerationwebui_api_url_text" name="textgenerationwebui_api_url" class="text_pole wide100p" maxlength="500" value="" autocomplete="off">
+                                        <input id="textgenerationwebui_api_url_text" name="textgenerationwebui_api_url" class="text_pole wide100p" maxlength="500" value="" autocomplete="off" data-server-history="ooba_blocking">
                                     </div>
                                     <div class="flex1">
-                                        <h4 data-i18n="Streaming API url">Streaming API url</h4>
+                                        <h4 data-i18n="Streaming API url">Streaming API URL</h4>
                                         <small data-i18n="Example: ws://127.0.0.1:5005/api/v1/stream">Example: ws://127.0.0.1:5005/api/v1/stream </small>
-                                        <input id="streaming_url_textgenerationwebui" type="text" class="text_pole wide100p" maxlength="500" value="" autocomplete="off">
+                                        <input id="streaming_url_textgenerationwebui" type="text" class="text_pole wide100p" maxlength="500" value="" autocomplete="off" data-server-history="ooba_streaming">
                                     </div>
                                 </div>
-                                <div id="api_button_textgenerationwebui" class="menu_button" type="submit" data-i18n="Connect">Connect</div>
+                                <div id="api_button_textgenerationwebui" class="menu_button" type="submit" data-i18n="Connect" data-server-connect="ooba_blocking,ooba_streaming">Connect</div>
                                 <div id="api_loading_textgenerationwebui" class="api-load-icon fa-solid fa-hourglass fa-spin"></div>
                             </div>
                         </form>
@@ -3254,9 +3259,16 @@
                             <h2></h2>
                         </div>
                         <div id="result_info" class="flex-container" style="display: none;">
-                            <span id="result_info_text" title="Token counts may be inaccurate and provided just for reference." data-i18n="[title]Token counts may be inaccurate and provided just for reference.">
-                                <strong id="result_info_total_tokens">Calculating...</strong> Total Tokens
-                            </span>
+                            <div id="result_info_text" title="Token counts may be inaccurate and provided just for reference." data-i18n="[title]Token counts may be inaccurate and provided just for reference.">
+                                <div>
+                                    <strong id="result_info_total_tokens" title="Total tokens">Calculating...</strong>&nbsp;<span data-i18n="Tokens">Tokens</span>
+                                </div>
+                                <div>
+                                    <small title="Permanent tokens">
+                                        (<span id="result_info_permanent_tokens"></span>&nbsp;<span data-i18n="Permanent">Permanent</span>)
+                                    </small>
+                                </div>
+                            </div>
                             <a id="chartokenwarning" class="right_menu_button fa-solid fa-triangle-exclamation" href="https://docs.sillytavern.app/usage/core-concepts/characterdesign/#character-tokens" target="_blank" title="About Token 'Limits'"></a>
                             <i title="Click for stats!" class="fa-solid fa-ranking-star right_menu_button rm_stats_button"></i>
                             <i title="Toggle character info panel" id="hideCharPanelAvatarButton" class="fa-solid fa-eye right_menu_button"></i>
@@ -3272,7 +3284,7 @@
                             <div id="name_div">
                                 <input id="character_name_pole" name="ch_name" class="text_pole" data-i18n="[placeholder]Name this character" placeholder="Name this character" maxlength="50" value="" autocomplete="off">
                                 <div class="extension_token_counter">
-                                    Tokens: <span data-token-counter="character_name_pole">counting...</span>
+                                    Tokens: <span data-token-counter="character_name_pole" data-token-permanent="true">counting...</span>
                                 </div>
                             </div>
 
@@ -3354,7 +3366,7 @@
 
                         <textarea id="description_textarea" data-i18n="[placeholder]Describe your character's physical and mental traits here." placeholder="Describe your character's physical and mental traits here." class="marginBot5" name="description" placeholder=""></textarea>
                         <div class="extension_token_counter">
-                            Tokens: <span data-token-counter="description_textarea">counting...</span>
+                            Tokens: <span data-token-counter="description_textarea" data-token-permanent="true">counting...</span>
                         </div>
 
                         <div id="first_message_div" class="marginBot5 title_restorable">
@@ -3638,7 +3650,7 @@
             </h4>
             <textarea id="personality_textarea" name="personality" data-i18n="[placeholder](A brief description of the personality)" placeholder="(A brief description of the personality)" form="form_create" class="text_pole" autocomplete="off" rows="1" maxlength="20000"></textarea>
             <div class="extension_token_counter">
-                Tokens: <span data-token-counter="personality_textarea">counting...</span>
+                Tokens: <span data-token-counter="personality_textarea" data-token-permanent="true">counting...</span>
             </div>
         </div>
 
@@ -3651,7 +3663,7 @@
             </h4>
             <textarea id="scenario_pole" name="scenario" data-i18n="[placeholder](Circumstances and context of the interaction)" placeholder="(Circumstances and context of the interaction)" class="text_pole" maxlength="20000" value="" autocomplete="off" form="form_create" rows="1"></textarea>
             <div class="extension_token_counter">
-                Tokens: <span data-token-counter="scenario_pole">counting...</span>
+                Tokens: <span data-token-counter="scenario_pole" data-token-permanent="true">counting...</span>
             </div>
         </div>
 

@@ -44,3 +44,5 @@ public/notes/faq.md.html
 public/notes/update.html
 public/assets/
 access.log
+/vectors/
+/cache/
