@@ -77,18 +77,18 @@ async function onVectorizeAllClick() {
 let syncBlocked = false;
 
 async function synchronizeChat(batchSize = 5) {
+    if (!settings.enabled) {
+        return -1;
+    }
+
     try {
-        await waitUntilCondition(() => !syncBlocked, 500);
+        await waitUntilCondition(() => !syncBlocked && !is_send_press, 1000);
     } catch {
         console.log('Vectors: Synchronization blocked by another process');
         return -1;
     }
 
     try {
-        if (!settings.enabled) {
-            return -1;
-        }
-
         syncBlocked = true;
         const context = getContext();
         const chatId = getCurrentChatId();
@@ -424,7 +424,6 @@ jQuery(async () => {
 
     $('#vectors_vectorize_all').on('click', onVectorizeAllClick);
 
-    eventSource.on(event_types.CHAT_CHANGED, onChatEvent);
     eventSource.on(event_types.MESSAGE_DELETED, onChatEvent);
     eventSource.on(event_types.MESSAGE_EDITED, onChatEvent);
     eventSource.on(event_types.MESSAGE_SENT, onChatEvent);
