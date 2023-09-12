@@ -5,7 +5,9 @@ A WIP extension to allow for timeline based naviation of chat histories.
 
 ## Features
 
-Display all chats with the current character. Chat messages with the same content will be shown as a single node on the timeline.
+- Display all chats with the current character. Chat messages with the same content will be shown as a single node on the timeline.
+- Search all current character message content with realtime fulltext filtering. 
+- Theming based on UI theme or custom theme.
 
 ## Installation and Usage
 
@@ -31,18 +33,9 @@ MIT probably.
 
 ## Todos
 ```
-/*
- * TODO: Docs for all the functions
- * TODO: Split out the functions into separate files
- * TODO: Add options for layouts/styles
- * TODO: Add options for searching/filtering
- * TODO: Allow for toggling of movable nodes
- * TODO: Edge labels?
- * TODO: Possible minimap mode
- * TODO: More context menu options
- * TODO: Move away from CDNs
- * TODO: Experimental multi-tree view
- * TODO: Group support (maybe)
- * TODO: Don't reset the graph when the modal is closed/opened
- */
+// TODO Edge labels?
+// TODO Possible minimap mode
+// TODO More context menu options
+// TODO Experimental multi-tree view
+// TODO Mobile taps on iOS
 ```
