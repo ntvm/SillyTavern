@@ -51,6 +51,17 @@
     display: flex;
 }
 
+#no_chat_expressions {
+    text-align: center;
+    margin: 10px 0;
+    font-weight: bold;
+    opacity: 0.8;
+}
+
+#image_list_header_name {
+    font-weight: 400;
+}
+
 img.expression {
     min-width: 100px;
     min-height: 100px;
@@ -112,6 +123,8 @@ img.expression.default {
     display: flex;
     justify-content: center;
     align-items: center;
+    flex-direction: column;
+    line-height: 1;
 }
 
 .expression_list_buttons {

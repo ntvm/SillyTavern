@@ -61,9 +61,6 @@ const _ = require('lodash');
 util.inspect.defaultOptions.maxArrayLength = null;
 util.inspect.defaultOptions.maxStringLength = null;
 
-// Create files before running anything else
-createDefaultFiles();
-
 // local library imports
 const basicAuthMiddleware = require('./src/middleware/basicAuthMiddleware');
 const characterCardParser = require('./src/character-card-parser.js');
@@ -72,26 +69,6 @@ const novelai = require('./src/novelai');
 const statsHelpers = require('./statsHelpers.js');
 const { writeSecret, readSecret, readSecretState, migrateSecrets, SECRET_KEYS, getAllSecrets } = require('./src/secrets');
 const { delay, getVersion } = require('./src/util');
-
-function createDefaultFiles() {
-    const files = {
-        settings: 'public/settings.json',
-        bg_load: 'public/css/bg_load.css',
-        config: 'config.conf',
-    };
-
-    for (const file of Object.values(files)) {
-        try {
-            if (!fs.existsSync(file)) {
-                const defaultFilePath = path.join('default', path.parse(file).base);
-                fs.copyFileSync(defaultFilePath, file);
-                console.log(`Created default file: ${file}`);
-            }
-        } catch (error) {
-            console.error(`FATAL: Could not write default file: ${file}`, error);
-        }
-    }
-}
 
 // Work around a node v20.0.0, v20.1.0, and v20.2.0 bug. The issue was fixed in v20.3.0.
 // https://github.com/nodejs/node/issues/47822#issuecomment-1564708870
@@ -514,7 +491,7 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
         use_authors_note: false,
         use_world_info: false,
         max_context_length: request.body.max_context_length,
-        singleline: !!request.body.singleline,
+        max_length: request.body.max_length,
     };
 
     if (request.body.gui_settings == false) {
@@ -2998,13 +2975,42 @@ app.get('/discover_extensions', jsonParser, function (_, response) {
     return response.send(extensions);
 });
 
+/**
+ * Gets the path to the sprites folder for the provided character name
+ * @param {string} name - The name of the character
+ * @param {boolean} isSubfolder - Whether the name contains a subfolder
+ * @returns {string | null} The path to the sprites folder. Null if the name is invalid.
+ */
+function getSpritesPath(name, isSubfolder) {
+    if (isSubfolder) {
+        const nameParts = name.split('/');
+        const characterName = sanitize(nameParts[0]);
+        const subfolderName = sanitize(nameParts[1]);
+
+        if (!characterName || !subfolderName) {
+            return null;
+        }
+
+        return path.join(directories.characters, characterName, subfolderName);
+    }
+
+    name = sanitize(name);
+
+    if (!name) {
+        return null;
+    }
+
+    return path.join(directories.characters, name);
+}
+
 app.get('/get_sprites', jsonParser, function (request, response) {
     const name = String(request.query.name);
-    const spritesPath = path.join(directories.characters, name);
+    const isSubfolder = name.includes('/');
+    const spritesPath = getSpritesPath(name, isSubfolder);
     let sprites = [];
 
     try {
-        if (fs.existsSync(spritesPath) && fs.statSync(spritesPath).isDirectory()) {
+        if (spritesPath && fs.existsSync(spritesPath) && fs.statSync(spritesPath).isDirectory()) {
             sprites = fs.readdirSync(spritesPath)
                 .filter(file => {
                     const mimeType = mime.lookup(file);
@@ -5309,21 +5315,18 @@ app.post('/get_character_assets_list', jsonParser, async (request, response) => 
 
 // Stable Diffusion generation
 require('./src/stable-diffusion').registerEndpoints(app, jsonParser);
+
 // LLM and SD Horde generation
 require('./src/horde').registerEndpoints(app, jsonParser);
+
 // Vector storage DB
 require('./src/vectors').registerEndpoints(app, jsonParser);
+
 // Chat translation
 require('./src/translate').registerEndpoints(app, jsonParser);
+
 // Emotion classification
-import('./src/classify.mjs').then(module => {
-    module.default.registerEndpoints(app, jsonParser);
-}).catch(err => {
-    console.error(err);
-});
+require('./src/classify').registerEndpoints(app, jsonParser);
+
 // Image captioning
-import('./src/caption.mjs').then(module => {
-    module.default.registerEndpoints(app, jsonParser);
-}).catch(err => {
-    console.error(err);
-});
+require('./src/caption').registerEndpoints(app, jsonParser);
