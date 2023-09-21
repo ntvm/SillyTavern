@@ -842,8 +842,8 @@
                                             </div>
                                         </div>
                                         <div class="range-block m-t-1">
-                                            <div class="range-block-title openai_restorable">
-                                                <span data-i18n="Continue nudge">Continue nudge</span>
+                                            <div class="range-block-title openai_restorable" data-i18n="Continue nudge">
+                                                <span>Continue nudge</span>
                                                 <div id="continue_nudge_prompt_restore" title="Restore new chat prompt" class="right_menu_button">
                                                     <div class="fa-solid fa-clock-rotate-left"></div>
                                                 </div>
@@ -1753,10 +1753,11 @@
                                     <input id="horde_trusted_workers_only" type="checkbox" />
                                     <span data-i18n="Trusted workers only">Trusted workers only</span>
                                 </label>
+                                <small id="adjustedHordeParams">Context: --, Response: --</small>
 
                                 <h4 data-i18n="API key">API key</h4>
                                 <small>
-                                <span data-i18n="Get it here:">Get it here: </span> <a target="_blank" href="https://horde.koboldai.net/register" data-i18n="Register">Register</a> (<a id="horde_kudos" href="javascript:void(0);" data-i18n="View my Kudos">View my Kudos</a>)<br>
+                                    <span data-i18n="Get it here:">Get it here: </span> <a target="_blank" href="https://horde.koboldai.net/register" data-i18n="Register">Register</a> (<a id="horde_kudos" href="javascript:void(0);" data-i18n="View my Kudos">View my Kudos</a>)<br>
                                     <span data-i18n="Enter">Enter </span> <span class="monospace">0000000000</span> <span data-i18n="to use anonymous mode.">to use anonymous mode. </span>
                                 </small>
                                 <!-- <div>
@@ -1952,6 +1953,10 @@
                                         <option value="gpt-3.5-turbo-16k-0613">gpt-3.5-turbo-16k-0613</option>
                                         <option value="gpt-3.5-turbo-0613">gpt-3.5-turbo-0613</option>
                                         <option value="gpt-3.5-turbo-0301">gpt-3.5-turbo-0301</option>
+                                    </optgroup>
+                                    <optgroup label="GPT-3.5 Turbo Instruct">
+                                        <option value="gpt-3.5-turbo-instruct">gpt-3.5-turbo-instruct</option>
+                                        <option value="gpt-3.5-turbo-instruct-0914">gpt-3.5-turbo-instruct-0914</option>
                                     </optgroup>
                                     <optgroup label="GPT-4">
                                         <option value="gpt-4">gpt-4</option>
@@ -2496,25 +2501,27 @@
                         </div>
                         <div data-newbie-hidden>
                             <h4>
-                                <span data-i18n="Multigen">Multigen</span>
-                                <a href="https://docs.sillytavern.app/usage/core-concepts/advancedformatting/#multigen" class="notes-link" target="_blank">
-                                    <span class="note-link-span">?</span>
-                                </a>
+                                <span data-i18n="Auto-Continue">Auto-Continue</span>
                             </h4>
-                            <label class="checkbox_label" for="multigen">
-                                <input id="multigen" type="checkbox" />
-                                <span data-i18n="Enabled">
-                                    Enabled
-                                </span>
-                            </label>
-                            <div class="multigen_settings_block">
-                                <label for="multigen_1st_chunk">
-                                    <small><span data-i18n="First chunk (tokens)">First chunk (tokens)</span></small>
-                                    <input id="multigen_first_chunk" type="number" class="text_pole textarea_compact" min="1" max="512" />
+                            <div class="flex-container">
+                                <label class="checkbox_label" for="auto_continue_enabled">
+                                    <input id="auto_continue_enabled" type="checkbox" />
+                                    <span data-i18n="Enabled">
+                                        Enabled
+                                    </span>
                                 </label>
-                                <label for="multigen_next_chunk">
-                                    <small><span data-i18n="Next chunks (tokens)">Next chunks (tokens)</span></small>
-                                    <input id="multigen_next_chunks" type="number" class="text_pole textarea_compact" min="1" max="512" />
+                                <label class="checkbox_label" for="auto_continue_allow_chat_completions">
+                                    <input id="auto_continue_allow_chat_completions" type="checkbox" />
+                                    <span data-i18n="Allow for Chat Completion APIs">
+                                        Allow for Chat Completion APIs
+                                    </span>
+                                </label>
+                            </div>
+
+                            <div class="auto_continue_settings_block">
+                                <label for="auto_continue_target_length">
+                                    <span data-i18n="Target length (tokens)">Target length (tokens)</span>
+                                    <input id="auto_continue_target_length" type="number" class="text_pole textarea_compact" min="0" max="1024" />
                                 </label>
                             </div>
                         </div>
@@ -2693,7 +2700,7 @@
                     <h3><span data-i18n="User Settings">User Settings</span></h3>
                     <div id="version_display"></div>
                 </div>
-                <div class="flex-container spaceEvenly">
+                <div id="user-settings-block-content" class="flex-container spaceEvenly">
                     <div id="UI-Theme-Block" class="flex-container flexFlowColumn wide100p">
                         <div id="color-picker-block" class="flex-container flexFlowColumn flexNoGap">
                             <div id="UI-Mode-Block">
@@ -2730,6 +2737,10 @@
                                 <div class="flex-container">
                                     <toolcool-color-picker id="blur-tint-color-picker"></toolcool-color-picker>
                                     <span data-i18n="Blur Tint">UI Background</span>
+                                </div>
+                                <div class="flex-container">
+                                    <toolcool-color-picker id="border-color-picker"></toolcool-color-picker>
+                                    <span data-i18n="UI Border">UI Border</span>
                                 </div>
                                 <div class="flex-container">
                                     <toolcool-color-picker id="user-mes-blur-tint-color-picker"></toolcool-color-picker>
@@ -2898,7 +2909,7 @@
                                     <input id="play_sound_unfocused" type="checkbox" />
                                     <span data-i18n="Background Sound Only">Background Sound Only</span>
                                 </label>
-                                <label data-newbie-hidden for="fast_ui_mode" class="checkbox_label" title="removes blur and uses alternative background color for divs" data-i18n="[title]removes blur and uses alternative background color for divs">
+                                <label data-newbie-hidden for="fast_ui_mode" class="checkbox_label" title="removes blur from window backgrounds" data-i18n="[title]removes blur from window backgrounds">
                                     <input id="fast_ui_mode" type="checkbox" />
                                     <span data-i18n="No Blur Effect">No Blur Effect</span>
                                 </label>
@@ -3521,7 +3532,7 @@
 
                 <div id="rm_character_import" class="right_menu" style="display: none;">
                     <form id="form_import" action="javascript:void(null);" method="post" enctype="multipart/form-data">
-                        <input multiple type="file" id="character_import_file" accept=".json, image/png, image/webp" name="avatar">
+                        <input multiple type="file" id="character_import_file" accept=".json, image/png" name="avatar">
                         <input id="character_import_file_type" name="file_type" class="text_pole" maxlength="999" size="2" value="" autocomplete="off">
                     </form>
                 </div>
@@ -3821,6 +3832,7 @@
     <div id="tag_view_template" class="template_element">
         <div class="tag_view_item">
             <div class="tagColorPickerHolder"></div>
+            <div class="tagColorPicker2Holder"></div>
             <div class="tag_view_name" contenteditable="true"></div>
             <div class="tag_view_counter"><span class="tag_view_counter_value"></span>&nbsp;entries</div>
             <div title="Delete tag" class="tag_delete fa-solid fa-trash-can right_menu_button" data-i18n="[title]Delete tag"></div>
@@ -3970,6 +3982,7 @@
                                         <option value="1" data-i18n="After Char Defs">After Char Defs</option>
                                         <option value="2" data-i18n="Before AN">Before AN</option>
                                         <option value="3" data-i18n="After AN">After AN</option>
+                                        <option value="4" data-i18n="at Depth">at Depth</option>
                                     </select>
                                 </small>
                             </div>
@@ -4133,7 +4146,8 @@
                             <div title="Generate Image" class="sd_message_gen fa-solid fa-paintbrush" data-i18n="[title]Generate Image"></div>
                             <div title="Narrate" class="mes_narrate fa-solid fa-bullhorn" data-i18n="[title]Narrate"></div>
                             <div title="Prompt" class="mes_prompt fa-solid fa-square-poll-horizontal " data-i18n="[title]Prompt"></div>
-                            <div title="Create bookmark" class="mes_create_bookmark fa-regular fa-code-branch" data-i18n="[title]Create Bookmark"></div>
+                            <div title="Create bookmark" class="mes_create_bookmark fa-regular fa-solid fa-book-bookmark" data-i18n="[title]Create Bookmark"></div>
+                            <div title="Create branch" class="mes_create_branch fa-regular fa-code-branch" data-i18n="[title]Create Branch"></div>
                             <div title="Copy" class="mes_copy fa-solid fa-copy " data-i18n="[title]Copy"></div>
                         </div>
                         <div title="Open bookmark chat" class="mes_bookmark fa-solid fa-bookmark" data-i18n="[title]Open bookmark chat"></div>
@@ -4488,7 +4502,6 @@
     <div id="export_format_popup" class="list-group">
         <div class="export_format list-group-item" data-format="png">PNG</div>
         <div class="export_format list-group-item" data-format="json">JSON</div>
-        <div class="export_format list-group-item" data-format="webp">WEBP</div>
     </div>
 
     <div id="zoomed_avatar_template" class="template_element">

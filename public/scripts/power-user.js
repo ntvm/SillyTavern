@@ -93,9 +93,11 @@ let power_user = {
     always_force_name2: false,
     user_prompt_bias: '',
     show_user_prompt_bias: true,
-    multigen: false,
-    multigen_first_chunk: 50,
-    multigen_next_chunks: 30,
+    auto_continue: {
+        enabled: false,
+        allow_chat_completions: false,
+        target_length: 400,
+    },
     markdown_escape_strings: '',
 
     ui_mode: ui_mode.POWER,
@@ -124,6 +126,8 @@ let power_user = {
     user_mes_blur_tint_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeUserMesBlurTintColor').trim()}`,
     bot_mes_blur_tint_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeBotMesBlurTintColor').trim()}`,
     shadow_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeShadowColor').trim()}`,
+    border_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeBorderColor').trim()}`,
+
 
     waifuMode: false,
     movingUI: false,
@@ -225,6 +229,7 @@ const storage_keys = {
     blur_strength: "TavernAI_blur_strength",
     shadow_color: "TavernAI_shadow_color",
     shadow_width: "TavernAI_shadow_width",
+    border_color: "TavernAI_border_color",
 
     waifuMode: "TavernAI_waifuMode",
     movingUI: "TavernAI_movingUI",
@@ -520,6 +525,9 @@ async function applyThemeColor(type) {
     if (type === 'shadow') {
         document.documentElement.style.setProperty('--SmartThemeShadowColor', power_user.shadow_color);
     }
+    if (type === 'border') {
+        document.documentElement.style.setProperty('--SmartThemeBorderColor', power_user.border_color);
+    }
 }
 
 async function applyBlurStrength() {
@@ -570,6 +578,7 @@ async function applyTheme(name) {
         { key: 'user_mes_blur_tint_color', selector: '#user-mes-blur-tint-color-picker', type: 'userMesBlurTint' },
         { key: 'bot_mes_blur_tint_color', selector: '#bot-mes-blur-tint-color-picker', type: 'botMesBlurTint' },
         { key: 'shadow_color', selector: '#shadow-color-picker', type: 'shadow' },
+        { key: 'border_color', selector: '#border-color-picker', type: 'border' },
         {
             key: 'blur_strength',
             action: async () => {
@@ -848,9 +857,9 @@ function loadPowerUserSettings(settings, data) {
     $("#noShadowsmode").prop("checked", power_user.noShadows);
     $("#start_reply_with").val(power_user.user_prompt_bias);
     $("#chat-show-reply-prefix-checkbox").prop("checked", power_user.show_user_prompt_bias);
-    $("#multigen").prop("checked", power_user.multigen);
-    $("#multigen_first_chunk").val(power_user.multigen_first_chunk);
-    $("#multigen_next_chunks").val(power_user.multigen_next_chunks);
+    $("#auto_continue_enabled").prop("checked", power_user.auto_continue.enabled);
+    $("#auto_continue_allow_chat_completions").prop("checked", power_user.auto_continue.allow_chat_completions);
+    $("#auto_continue_target_length").val(power_user.auto_continue.target_length);
     $("#play_message_sound").prop("checked", power_user.play_message_sound);
     $("#play_sound_unfocused").prop("checked", power_user.play_sound_unfocused);
     $("#never_resize_avatars").prop("checked", power_user.never_resize_avatars);
@@ -888,6 +897,7 @@ function loadPowerUserSettings(settings, data) {
     $("#user-mes-blur-tint-color-picker").attr('color', power_user.user_mes_blur_tint_color);
     $("#bot-mes-blur-tint-color-picker").attr('color', power_user.bot_mes_blur_tint_color);
     $("#shadow-color-picker").attr('color', power_user.shadow_color);
+    $("#border-color-picker").attr('color', power_user.border_color);
     $("#ui_mode_select").val(power_user.ui_mode).find(`option[value="${power_user.ui_mode}"]`).attr('selected', true);
 
     for (const theme of themes) {
@@ -1225,6 +1235,7 @@ async function saveTheme() {
         bot_mes_blur_tint_color: power_user.bot_mes_blur_tint_color,
         shadow_color: power_user.shadow_color,
         shadow_width: power_user.shadow_width,
+        border_color: power_user.border_color,
         font_scale: power_user.font_scale,
         fast_ui_mode: power_user.fast_ui_mode,
         waifuMode: power_user.waifuMode,
@@ -1816,8 +1827,18 @@ $(document).ready(() => {
         saveSettingsDebounced();
     })
 
-    $("#multigen").change(function () {
-        power_user.multigen = $(this).prop("checked");
+    $("#auto_continue_enabled").on('change', function () {
+        power_user.auto_continue.enabled = $(this).prop("checked");
+        saveSettingsDebounced();
+    });
+
+    $("#auto_continue_allow_chat_completions").on('change', function () {
+        power_user.auto_continue.allow_chat_completions = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $("#auto_continue_target_length").on('input', function () {
+        power_user.auto_continue.target_length = Number($(this).val());
         saveSettingsDebounced();
     });
 
@@ -1933,6 +1954,12 @@ $(document).ready(() => {
         saveSettingsDebounced();
     });
 
+    $("#border-color-picker").on('change', (evt) => {
+        power_user.border_color = evt.detail.rgba;
+        applyThemeColor('border');
+        saveSettingsDebounced();
+    });
+
     $("#themes").on('change', function () {
         const themeSelected = String($(this).find(':selected').val());
         power_user.theme = themeSelected;
@@ -1983,16 +2010,6 @@ $(document).ready(() => {
         power_user.sort_order = $(this).find(":selected").data('order');
         power_user.sort_rule = $(this).find(":selected").data('rule');
         printCharacters();
-        saveSettingsDebounced();
-    });
-
-    $("#multigen_first_chunk").on('input', function () {
-        power_user.multigen_first_chunk = Number($(this).val());
-        saveSettingsDebounced();
-    });
-
-    $("#multigen_next_chunks").on('input', function () {
-        power_user.multigen_next_chunks = Number($(this).val());
         saveSettingsDebounced();
     });
 

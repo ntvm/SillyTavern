@@ -566,6 +566,11 @@ async function moduleWorker() {
         offlineMode.css('display', 'none');
     }
 
+    // Don't bother classifying if current char has no sprites and no default expressions are enabled
+    if (spriteCache[spriteFolderName].length === 0 && !extension_settings.expressions.showDefault) {
+        return;
+    }
+
     // check if last message changed
     if ((lastCharacter === context.characterId || lastCharacter === context.groupId)
         && lastMessage === currentLastMessage.mes) {
@@ -574,6 +579,7 @@ async function moduleWorker() {
 
     // API is busy
     if (inApiCall) {
+        console.debug('Classification API is busy');
         return;
     }
 
@@ -737,7 +743,8 @@ async function setSpriteSlashCommand(_, spriteId) {
 
     spriteId = spriteId.trim().toLowerCase();
 
-    const spriteFolderName = getSpriteFolderName();
+    const currentLastMessage = getLastCharacterMessage();
+    const spriteFolderName = getSpriteFolderName(currentLastMessage, currentLastMessage.name);
     await validateImages(spriteFolderName);
 
     // Fuzzy search for sprite
@@ -916,7 +923,7 @@ async function getSpritesList(name) {
     console.debug('getting sprites list');
 
     try {
-        const result = await fetch(`/get_sprites?name=${encodeURIComponent(name)}`);
+        const result = await fetch(`/api/sprites/get?name=${encodeURIComponent(name)}`);
         let sprites = result.ok ? (await result.json()) : [];
         return sprites;
     }
@@ -1248,7 +1255,7 @@ async function onClickExpressionUpload(event) {
         formData.append('label', id);
         formData.append('avatar', file);
 
-        await handleFileUpload('/upload_sprite', formData);
+        await handleFileUpload('/api/sprites/upload', formData);
 
         // Reset the input
         e.target.form.reset();
@@ -1354,7 +1361,7 @@ async function onClickExpressionUploadPackButton() {
         formData.append('name', name);
         formData.append('avatar', file);
 
-        const { count } = await handleFileUpload('/upload_sprite_pack', formData);
+        const { count } = await handleFileUpload('/api/sprites/upload-zip', formData);
         toastr.success(`Uploaded ${count} image(s) for ${name}`);
 
         // Reset the input
@@ -1381,7 +1388,7 @@ async function onClickExpressionDelete(event) {
     const name = $('#image_list').data('name');
 
     try {
-        await fetch('/delete_sprite', {
+        await fetch('/api/sprites/delete', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify({ name, label: id }),
