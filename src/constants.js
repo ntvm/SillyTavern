@@ -21,6 +21,7 @@ const DIRECTORIES = {
     instruct: 'public/instruct',
     context: 'public/context',
     backups: 'backups/',
+    NvSettings: 'public/NvSettings',
     quickreplies: 'public/QuickReplies',
     assets: 'public/assets',
 };

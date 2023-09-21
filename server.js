@@ -2867,8 +2867,9 @@ async function sendClaudeRequest(request, response) {
         request.socket.on('close', function () {
             controller.abort();
         });
-
-        let requestPrompt = convertClaudePrompt(request.body.messages, true, !request.body.exclude_assistant);
+        const { HumAssistOff } = require('./config.conf');
+        const { SystemFul  } = require('./config.conf');
+        let requestPrompt = convertClaudePrompt(request.body.messages, true, !request.body.exclude_assistant, HumAssistOff, SystemFul);
 
         if (request.body.assistant_prefill && !request.body.exclude_assistant) {
             requestPrompt += request.body.assistant_prefill;

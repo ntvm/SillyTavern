@@ -232,6 +232,12 @@ function continueChatCallback() {
     $('#option_continue').trigger('click', { fromSlashCommand: true });
 }
 
+function lookChatCallback() {
+    // Prevent infinite recursion
+    $('#send_textarea').val('');
+    $('#option_lookaround').trigger('click', { fromSlashCommand: true });
+}
+
 export async function generateSystemMessage(_, prompt) {
     $('#send_textarea').val('');
 
