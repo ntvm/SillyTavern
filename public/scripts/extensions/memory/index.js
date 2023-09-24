@@ -225,18 +225,21 @@ function onMemoryPromptInput() {
 function onMemoryTemplateInput() {
     const value = $(this).val();
     extension_settings.memory.template = value;
+    reinsertMemory();
     saveSettingsDebounced();
 }
 
 function onMemoryDepthInput() {
     const value = $(this).val();
     extension_settings.memory.depth = Number(value);
+    reinsertMemory();
     saveSettingsDebounced();
 }
 
 function onMemoryPositionChange(e) {
     const value = e.target.value;
     extension_settings.memory.position = value;
+    reinsertMemory();
     saveSettingsDebounced();
 }
 
@@ -438,7 +441,7 @@ async function summarizeChatMain(context, force) {
         return;
     }
 
-    const summary = await generateQuietPrompt(prompt);
+    const summary = await generateQuietPrompt(prompt, false);
     const newContext = getContext();
 
     // something changed during summarization request
@@ -563,6 +566,11 @@ function onMemoryContentInput() {
     setMemoryContext(value, true);
 }
 
+function reinsertMemory() {
+    const existingValue = $('#memory_contents').val();
+    setMemoryContext(existingValue, false);
+}
+
 function setMemoryContext(value, saveToMessage) {
     switch (extension_settings.memory.Extensionmode) {
 	case "XML_hints":
@@ -649,6 +657,10 @@ jQuery(function () {
                         </div>
                         <label for="memory_position">Injection position:</label>
                         <div class="radio_group">
+                            <label>
+                                <input type="radio" name="memory_position" value="2" />
+                                Before Main Prompt / Story String
+                            </label>
                             <label>
                                 <input type="radio" name="memory_position" value="0" />
                                 After scenario
