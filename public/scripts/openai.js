@@ -713,23 +713,26 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
 
     // Bias
     if (bias && bias.trim().length) addToChatCompletion('bias');
-
-    // Tavern Extras - Summary
-/*<<<<<<< HEAD
-    if (prompts.has('summary')) chatCompletion.insert(Message.fromPrompt(prompts.get('summary')), 'scenario');
-
-
     // Tavern Extras - Nvkun
     if (prompts.has('XMLpromptPush')) chatCompletion.insert(Message.fromPrompt(prompts.get('XMLpromptPush')), 'scenario');
-=======*/
+    // Tavern Extras - Summary
+
     if (prompts.has('summary')) {
         const summary = prompts.get('summary');
+        switch (summary.position){
+            case "end":
+                chatCompletion.insert(Message.fromPrompt(summary), 'scenario');
+                break
+			
+            case "start":
+                chatCompletion.insert(Message.fromPrompt(summary), 'main');
+                break
 
-        if (summary.position) {
-            chatCompletion.insert(Message.fromPrompt(summary), 'main', summary.position);
-        }
+            case "false":
+                break
+		
     }
-//>>>>>>> staging
+	}
 
     // Authors Note
     if (prompts.has('authorsNote')) {
@@ -751,17 +754,24 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
 
     // Vectors Memory
     if (prompts.has('vectorsMemory')) {
-/*<<<<<<< HEAD
-        const vectorsMemory = Message.fromPrompt(prompts.get('vectorsMemory'));
-        chatCompletion.insert(vectorsMemory, 'scenario');
-*/
         const vectorsMemory = prompts.get('vectorsMemory');
-
-        if (vectorsMemory.position) {
-            chatCompletion.insert(Message.fromPrompt(vectorsMemory), 'main', vectorsMemory.position);
-        }
-//>>>>>>> staging
+        switch (vectorsMemory.position) {
+            case "end":
+                chatCompletion.insert(Message.fromPrompt(vectorsMemory), 'scenario');
+                break
+			
+            case "start":
+                chatCompletion.insert(Message.fromPrompt(vectorsMemory), 'main');
+                break
+				
+            case false:
+                break
+		
     }
+	}
+
+
+
 
     // Smart Context (ChromaDB)
     if (prompts.has('smartContext')) {
@@ -826,7 +836,7 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
 
     // Tavern Extras - Summary NVfix
     const summary = extensionPrompts['1_memory'];
-    if (summary && summary.value && extension_settings.memory.position == "0") systemPrompts.push({
+    if (summary && summary.value && summary.position !== 1 ) systemPrompts.push({
         role: 'system',
         content: summary.value,
         identifier: 'summary',
@@ -840,7 +850,8 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
 	    if (extension_settings.Nvkun.Inputer_frozen == true && extension_settings.Nvkun.Inputer_prompt !== '') systemPrompts.push({
             role: 'system',
             content: extension_settings.Nvkun.Inputer_prompt,
-            identifier: 'XMLpromptPush'
+            identifier: 'XMLpromptPush',
+			position: ''
         });			
 	    break
 	
@@ -850,7 +861,8 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
         if (inject1 && inject1.value && extension_settings.Nvkun.Inputer_frozen == true) systemPrompts.push({
             role: 'system',
             content: inject1.value,
-            identifier: 'XMLpromptPush'
+            identifier: 'XMLpromptPush',
+			position: ''
         });
         break
 	
@@ -873,7 +885,7 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
 
     // Vectors Memory
     const vectorsMemory = extensionPrompts['3_vectors'];
-    if (vectorsMemory && vectorsMemory.value && extension_settings.vectors.position == "0") systemPrompts.push({
+    if (vectorsMemory && vectorsMemory.value && vectorsMemory.position !== 1) systemPrompts.push({
         role: 'system',
         content: vectorsMemory.value,
         identifier: 'vectorsMemory',

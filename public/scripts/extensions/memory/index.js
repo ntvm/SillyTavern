@@ -663,7 +663,7 @@ jQuery(function () {
                             </label>
                             <label>
                                 <input type="radio" name="memory_position" value="0" />
-                                After scenario
+                                After Main Prompt / Story String
                             </label>
                             <label>
                                 <input type="radio" name="memory_position" value="1" />

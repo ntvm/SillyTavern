@@ -1,4 +1,4 @@
-import { eventSource, event_types, extension_prompt_types, getCurrentChatId, getRequestHeaders, is_send_press, saveSettingsDebounced, setExtensionPrompt, substituteParams } from "../../../script.js";
+import { eventSource, event_types, extension_prompt_types, getCurrentChatId, getRequestHeaders, is_send_press, saveSettingsDebounced, saveSettings, setExtensionPrompt, substituteParams } from "../../../script.js";
 import { ModuleWorkerWrapper, extension_settings, getContext, renderExtensionTemplate } from "../../extensions.js";
 import { collapseNewlines, power_user, ui_mode } from "../../power-user.js";
 import { debounce, getStringHash as calculateHash, waitUntilCondition, onlyUnique } from "../../utils.js";
@@ -423,7 +423,7 @@ jQuery(async () => {
     $('input[name="vectors_position"]').on('change', () => {
         settings.position = Number($('input[name="vectors_position"]:checked').val());
         Object.assign(extension_settings.vectors, settings);
-        saveSettingsDebounced();
+        saveSettings();
     });
     $('#vectors_advanced_settings').toggleClass('displayNone', power_user.ui_mode === ui_mode.SIMPLE);
 
