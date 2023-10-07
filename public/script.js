@@ -16,6 +16,11 @@ import {
     generateTextGenWithStreaming,
     getTextGenGenerationData,
     formatTextGenURL,
+    getTextGenUrlSourceId,
+    isMancer,
+    isAphrodite,
+    textgen_types,
+    textgenerationwebui_banned_in_macros,
 } from "./scripts/textgen-settings.js";
 
 import {
@@ -178,7 +183,6 @@ import {
 import { applyLocale } from "./scripts/i18n.js";
 import { getTokenCount, getTokenizerModel, saveTokenCache } from "./scripts/tokenizers.js";
 import { initPersonas, selectCurrentPersona, setPersonaDescription } from "./scripts/personas.js";
-import { loadMancerModels } from "./scripts/mancer-settings.js";
 
 //exporting functions and vars for mods
 export {
@@ -391,6 +395,8 @@ const extension_prompt_types = {
     BEFORE_PROMPT: 2
 };
 
+export const MAX_INJECTION_DEPTH = 1000;
+
 let system_messages = {};
 
 function getSystemMessages() {
@@ -590,6 +596,8 @@ function getCurrentChatId() {
 }
 
 const talkativeness_default = 0.5;
+const depth_prompt_depth_default = 4;
+const per_page_default = 50;
 
 var is_advanced_char_open = false;
 
@@ -612,7 +620,9 @@ let create_save = {
     mes_example: "",
     world: "",
     talkativeness: talkativeness_default,
-    alternate_greetings: []
+    alternate_greetings: [],
+    depth_prompt_prompt: '',
+    depth_prompt_depth: depth_prompt_depth_default,
 };
 
 //animation right menu
@@ -631,7 +641,6 @@ let is_get_status = false;
 let is_get_status_novel = false;
 let is_api_button_press = false;
 let is_api_button_press_novel = false;
-let api_use_mancer_webui = false;
 
 let is_send_press = false; //Send generation
 
@@ -770,7 +779,8 @@ async function getStatus() {
             data: JSON.stringify({
                 api_server: main_api == "kobold" ? api_server : api_server_textgenerationwebui,
                 main_api: main_api,
-                use_mancer: main_api == "textgenerationwebui" ? api_use_mancer_webui : false,
+                use_mancer: main_api == "textgenerationwebui" ? isMancer() : false,
+                use_aphrodite: main_api == "textgenerationwebui" ? isAphrodite() : false,
             }),
             beforeSend: function () { },
             cache: false,
@@ -914,7 +924,7 @@ async function printCharacters(fullRefresh = false) {
     const storageKey = 'Characters_PerPage';
     $("#rm_print_characters_pagination").pagination({
         dataSource: getEntitiesList({ doFilter: true }),
-        pageSize: Number(localStorage.getItem(storageKey)) || 50,
+        pageSize: Number(localStorage.getItem(storageKey)) || per_page_default,
         sizeChangerOptions: [10, 25, 50, 100, 250, 500, 1000],
         pageRange: 1,
         pageNumber: saveCharactersPage || 1,
@@ -1752,7 +1762,35 @@ function substituteParams(content, _name1, _name2, _original, _group) {
     });
     content = randomReplace(content);
     content = diceRollReplace(content);
+    content = bannedWordsReplace(content);
     return content;
+}
+
+/**
+ * Replaces banned words in macros with an empty string.
+ * Adds them to textgenerationwebui ban list.
+ * @param {string} inText Text to replace banned words in
+ * @returns {string} Text without the "banned" macro
+ */
+function bannedWordsReplace(inText) {
+    if (!inText) {
+        return '';
+    }
+
+    const banPattern = /{{banned "(.*)"}}/gi;
+
+    if (main_api == 'textgenerationwebui') {
+        const bans = inText.matchAll(banPattern);
+        if (bans) {
+            for (const banCase of bans) {
+                console.log("Found banned words in macros: " + banCase[1]);
+                textgenerationwebui_banned_in_macros.push(banCase[1]);
+            }
+        }
+    }
+
+    inText = inText.replaceAll(banPattern, "");
+    return inText;
 }
 
 function getTimeSinceLastMessage() {
@@ -2325,7 +2363,11 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         return;
     }
 
-    if (main_api == 'textgenerationwebui' && textgenerationwebui_settings.streaming && !textgenerationwebui_settings.streaming_url) {
+    if (
+        main_api == 'textgenerationwebui' &&
+        textgenerationwebui_settings.streaming &&
+        textgenerationwebui_settings.type === textgen_types.OOBA &&
+        !textgenerationwebui_settings.streaming_url) {
         toastr.error('Streaming URL is not set. Look it up in the console window when starting TextGen Web UI');
         is_send_press = false;
         return;
@@ -2472,6 +2514,11 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             systemPrompt = formatInstructModeSystemPrompt(substituteParams(systemPrompt, name1, name2, power_user.instruct.system_prompt));
         }
 
+        // Depth prompt (character-specific A/N)
+        const depthPromptText = baseChatReplace(characters[this_chid].data?.extensions?.depth_prompt?.prompt?.trim(), name1, name2) || '';
+        const depthPromptDepth = characters[this_chid].data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default;
+        setExtensionPrompt('DEPTH_PROMPT', depthPromptText, extension_prompt_types.IN_CHAT, depthPromptDepth);
+
         // Parse example messages
         if (!mesExamples.startsWith('<START>')) {
             mesExamples = '<START>\n' + mesExamples.trim();
@@ -2572,6 +2619,15 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         setFloatingPrompt();
         // Add WI to prompt (and also inject WI to AN value via hijack)
         let { worldInfoString, worldInfoBefore, worldInfoAfter, worldInfoDepth } = await getWorldInfoPrompt(chat2, this_max_context);
+
+        // Add all depth WI entries to prompt
+        if (Array.isArray(worldInfoDepth)) {
+            worldInfoDepth.forEach((e) => {
+                const joinedEntries = e.entries.join("\n");
+                setExtensionPrompt(`customDepthWI-${e.depth}`, joinedEntries, extension_prompt_types.IN_CHAT, e.depth)
+            });
+        }
+
         // Add persona description to prompt
         addPersonaDescriptionExtensionPrompt();
         // Call combined AN into Generate
@@ -2595,14 +2651,6 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         };
 
         const storyString = renderStoryString(storyStringParams);
-
-        // Add all depth WI entries to prompt
-        if (Array.isArray(worldInfoDepth)) {
-            worldInfoDepth.forEach((e) => {
-                const joinedEntries = e.entries.join("\n");
-                setExtensionPrompt(`customDepthWI-${e.depth}`, joinedEntries, extension_prompt_types.IN_CHAT, e.depth)
-            });
-        }
 
         if (main_api === 'openai') {
             message_already_generated = '';
@@ -2889,7 +2937,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                 // TODO: Rewrite getExtensionPrompt to not require multiple for loops
                 // Set all extension prompts where insertion depth > mesSend length
                 if (finalMesSend.length) {
-                    for (let upperDepth = 100; upperDepth >= finalMesSend.length; upperDepth--) {
+                    for (let upperDepth = MAX_INJECTION_DEPTH; upperDepth >= finalMesSend.length; upperDepth--) {
                         const upperAnchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, upperDepth);
                         if (upperAnchor && upperAnchor.length) {
                             finalMesSend[0].extensionPrompts.push(upperAnchor);
@@ -3013,7 +3061,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             }
             else if (main_api == 'textgenerationwebui') {
                 generate_data = getTextGenGenerationData(finalPrompt, this_amount_gen, isImpersonate, cfgValues);
-                generate_data.use_mancer = api_use_mancer_webui;
+                generate_data.use_mancer = isMancer();
+                generate_data.use_aphrodite = isAphrodite();
             }
             else if (main_api == 'novel') {
                 const this_settings = novelai_settings[novelai_setting_names[nai_settings.preset_settings_novel]];
@@ -3250,7 +3299,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     //console.log('runGenerate calling showSwipeBtns');
                     showSwipeButtons();
 
-                    if (main_api == 'textgenerationwebui' && api_use_mancer_webui) {
+                    if (main_api == 'textgenerationwebui' && isMancer()) {
                         const errorText = `<h3>Inferencer endpoint is unhappy!</h3>
                         Returned status <tt>${data.status}</tt> with the reason:<br/>
                         ${data.response}`;
@@ -4983,9 +5032,7 @@ async function getSettings(type) {
         api_server_textgenerationwebui = settings.api_server_textgenerationwebui;
         $("#textgenerationwebui_api_url_text").val(api_server_textgenerationwebui);
         $("#mancer_api_url_text").val(api_server_textgenerationwebui);
-        api_use_mancer_webui = settings.api_use_mancer_webui
-        $('#use-mancer-api-checkbox').prop("checked", api_use_mancer_webui);
-        $('#use-mancer-api-checkbox').trigger("change");
+        $("#aphrodite_api_url_text").val(api_server_textgenerationwebui);
 
         selected_button = settings.selected_button;
 
@@ -5021,7 +5068,6 @@ async function saveSettings(type) {
             active_group: active_group,
             api_server: api_server,
             api_server_textgenerationwebui: api_server_textgenerationwebui,
-            api_use_mancer_webui: api_use_mancer_webui,
             preset_settings: preset_settings,
             user_avatar: user_avatar,
             amount_gen: amount_gen,
@@ -5449,7 +5495,7 @@ function select_rm_info(type, charId, previousCharId = null) {
             }
 
             try {
-                const perPage = Number(localStorage.getItem('Characters_PerPage'));
+                const perPage = Number(localStorage.getItem('Characters_PerPage')) || per_page_default;
                 const page = Math.floor(charIndex / perPage) + 1;
                 const selector = `#rm_print_characters_block [title^="${charId}"]`;
                 $('#rm_print_characters_pagination').pagination('go', page);
@@ -5484,7 +5530,7 @@ function select_rm_info(type, charId, previousCharId = null) {
                 return;
             }
 
-            const perPage = Number(localStorage.getItem('Characters_PerPage'));
+            const perPage = Number(localStorage.getItem('Characters_PerPage')) || per_page_default;
             const page = Math.floor(charIndex / perPage) + 1;
             $('#rm_print_characters_pagination').pagination('go', page);
             const selector = `#rm_print_characters_block [grid="${charId}"]`;
@@ -5553,6 +5599,8 @@ export function select_selected_character(chid) {
     $("#personality_textarea").val(characters[chid].personality);
     $("#firstmessage_textarea").val(characters[chid].first_mes);
     $("#scenario_pole").val(characters[chid].scenario);
+    $("#depth_prompt_prompt").val(characters[chid].data?.extensions?.depth_prompt?.prompt ?? '');
+    $("#depth_prompt_depth").val(characters[chid].data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default);
     $("#talkativeness_slider").val(characters[chid].talkativeness || talkativeness_default);
     $("#mes_example_textarea").val(characters[chid].mes_example);
     $("#selected_chat_pole").val(characters[chid].chat);
@@ -5620,6 +5668,8 @@ function select_rm_create() {
     $("#firstmessage_textarea").val(create_save.first_message);
     $("#talkativeness_slider").val(create_save.talkativeness);
     $("#scenario_pole").val(create_save.scenario);
+    $("#depth_prompt_prompt").val(create_save.depth_prompt_prompt);
+    $("#depth_prompt_depth").val(create_save.depth_prompt_depth);
     $("#mes_example_textarea").val(create_save.mes_example.trim().length === 0 ? '<START>' : create_save.mes_example);
     $('#character_json_data').val('');
     $("#avatar_div").css("display", "flex");
@@ -5648,7 +5698,7 @@ function select_rm_characters() {
  * @param {string} key Prompt injection id.
  * @param {string} value Prompt injection value.
  * @param {number} position Insertion position. 0 is after story string, 1 is in-chat with custom depth.
- * @param {number} depth Insertion depth. 0 represets the last message in context. Expected values up to 100.
+ * @param {number} depth Insertion depth. 0 represets the last message in context. Expected values up to MAX_INJECTION_DEPTH.
  */
 export function setExtensionPrompt(key, value, position, depth) {
     extension_prompts[key] = { value: String(value), position: Number(position), depth: Number(depth) };
@@ -6272,6 +6322,8 @@ async function createOrEditCharacter(e) {
                         { id: '#firstmessage_textarea', callback: value => create_save.first_message = value },
                         { id: '#talkativeness_slider', callback: value => create_save.talkativeness = value, defaultValue: talkativeness_default },
                         { id: '#scenario_pole', callback: value => create_save.scenario = value },
+                        { id: '#depth_prompt_prompt', callback: value => create_save.depth_prompt_prompt = value },
+                        { id: '#depth_prompt_depth', callback: value => create_save.depth_prompt_depth = value, defaultValue: depth_prompt_depth_default },
                         { id: '#mes_example_textarea', callback: value => create_save.mes_example = value },
                         { id: '#character_json_data', callback: () => { } },
                         { id: '#alternate_greetings_template', callback: value => create_save.alternate_greetings = value, defaultValue: [] },
@@ -7443,23 +7495,25 @@ jQuery(async function () {
 
     $("#character_name_pole").on("input", function () {
         if (menu_type == "create") {
-            create_save.name = $("#character_name_pole").val();
+            create_save.name = String($("#character_name_pole").val());
         }
     });
 
     const elementsToUpdate = {
-        '#description_textarea': function () { create_save.description = $("#description_textarea").val(); },
-        '#creator_notes_textarea': function () { create_save.creator_notes = $("#creator_notes_textarea").val(); },
-        '#character_version_textarea': function () { create_save.character_version = $("#character_version_textarea").val(); },
-        '#system_prompt_textarea': function () { create_save.system_prompt = $("#system_prompt_textarea").val(); },
-        '#post_history_instructions_textarea': function () { create_save.post_history_instructions = $("#post_history_instructions_textarea").val(); },
-        '#creator_textarea': function () { create_save.creator = $("#creator_textarea").val(); },
-        '#tags_textarea': function () { create_save.tags = $("#tags_textarea").val(); },
-        '#personality_textarea': function () { create_save.personality = $("#personality_textarea").val(); },
-        '#scenario_pole': function () { create_save.scenario = $("#scenario_pole").val(); },
-        '#mes_example_textarea': function () { create_save.mes_example = $("#mes_example_textarea").val(); },
-        '#firstmessage_textarea': function () { create_save.first_message = $("#firstmessage_textarea").val(); },
-        '#talkativeness_slider': function () { create_save.talkativeness = $("#talkativeness_slider").val(); },
+        '#description_textarea': function () { create_save.description = String($("#description_textarea").val()); },
+        '#creator_notes_textarea': function () { create_save.creator_notes = String($("#creator_notes_textarea").val()); },
+        '#character_version_textarea': function () { create_save.character_version = String($("#character_version_textarea").val()); },
+        '#system_prompt_textarea': function () { create_save.system_prompt = String($("#system_prompt_textarea").val()); },
+        '#post_history_instructions_textarea': function () { create_save.post_history_instructions = String($("#post_history_instructions_textarea").val()); },
+        '#creator_textarea': function () { create_save.creator = String($("#creator_textarea").val()); },
+        '#tags_textarea': function () { create_save.tags = String($("#tags_textarea").val()); },
+        '#personality_textarea': function () { create_save.personality = String($("#personality_textarea").val()); },
+        '#scenario_pole': function () { create_save.scenario = String($("#scenario_pole").val()); },
+        '#mes_example_textarea': function () { create_save.mes_example = String($("#mes_example_textarea").val()); },
+        '#firstmessage_textarea': function () { create_save.first_message = String($("#firstmessage_textarea").val()); },
+        '#talkativeness_slider': function () { create_save.talkativeness = Number($("#talkativeness_slider").val()); },
+        '#depth_prompt_prompt': function () { create_save.depth_prompt_prompt = String($("#depth_prompt_prompt").val()); },
+        '#depth_prompt_depth': function () { create_save.depth_prompt_depth = Number($("#depth_prompt_depth").val()); },
     };
 
     Object.keys(elementsToUpdate).forEach(function (id) {
@@ -7610,41 +7664,30 @@ jQuery(async function () {
         }
     });
 
-    $("#use-mancer-api-checkbox").on("change", function (e) {
-        const enabled = $("#use-mancer-api-checkbox").prop("checked");
-        $("#mancer_api_subpanel").toggle(enabled);
-        $("#tgwebui_api_subpanel").toggle(!enabled);
+    $("#api_button_textgenerationwebui").on('click', async function (e) {
+        const urlSourceId = getTextGenUrlSourceId();
 
-        api_use_mancer_webui = enabled;
-        saveSettingsDebounced();
-        getStatus();
-
-        if (enabled) {
-            loadMancerModels();
-        }
-    });
-
-    $("#api_button_textgenerationwebui").click(async function (e) {
-        const url_source = api_use_mancer_webui ? "#mancer_api_url_text" : "#textgenerationwebui_api_url_text";
-        if ($(url_source).val() != "") {
-            let value = formatTextGenURL(String($(url_source).val()).trim(), api_use_mancer_webui);
+        if ($(urlSourceId).val() != "") {
+            let value = formatTextGenURL(String($(urlSourceId).val()).trim(), isMancer());
             if (!value) {
                 callPopup("Please enter a valid URL.<br/>WebUI URLs should end with <tt>/api</tt><br/>Enable 'Relaxed API URLs' to allow other paths.", 'text');
                 return;
             }
 
-            const mancer_key = String($("#api_key_mancer").val()).trim();
-            if (mancer_key.length) {
-                await writeSecret(SECRET_KEYS.MANCER, mancer_key);
+            const mancerKey = String($("#api_key_mancer").val()).trim();
+            if (mancerKey.length) {
+                await writeSecret(SECRET_KEYS.MANCER, mancerKey);
             }
 
-            $(url_source).val(value);
+            const aphroditeKey = String($("#api_key_aphrodite").val()).trim();
+            if (aphroditeKey.length) {
+                await writeSecret(SECRET_KEYS.APHRODITE, aphroditeKey);
+            }
+
+            $(urlSourceId).val(value);
             $("#api_loading_textgenerationwebui").css("display", "inline-block");
             $("#api_button_textgenerationwebui").css("display", "none");
 
-            if (api_use_mancer_webui) {
-                textgenerationwebui_settings.streaming_url = value.replace("http", "ws") + "/v1/stream";
-            }
             api_server_textgenerationwebui = value;
             main_api = "textgenerationwebui";
             saveSettingsDebounced();
@@ -7722,6 +7765,7 @@ jQuery(async function () {
         }
 
         else if (id == "option_regenerate") {
+            closeMessageEditor();
             if (is_send_press == false) {
                 //hideSwipeButtons();
 

@@ -667,7 +667,7 @@ jQuery(function () {
                             </label>
                             <label>
                                 <input type="radio" name="memory_position" value="1" />
-                                In-chat @ Depth <input id="memory_depth" class="text_pole widthUnset" type="number" min="0" max="99" />
+                                In-chat @ Depth <input id="memory_depth" class="text_pole widthUnset" type="number" min="0" max="999" />
                             </label>
                         </div>
                         </div>

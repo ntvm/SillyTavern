@@ -1,5 +1,5 @@
 import { saveSettings, callPopup, substituteParams, getRequestHeaders, chat_metadata, this_chid, characters, saveCharacterDebounced, menu_type, eventSource, event_types } from "../script.js";
-import { download, debounce, initScrollHeight, resetScrollHeight, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, deepClone, getSortableDelay, escapeRegex, PAGINATION_TEMPLATE, navigation_option } from "./utils.js";
+import { download, debounce, initScrollHeight, resetScrollHeight, parseJsonFile, extractDataFromPng, getFileBuffer, getCharaFilename, getSortableDelay, escapeRegex, PAGINATION_TEMPLATE, navigation_option, waitUntilCondition } from "./utils.js";
 import { getContext } from "./extensions.js";
 import { NOTE_MODULE_NAME, metadata_keys, shouldWIAddPrompt } from "./authors-note.js";
 import { registerSlashCommand } from "./slash-commands.js";
@@ -51,6 +51,9 @@ let updateEditor = (navigation) => { navigation; };
 
 // Do not optimize. updateEditor is a function that is updated by the displayWorldEntries with new data.
 const worldInfoFilter = new FilterHelper(() => updateEditor());
+const SORT_ORDER_KEY = 'world_info_sort_order';
+
+const InputWidthReference = $("#WIInputWidthReference");
 
 const DEFAULT_DEPTH = 4;
 
@@ -161,6 +164,7 @@ function setWorldInfoSettings(settings, data) {
         $("#world_editor_select").append(`<option value='${i}'>${item}</option>`);
     });
 
+    $('#world_info_sort_order').val(localStorage.getItem(SORT_ORDER_KEY) || '0');
     $("#world_editor_select").trigger("change");
 }
 
@@ -232,6 +236,67 @@ function getWIElement(name) {
     return wiElement;
 }
 
+/**
+ * @param {any[]} data WI entries
+ * @returns {any[]} Sorted data
+ */
+function sortEntries(data) {
+    const option = $('#world_info_sort_order').find(":selected");
+    const sortField = option.data('field');
+    const sortOrder = option.data('order');
+    const sortRule = option.data('rule');
+    const orderSign = sortOrder === 'asc' ? 1 : -1;
+
+    if (sortRule === 'priority') {
+        // First constant, then normal, then disabled. Then sort by order
+        data.sort((a, b) => {
+            const aValue = a.constant ? 0 : a.disable ? 2 : 1;
+            const bValue = b.constant ? 0 : b.disable ? 2 : 1;
+
+            return (aValue - bValue || b.order - a.order);
+        });
+    } else {
+        const primarySort = (a, b) => {
+            const aValue = a[sortField];
+            const bValue = b[sortField];
+
+            // Sort strings
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                if (sortRule === 'length') {
+                    // Sort by string length
+                    return orderSign * (aValue.length - bValue.length);
+                } else {
+                    // Sort by A-Z ordinal
+                    return orderSign * aValue.localeCompare(bValue);
+                }
+            }
+
+            // Sort numbers
+            return orderSign * (Number(aValue) - Number(bValue));
+        };
+        const secondarySort = (a, b) => b.order - a.order;
+        const tertiarySort = (a, b) => a.uid - b.uid;
+
+        data.sort((a, b) => {
+            const primary = primarySort(a, b);
+
+            if (primary !== 0) {
+                return primary;
+            }
+
+            const secondary = secondarySort(a, b);
+
+            if (secondary !== 0) {
+                return secondary;
+            }
+
+            return tertiarySort(a, b);
+        });
+    }
+
+    return data;
+}
+
 function nullWorldInfo() {
     toastr.info("Create or import a new World Info file first.", "World Info is not set", { timeOut: 10000, preventDuplicates: true });
 }
@@ -261,8 +326,9 @@ function displayWorldEntries(name, data, navigation = navigation_option.none) {
 
         // Sort the entries array by displayIndex and uid
         entriesArray.sort((a, b) => a.displayIndex - b.displayIndex || a.uid - b.uid);
+        entriesArray = sortEntries(entriesArray);
         entriesArray = worldInfoFilter.applyFilters(entriesArray);
-        callback(entriesArray);
+        typeof callback === 'function' && callback(entriesArray);
         return entriesArray;
     }
 
@@ -273,9 +339,10 @@ function displayWorldEntries(name, data, navigation = navigation_option.none) {
     }
 
     const storageKey = 'WI_PerPage';
+    const perPageDefault = 25;
     $("#world_info_pagination").pagination({
         dataSource: getDataArray,
-        pageSize: Number(localStorage.getItem(storageKey)) || 25,
+        pageSize: Number(localStorage.getItem(storageKey)) || perPageDefault,
         sizeChangerOptions: [10, 25, 50, 100],
         showSizeChanger: true,
         pageRange: 1,
@@ -288,7 +355,30 @@ function displayWorldEntries(name, data, navigation = navigation_option.none) {
         showNavigator: true,
         callback: function (page) {
             $("#world_popup_entries_list").empty();
+            const keywordHeaders = `
+            <div id="WIEntryHeaderTitlesPC" class="flex-container wide100p spaceBetween justifyCenter textAlignCenter" style="padding:0 2.5em;">
+            <small class="flex1">
+            Title/Memo
+        </small>
+                <small style="width:${InputWidthReference.width() + 5 + 'px'}">
+                    Status
+                </small>
+                <small style="width:${InputWidthReference.width() + 20 + 'px'}">
+                    Position
+                </small>
+                <small style="width:${InputWidthReference.width() + 15 + 'px'}">
+                    Depth
+                </small>
+                <small style="width:${InputWidthReference.width() + 15 + 'px'}">
+                    Order
+                </small>
+                <small style="width:${InputWidthReference.width() + 15 + 'px'}">
+                    Trigger %
+                </small>
+
+            </div>`
             const blocks = page.map(entry => getWorldEntry(name, data, entry));
+            $("#world_popup_entries_list").append(keywordHeaders);
             $("#world_popup_entries_list").append(blocks);
         },
         afterSizeSelectorChange: function (e) {
@@ -296,8 +386,28 @@ function displayWorldEntries(name, data, navigation = navigation_option.none) {
         }
     });
 
-    if (navigation === navigation_option.last) {
-        $("#world_info_pagination").pagination('go', $("#world_info_pagination").pagination('getTotalPage'));
+    if (typeof navigation === 'number' && Number(navigation) >= 0) {
+        const selector = `#world_popup_entries_list [uid="${navigation}"]`;
+        const data = getDataArray();
+        const uidIndex = data.findIndex(x => x.uid === navigation);
+        const perPage = Number(localStorage.getItem(storageKey)) || perPageDefault;
+        const page = Math.floor(uidIndex / perPage) + 1;
+        $("#world_info_pagination").pagination('go', page);
+        waitUntilCondition(() => document.querySelector(selector) !== null).finally(() => {
+            const element = $(selector);
+
+            if (element.length === 0) {
+                console.log(`Could not find element for uid ${navigation}`);
+                return;
+            }
+
+            const elementOffset = element.offset();
+            const parentOffset = element.parent().offset();
+            const scrollOffset = elementOffset.top - parentOffset.top;
+            $('#WorldInfo').scrollTop(scrollOffset);
+            element.addClass('flash animated');
+            setTimeout(() => element.removeClass('flash animated'), 2000);
+        });
     }
 
     $("#world_popup_new").off('click').on('click', () => {
@@ -306,6 +416,23 @@ function displayWorldEntries(name, data, navigation = navigation_option.none) {
 
     $("#world_popup_name_button").off('click').on('click', async () => {
         await renameWorldInfo(name, data);
+    });
+
+    $("#world_backfill_memos").off('click').on('click', async () => {
+        let counter = 0;
+        for (const entry of Object.values(data.entries)) {
+            if (!entry.comment && Array.isArray(entry.key) && entry.key.length > 0) {
+                entry.comment = entry.key[0];
+                setOriginalDataValue(data, entry.uid, "comment", entry.comment);
+                counter++;
+            }
+        }
+
+        if (counter > 0) {
+            toastr.info(`Backfilled ${counter} titles`);
+            await saveWorldInfo(name, data, true);
+            updateEditor(navigation_option.previous);
+        }
     });
 
     $("#world_popup_export").off('click').on('click', () => {
@@ -413,6 +540,7 @@ function deleteOriginalDataValue(data, uid) {
 function getWorldEntry(name, data, entry) {
     const template = $("#entry_edit_template .world_entry").clone();
     template.data("uid", entry.uid);
+    template.attr("uid", entry.uid);
 
     // key
     const keyInput = template.find('textarea[name="key"]');
@@ -435,11 +563,15 @@ function getWorldEntry(name, data, entry) {
         saveWorldInfo(name, data);
     });
     keyInput.val(entry.key.join(",")).trigger("input");
-    initScrollHeight(keyInput);
+    //initScrollHeight(keyInput);
 
     // logic AND/NOT
     const selectiveLogicDropdown = template.find('select[name="entryLogicType"]');
     selectiveLogicDropdown.data("uid", entry.uid);
+
+    selectiveLogicDropdown.on("click", function (event) {
+        event.stopPropagation();
+    })
 
     selectiveLogicDropdown.on("input", function () {
         const uid = $(this).data("uid");
@@ -561,6 +693,7 @@ function getWorldEntry(name, data, entry) {
     commentInput.on("input", function () {
         const uid = $(this).data("uid");
         const value = $(this).val();
+        resetScrollHeight(this);
         data.entries[uid].comment = value;
 
         setOriginalDataValue(data, uid, "comment", data.entries[uid].comment);
@@ -580,6 +713,7 @@ function getWorldEntry(name, data, entry) {
     });
 
     commentInput.val(entry.comment).trigger("input");
+    initScrollHeight(commentInput);
     commentToggle.prop("checked", true /* entry.addMemo */).trigger("input");
     commentToggle.parent().hide()
 
@@ -652,6 +786,7 @@ function getWorldEntry(name, data, entry) {
 
 
     // constant
+    /*
     const constantInput = template.find('input[name="constant"]');
     constantInput.data("uid", entry.uid);
     constantInput.on("input", function () {
@@ -662,6 +797,7 @@ function getWorldEntry(name, data, entry) {
         saveWorldInfo(name, data);
     });
     constantInput.prop("checked", entry.constant).trigger("input");
+    */
 
     // order
     const orderInput = template.find('input[name="order"]');
@@ -671,10 +807,12 @@ function getWorldEntry(name, data, entry) {
         const value = Number($(this).val());
 
         data.entries[uid].order = !isNaN(value) ? value : 0;
+        updatePosOrdDisplay(uid)
         setOriginalDataValue(data, uid, "insertion_order", data.entries[uid].order);
         saveWorldInfo(name, data);
     });
     orderInput.val(entry.order).trigger("input");
+    orderInput.width(InputWidthReference.width() + 15 + 'px')
 
     // probability
     if (entry.probability === undefined) {
@@ -684,19 +822,22 @@ function getWorldEntry(name, data, entry) {
     // depth
     const depthInput = template.find('input[name="depth"]');
     depthInput.data("uid", entry.uid);
+
     depthInput.on("input", function () {
         const uid = $(this).data("uid");
         const value = Number($(this).val());
 
         data.entries[uid].depth = !isNaN(value) ? value : 0;
-        setOriginalDataValue(data, uid, "depth", data.entries[uid].depth);
+        updatePosOrdDisplay(uid)
+        setOriginalDataValue(data, uid, "extensions.depth", data.entries[uid].depth);
         saveWorldInfo(name, data);
     });
     depthInput.val(entry.depth ?? DEFAULT_DEPTH).trigger("input");
+    depthInput.width(InputWidthReference.width() + 15 + 'px');
 
     // Hide by default unless depth is specified
     if (entry.position === world_info_position.atDepth) {
-        depthInput.parent().hide();
+        //depthInput.parent().hide();
     }
 
     const probabilityInput = template.find('input[name="probability"]');
@@ -720,6 +861,7 @@ function getWorldEntry(name, data, entry) {
         saveWorldInfo(name, data);
     });
     probabilityInput.val(entry.probability).trigger("input");
+    probabilityInput.width(InputWidthReference.width() + 15 + 'px')
 
     // probability toggle
     if (entry.useProbability === undefined) {
@@ -758,16 +900,26 @@ function getWorldEntry(name, data, entry) {
     }
 
     const positionInput = template.find('select[name="position"]');
+    initScrollHeight(positionInput);
     positionInput.data("uid", entry.uid);
+    positionInput.on("click", function (event) {
+        // Prevent closing the drawer on clicking the input
+        event.stopPropagation();
+    });
     positionInput.on("input", function () {
         const uid = $(this).data("uid");
         const value = Number($(this).val());
         data.entries[uid].position = !isNaN(value) ? value : 0;
         if (value === world_info_position.atDepth) {
-            depthInput.parent().show();
+            depthInput.prop('disabled', false);
+            depthInput.css('visibility', 'visible')
+            //depthInput.parent().show();
         } else {
-            depthInput.parent().hide();
+            depthInput.prop('disabled', true);
+            depthInput.css('visibility', 'hidden')
+            //depthInput.parent().hide();
         }
+        updatePosOrdDisplay(uid)
         // Spec v2 only supports before_char and after_char
         setOriginalDataValue(data, uid, "position", data.entries[uid].position == 0 ? 'before_char' : 'after_char');
         // Write the original value as extensions field
@@ -780,10 +932,11 @@ function getWorldEntry(name, data, entry) {
         .prop("selected", true)
         .trigger("input");
 
-    // display uid
-    template.find(".world_entry_form_uid_value").text(entry.uid);
+    //add UID above content box (less important doesn't need to be always visible)
+    template.find(".world_entry_form_uid_value").text(`(UID: ${entry.uid})`);
 
     // disable
+    /*
     const disableInput = template.find('input[name="disable"]');
     disableInput.data("uid", entry.uid);
     disableInput.on("input", function () {
@@ -794,6 +947,70 @@ function getWorldEntry(name, data, entry) {
         saveWorldInfo(name, data);
     });
     disableInput.prop("checked", entry.disable).trigger("input");
+    */
+
+    //new tri-state selector for constant/normal/disabled
+    const entryStateSelector = template.find('select[name="entryStateSelector"]');
+    entryStateSelector.data("uid", entry.uid);
+    console.log(entry.uid)
+    entryStateSelector.on("click", function (event) {
+        // Prevent closing the drawer on clicking the input
+        event.stopPropagation();
+    });
+    entryStateSelector.on("input", function () {
+        const uid = entry.uid;
+        const value = $(this).val();
+        switch (value) {
+            case "constant":
+                data.entries[uid].constant = true;
+                data.entries[uid].disable = false;
+                setOriginalDataValue(data, uid, "enabled", true);
+                setOriginalDataValue(data, uid, "constant", true);
+                template.removeClass('disabledWIEntry');
+                console.debug("set to constant")
+                break
+            case "normal":
+                data.entries[uid].constant = false;
+                data.entries[uid].disable = false;
+                setOriginalDataValue(data, uid, "enabled", true);
+                setOriginalDataValue(data, uid, "constant", false);
+                template.removeClass('disabledWIEntry');
+                console.debug("set to normal")
+                break
+            case "disabled":
+                data.entries[uid].constant = false;
+                data.entries[uid].disable = true;
+                setOriginalDataValue(data, uid, "enabled", false);
+                setOriginalDataValue(data, uid, "constant", false);
+                template.addClass('disabledWIEntry');
+                console.debug("set to disabled")
+                break
+        }
+        saveWorldInfo(name, data);
+
+    })
+
+    const entryState = function () {
+
+        console.log(`constant: ${entry.constant},  disabled: ${entry.disable}`)
+        if (entry.constant === true) {
+            console.debug('found constant')
+            return "constant"
+        } else if (entry.disable === true) {
+            console.debug('found disabled')
+            return "disabled"
+        } else {
+            console.debug('found normal')
+            return "normal"
+        }
+
+    }
+    template
+        .find(`select[name="entryStateSelector"] option[value=${entryState()}]`)
+        .prop("selected", true)
+        .trigger("input");
+
+    saveWorldInfo(name, data);
 
     // exclude recursion
     const excludeRecursionInput = template.find('input[name="exclude_recursion"]');
@@ -808,7 +1025,7 @@ function getWorldEntry(name, data, entry) {
     excludeRecursionInput.prop("checked", entry.excludeRecursion).trigger("input");
 
     // delete button
-    const deleteButton = template.find("input.delete_entry_button");
+    const deleteButton = template.find(".delete_entry_button");
     deleteButton.data("uid", entry.uid);
     deleteButton.on("click", function () {
         const uid = $(this).data("uid");
@@ -819,6 +1036,30 @@ function getWorldEntry(name, data, entry) {
     });
 
     template.find('.inline-drawer-content').css('display', 'none'); //entries start collapsed
+
+    function updatePosOrdDisplay(uid) {
+        // display position/order info left of keyword box
+        let entry = data.entries[uid]
+        let posText = entry.position
+        switch (entry.position) {
+            case 0:
+                posText = '↑CD';
+                break
+            case 1:
+                posText = 'CD↓';
+                break
+            case 2:
+                posText = '↑AN';
+                break
+            case 3:
+                posText = 'AN↓';
+                break
+            case 4:
+                posText = `@D${entry.depth}`;
+                break
+        }
+        template.find(".world_entry_form_position_value").text(`(${posText} ${entry.order})`);
+    }
 
     return template;
 }
@@ -862,7 +1103,7 @@ function createWorldInfoEntry(name, data) {
     const newEntry = { uid: newUid, ...newEntryTemplate };
     data.entries[newUid] = newEntry;
 
-    updateEditor(navigation_option.last);
+    updateEditor(newUid);
 }
 
 async function _save(name, data) {
@@ -1088,7 +1329,7 @@ async function getSortedEntries() {
         console.debug(`Sorted ${entries.length} world lore entries using strategy ${world_info_character_strategy}`);
 
         // Need to deep clone the entries to avoid modifying the cached data
-        return deepClone(entries);
+        return structuredClone(entries);
     }
     catch (e) {
         console.error(e);
@@ -1434,6 +1675,7 @@ function convertCharacterBook(characterBook) {
             displayIndex: entry.extensions?.display_index ?? index,
             probability: entry.extensions?.probability ?? null,
             useProbability: entry.extensions?.useProbability ?? false,
+            depth: entry.extensions?.depth ?? DEFAULT_DEPTH,
         };
     });
 
@@ -1469,12 +1711,19 @@ export function checkEmbeddedWorld(chid) {
         const checkKey = `AlertWI_${characters[chid].avatar}`;
         const worldName = characters[chid]?.data?.extensions?.world;
         if (!localStorage.getItem(checkKey) && (!worldName || !world_names.includes(worldName))) {
-            toastr.info(
-                'To import and use it, select "Import Card Lore" in the "More..." dropdown menu on the character panel.',
-                `${characters[chid].name} has an embedded World/Lorebook`,
-                { timeOut: 10000, extendedTimeOut: 20000, positionClass: 'toast-top-center' },
-            );
             localStorage.setItem(checkKey, 1);
+
+            callPopup(`<h3>This character has an embedded World/Lorebook.</h3>
+                       <h3>Would you like to import it now?</h3>
+                       <div class="m-b-1">If you want to import it later, select "Import Card Lore" in the "More..." dropdown menu on the character panel.</div>`,
+                'confirm',
+                '',
+                { okButton: 'Yes', })
+                .then((result) => {
+                    if (result) {
+                        importEmbeddedWorldInfo(true);
+                    }
+                });
         }
         return true;
     }
@@ -1482,7 +1731,7 @@ export function checkEmbeddedWorld(chid) {
     return false;
 }
 
-export async function importEmbeddedWorldInfo() {
+export async function importEmbeddedWorldInfo(skipPopup = false) {
     const chid = $('#import_character_info').data('chid');
 
     if (chid === undefined) {
@@ -1492,10 +1741,12 @@ export async function importEmbeddedWorldInfo() {
     const bookName = characters[chid]?.data?.character_book?.name || `${characters[chid]?.name}'s Lorebook`;
     const confirmationText = (`<h3>Are you sure you want to import "${bookName}"?</h3>`) + (world_names.includes(bookName) ? 'It will overwrite the World/Lorebook with the same name.' : '');
 
-    const confirmation = await callPopup(confirmationText, 'confirm');
+    if (!skipPopup) {
+        const confirmation = await callPopup(confirmationText, 'confirm');
 
-    if (!confirmation) {
-        return;
+        if (!confirmation) {
+            return;
+        }
     }
 
     const convertedBook = convertCharacterBook(characters[chid].data.character_book);
@@ -1754,6 +2005,14 @@ jQuery(() => {
         const term = $(this).val();
         worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, term);
     });
+
+    $('#world_info_sort_order').on('change', function(e) {
+        if (e.target instanceof HTMLOptionElement) {
+            localStorage.setItem(SORT_ORDER_KEY, e.target.value);
+        }
+
+        updateEditor(navigation_option.none);
+    })
 
     // Not needed on mobile
     const deviceInfo = getDeviceInfo();
