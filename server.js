@@ -553,8 +553,18 @@ app.post("/generate_textgenerationwebui", jsonParser, async function (request, r
         });
 
         async function* readWebsocket() {
-            const streamingUrl = new URL(streamingUrlString);
-            const websocket = new WebSocket(streamingUrl);
+            /** @type {WebSocket} */
+            let websocket;
+            /** @type {URL} */
+            let streamingUrl;
+
+            try {
+                const streamingUrl = new URL(streamingUrlString);
+                websocket = new WebSocket(streamingUrl);
+            } catch (error) {
+                console.log("[SillyTavern] Socket error", error);
+                return;
+            }
 
             websocket.on('open', async function () {
                 console.log('WebSocket opened');
@@ -1350,6 +1360,12 @@ app.post("/getcharacters", jsonParser, function (request, response) {
 
         let processingPromises = pngFiles.map((file, index) => processCharacter(file, index));
         await Promise.all(processingPromises); performance.mark('B');
+
+        // Filter out invalid/broken characters
+        characters = Object.values(characters).filter(x => x?.name).reduce((acc, val, index) => {
+            acc[index] = val;
+            return acc;
+        }, {});
 
         response.send(JSON.stringify(characters));
     });

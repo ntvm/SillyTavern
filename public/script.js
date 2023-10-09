@@ -143,7 +143,7 @@ import {
     onlyUnique,
 } from "./scripts/utils.js";
 
-import { extension_settings, getContext, loadExtensionSettings, processExtensionHelpers, registerExtensionHelper, runGenerationInterceptors, saveMetadataDebounced } from "./scripts/extensions.js";
+import { extension_settings, getContext, installExtension, loadExtensionSettings, processExtensionHelpers, registerExtensionHelper, runGenerationInterceptors, saveMetadataDebounced } from "./scripts/extensions.js";
 import { COMMENT_NAME_DEFAULT, executeSlashCommands, getSlashCommandsHelp, registerSlashCommand } from "./scripts/slash-commands.js";
 import {
     tag_map,
@@ -252,6 +252,8 @@ export {
     extension_prompt_types,
     mesForShowdownParse,
     printCharacters,
+    isOdd,
+    countOccurrences
 }
 
 // Allow target="_blank" in links
@@ -1754,6 +1756,13 @@ function substituteParams(content, _name1, _name2, _original, _group) {
 
     content = content.replace(/{{time}}/gi, moment().format('LT'));
     content = content.replace(/{{date}}/gi, moment().format('LL'));
+    content = content.replace(/{{weekday}}/gi, moment().format('dddd'));
+    content = content.replace(/{{isotime}}/gi, moment().format('HH:mm'));
+    content = content.replace(/{{isodate}}/gi, moment().format('YYYY-MM-DD'));
+    content = content.replace(/{{datetimeformat +([^}]*)}}/gi, (_, format) => {
+        const formattedTime = moment().format(format);
+        return formattedTime;
+    });
     content = content.replace(/{{idle_duration}}/gi, () => getTimeSinceLastMessage());
     content = content.replace(/{{time_UTC([-+]\d+)}}/gi, (_, offset) => {
         const utcOffset = parseInt(offset, 10);
@@ -3497,9 +3506,10 @@ export async function sendMessageAsUser(textareaText, messageBias) {
     }
     statMesProcess(chat[chat.length - 1], 'user', characters, this_chid, '');
     // Wait for all handlers to finish before continuing with the prompt
-    await eventSource.emit(event_types.MESSAGE_SENT, (chat.length - 1));
-    addOneMessage(chat[chat.length - 1]);
-    await eventSource.emit(event_types.USER_MESSAGE_RENDERED, (chat.length - 1));
+    const chat_id = (chat.length - 1);
+    await eventSource.emit(event_types.MESSAGE_SENT, chat_id);
+    addOneMessage(chat[chat_id]);
+    await eventSource.emit(event_types.USER_MESSAGE_RENDERED, chat_id);
     console.debug('message sent as user');
 }
 
@@ -4005,9 +4015,10 @@ async function saveReply(type, getMessage, _, title) {
             if (power_user.message_token_count_enabled) {
                 chat[chat.length - 1]['extra']['token_count'] = getTokenCount(chat[chat.length - 1]['mes'], 0);
             }
-            await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1));
-            addOneMessage(chat[chat.length - 1], { type: 'swipe' });
-            await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, (chat.length - 1));
+            const chat_id = (chat.length - 1);
+            await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
+            addOneMessage(chat[chat_id], { type: 'swipe' });
+            await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id);
         } else {
             chat[chat.length - 1]['mes'] = getMessage;
         }
@@ -4024,9 +4035,10 @@ async function saveReply(type, getMessage, _, title) {
         if (power_user.message_token_count_enabled) {
             chat[chat.length - 1]['extra']['token_count'] = getTokenCount(chat[chat.length - 1]['mes'], 0);
         }
-        await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1));
-        addOneMessage(chat[chat.length - 1], { type: 'swipe' });
-        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, (chat.length - 1));
+        const chat_id = (chat.length - 1);
+        await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
+        addOneMessage(chat[chat_id], { type: 'swipe' });
+        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id);
     } else if (type === 'appendFinal') {
         oldMessage = chat[chat.length - 1]['mes'];
         console.debug("Trying to appendFinal.")
@@ -4040,9 +4052,10 @@ async function saveReply(type, getMessage, _, title) {
         if (power_user.message_token_count_enabled) {
             chat[chat.length - 1]['extra']['token_count'] = getTokenCount(chat[chat.length - 1]['mes'], 0);
         }
-        await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1));
-        addOneMessage(chat[chat.length - 1], { type: 'swipe' });
-        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, (chat.length - 1));
+        const chat_id = (chat.length - 1);
+        await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
+        addOneMessage(chat[chat_id], { type: 'swipe' });
+        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id);
 
     } else {
         console.debug('entering chat update routine for non-swipe post');
@@ -4077,9 +4090,10 @@ async function saveReply(type, getMessage, _, title) {
         }
 
         saveImageToMessage(img, chat[chat.length - 1]);
-        await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1));
-        addOneMessage(chat[chat.length - 1]);
-        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, (chat.length - 1));
+        const chat_id = (chat.length - 1);
+        await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
+        addOneMessage(chat[chat_id]);
+        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id);
     }
 
     const item = chat[chat.length - 1];
@@ -4545,8 +4559,9 @@ async function getChatResult() {
     await eventSource.emit(event_types.CHAT_CHANGED, (getCurrentChatId()));
 
     if (chat.length === 1) {
-        await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1));
-        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, (chat.length - 1));
+        const chat_id = (chat.length - 1);
+        await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
+        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id);
     }
 }
 
@@ -6409,10 +6424,11 @@ async function createOrEditCharacter(e) {
                     const firstMessage = getFirstMessage();
                     chat[0] = firstMessage;
 
-                    await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1));
+                    const chat_id = (chat.length - 1);
+                    await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
                     clearChat();
                     await printMessages();
-                    await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, (chat.length - 1));
+                    await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, chat_id);
                     await saveChatConditional();
                 }
             },
@@ -6828,6 +6844,11 @@ function connectAPISlash(_, text) {
             source: 'openrouter',
             button: '#api_button_openai',
         },
+        'scale': {
+            selected: 'openai',
+            source: 'scale',
+            button: '#api_button_openai',
+        },
         'ai21': {
             selected: 'openai',
             source: 'ai21',
@@ -7070,11 +7091,11 @@ jQuery(async function () {
     }
 
     registerSlashCommand('dupe', DupeChar, [], "– duplicates the currently selected character", true, true);
-    registerSlashCommand('api', connectAPISlash, [], "(kobold, horde, novel, ooba, oai, claude, windowai, ai21, palm) – connect to an API", true, true);
-    registerSlashCommand('impersonate', doImpersonate, ['imp'], "- calls an impersonation response", true, true);
-    registerSlashCommand('delchat', doDeleteChat, [], "- deletes the current chat", true, true);
-    registerSlashCommand('closechat', doCloseChat, [], "- closes the current chat", true, true);
-    registerSlashCommand('panels', doTogglePanels, ['togglepanels'], "- toggle UI panels on/off", true, true);
+    registerSlashCommand('api', connectAPISlash, [], '<span class="monospace">(kobold, horde, novel, ooba, oai, claude, windowai, openrouter, scale, ai21, palm)</span> – connect to an API', true, true);
+    registerSlashCommand('impersonate', doImpersonate, ['imp'], "– calls an impersonation response", true, true);
+    registerSlashCommand('delchat', doDeleteChat, [], "– deletes the current chat", true, true);
+    registerSlashCommand('closechat', doCloseChat, [], "– closes the current chat", true, true);
+    registerSlashCommand('panels', doTogglePanels, ['togglepanels'], "– toggle UI panels on/off", true, true);
 
     setTimeout(function () {
         $("#groupControlsToggle").trigger('click');
@@ -8900,25 +8921,7 @@ jQuery(async function () {
         }
 
         const url = input.trim();
-        console.debug('Extension import started', url);
-
-        const request = await fetch('/api/extensions/install', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({ url }),
-        });
-
-        if (!request.ok) {
-            toastr.info(request.statusText, 'Extension import failed');
-            console.error('Extension import failed', request.status, request.statusText);
-            return;
-        }
-
-        const response = await request.json();
-        toastr.success(`Extension "${response.display_name}" by ${response.author} (version ${response.version}) has been imported successfully!`, 'Extension import successful');
-        console.debug(`Extension "${response.display_name}" has been imported successfully at ${response.extensionPath}`);
-        await loadExtensionSettings(settings);
-        eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
+        await installExtension(url);
     });
 
 

@@ -5,6 +5,7 @@ TODO:
 //const DEBUG_TONY_SAMA_FORK_MODE = false
 
 import { getRequestHeaders, callPopup } from "../../../script.js";
+import { deleteExtension, extensionNames, installExtension } from "../../extensions.js";
 export { MODULE_NAME };
 
 const MODULE_NAME = 'Assets';
@@ -47,8 +48,10 @@ function downloadAssetsList(url) {
                 }
 
                 console.debug(DEBUG_PREFIX, "Updated available assets to", availableAssets);
+                // First extensions, then everything else
+                const assetTypes = Object.keys(availableAssets).sort((a, b) => (a === 'extension') ? -1 : (b === 'extension') ? 1 : 0);
 
-                for (const assetType in availableAssets) {
+                for (const assetType of assetTypes) {
                     let assetTypeMenu = $('<div />', { id: "assets_audio_ambient_div", class: "assets-list-div" });
                     assetTypeMenu.append(`<h3>${assetType}</h3>`)
                     for (const i in availableAssets[assetType]) {
@@ -116,9 +119,13 @@ function downloadAssetsList(url) {
 
                         console.debug(DEBUG_PREFIX, "Created element for BGM", asset["id"])
 
+                        const displayName = DOMPurify.sanitize(asset["name"] || asset["id"]);
+                        const description = DOMPurify.sanitize(asset["description"] || "");
+
                         $(`<i></i>`)
                             .append(element)
-                            .append(`<span>${asset["id"]}</span>`)
+                            .append(`<span>${displayName}</span>`)
+                            .append(`<span>${description}</span>`)
                             .appendTo(assetTypeMenu);
                     }
                     assetTypeMenu.appendTo("#assets_menu");
@@ -136,7 +143,14 @@ function downloadAssetsList(url) {
 }
 
 function isAssetInstalled(assetType, filename) {
-    for (const i of currentAssets[assetType]) {
+    let assetList = currentAssets[assetType];
+
+    if (assetType == 'extension') {
+        const thirdPartyMarker = "third-party/";
+        assetList = extensionNames.filter(x => x.startsWith(thirdPartyMarker)).map(x => x.replace(thirdPartyMarker, ''));
+    }
+
+    for (const i of assetList) {
         //console.debug(DEBUG_PREFIX,i,filename)
         if (i.includes(filename))
             return true;
@@ -149,6 +163,13 @@ async function installAsset(url, assetType, filename) {
     console.debug(DEBUG_PREFIX, "Downloading ", url);
     const category = assetType;
     try {
+        if (category === 'extension') {
+            console.debug(DEBUG_PREFIX, "Installing extension ", url)
+            await installExtension(url);
+            console.debug(DEBUG_PREFIX, "Extension installed.")
+            return;
+        }
+
         const body = { url, category, filename };
         const result = await fetch('/api/assets/download', {
             method: 'POST',
@@ -170,6 +191,12 @@ async function deleteAsset(assetType, filename) {
     console.debug(DEBUG_PREFIX, "Deleting ", assetType, filename);
     const category = assetType;
     try {
+        if (category === 'extension') {
+            console.debug(DEBUG_PREFIX, "Deleting extension ", filename)
+            await deleteExtension(filename);
+            console.debug(DEBUG_PREFIX, "Extension deleted.")
+        }
+
         const body = { category, filename };
         const result = await fetch('/api/assets/delete', {
             method: 'POST',

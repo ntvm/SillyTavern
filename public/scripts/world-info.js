@@ -274,7 +274,7 @@ function sortEntries(data) {
             // Sort numbers
             return orderSign * (Number(aValue) - Number(bValue));
         };
-        const secondarySort = (a, b) => b.order - a.order;
+        const secondarySort = (a, b) => a.order - b.order;
         const tertiarySort = (a, b) => a.uid - b.uid;
 
         data.sort((a, b) => {
@@ -1759,6 +1759,9 @@ export async function importEmbeddedWorldInfo(skipPopup = false) {
 
     const newIndex = world_names.indexOf(bookName);
     if (newIndex >= 0) {
+        //show&draw the WI panel before..
+        $("#WIDrawerIcon").trigger('click');
+        //..auto-opening the new imported WI
         $("#world_editor_select").val(newIndex).trigger('change');
     }
 
@@ -1881,7 +1884,7 @@ export async function importWorldInfo(file) {
 jQuery(() => {
 
     $(document).ready(function () {
-        registerSlashCommand('world', onWorldInfoChange, [], "– sets active World, or unsets if no args provided", true, true);
+        registerSlashCommand('world', onWorldInfoChange, [], '<span class="monospace">(optional name)</span> – sets active World, or unsets if no args provided', true, true);
     })
 
 
@@ -2006,7 +2009,11 @@ jQuery(() => {
         worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, term);
     });
 
-    $('#world_info_sort_order').on('change', function(e) {
+    $('#world_refresh').on('click', () => {
+        updateEditor(navigation_option.previous);
+    });
+
+    $('#world_info_sort_order').on('change', function (e) {
         if (e.target instanceof HTMLOptionElement) {
             localStorage.setItem(SORT_ORDER_KEY, e.target.value);
         }
