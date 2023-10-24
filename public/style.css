@@ -351,11 +351,12 @@ code {
 
 
 hr {
-    background-image: linear-gradient(90deg, var(--transparent), var(--SmartThemeBorderColor), var(--transparent));
+    background-image: linear-gradient(90deg, var(--transparent), var(--SmartThemeBodyColor), var(--transparent));
     margin: 5px 0;
     height: 1px;
     min-height: 1px;
     border: 0;
+    opacity: 0.2;
 }
 
 #bg1,

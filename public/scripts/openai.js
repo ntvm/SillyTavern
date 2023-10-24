@@ -369,6 +369,7 @@ function setOpenAIMessages(chat) {
     }
 
 */
+
 }
 
 function setOpenAIMessageExamples(mesExamplesArray) {

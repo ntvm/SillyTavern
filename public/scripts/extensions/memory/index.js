@@ -682,6 +682,54 @@ function doPopout(e) {
     }
 }
 
+function doPopout(e) {
+    const target = e.target;
+    //repurposes the zoomed avatar template to server as a floating div
+    if ($("#summaryExtensionPopout").length === 0) {
+        console.debug('did not see popout yet, creating')
+        const originalHTMLClone = $(target).parent().parent().parent().find('.inline-drawer-content').html()
+        const originalElement = $(target).parent().parent().parent().find('.inline-drawer-content')
+        const template = $('#zoomed_avatar_template').html();
+        const controlBarHtml = `<div class="panelControlBar flex-container">
+        <div id="summaryExtensionPopoutheader" class="fa-solid fa-grip drag-grabber hoverglow"></div>
+        <div id="summaryExtensionPopoutClose" class="fa-solid fa-circle-xmark hoverglow dragClose"></div>
+    </div>`
+        const newElement = $(template);
+        newElement.attr('id', 'summaryExtensionPopout')
+            .removeClass('zoomed_avatar')
+            .addClass('draggable')
+            .empty()
+        const prevSummaryBoxContents = $('#memory_contents').val(); //copy summary box before emptying
+        originalElement.empty();
+        originalElement.html(`<div class="flex-container alignitemscenter justifyCenter wide100p"><small>Currently popped out</small></div>`)
+        newElement.append(controlBarHtml).append(originalHTMLClone)
+        $('body').append(newElement);
+        $("#summaryExtensionDrawerContents").addClass('scrollableInnerFull')
+        setMemoryContext(prevSummaryBoxContents, false); //paste prev summary box contents into popout box
+        setupListeners();
+        loadSettings();
+        loadMovingUIState();
+
+        $("#summaryExtensionPopout").fadeIn(250);
+        dragElement(newElement);
+
+        //setup listener for close button to restore extensions menu
+        $('#summaryExtensionPopoutClose').off('click').on('click', function () {
+            $("#summaryExtensionDrawerContents").removeClass('scrollableInnerFull')
+            const summaryPopoutHTML = $("#summaryExtensionDrawerContents")
+            $("#summaryExtensionPopout").fadeOut(250, () => {
+                originalElement.empty();
+                originalElement.html(summaryPopoutHTML);
+                $("#summaryExtensionPopout").remove()
+            })
+            loadSettings();
+        })
+    } else {
+        console.debug('saw existing popout, removing')
+        $("#summaryExtensionPopout").fadeOut(250, () => { $("#summaryExtensionPopoutClose").trigger('click') });
+    }
+}
+
 function setupListeners() {
     //setup shared listeners for popout and regular ext menu
     $('#memory_restore').off('click').on('click', onMemoryRestoreClick);
@@ -704,6 +752,7 @@ function setupListeners() {
     $('#memory_prompt_words_force').off('click').on('input', onMemoryPromptWordsForceInput);
     $('#Extensionmode').val(extension_settings.memory.Extensionmode).trigger('change');
 	$("#summarySettingsBlockToggle").off('click').on('click', function () {
+    $("#summarySettingsBlockToggle").off('click').on('click', function () {
         console.log('saw settings button click')
         $("#summarySettingsBlock").slideToggle(200, "swing"); //toggleClass("hidden");
     });
@@ -720,53 +769,29 @@ jQuery(function () {
                 </div>
                 <div class="inline-drawer-content">
                     <div id="summaryExtensionDrawerContents">
-                        <label for="summary_source">Summarization source:</label>
+                        <label for="summary_source">Summarize with:</label>
                         <select id="summary_source">
                             <option value="main">Main API</option>
                             <option value="extras">Extras API</option>
-                        </select>
-                        <label for="memory_contents">Current summary: </label>
-                        <textarea id="memory_contents" class="text_pole textarea_compact" rows="6" placeholder="Summary will be generated here..."></textarea>
-                        <div class="memory_contents_controls">
-                            <input id="memory_restore" class="menu_button" type="button" value="Restore previous state" />
-                            <label for="memory_frozen"><input id="memory_frozen" type="checkbox" />Pause summarization</label>
-                        </div>
-                        <div data-source="main" class="memory_contents_controls">
-                        </div>
-                        <div data-source="main">
+                        </select><br>
                         <label for="Extensionmode">Extension mode:</label>
                             <select id="Extensionmode">
                             <option value="XML_hints">XML hints override</option>
                             <option value="false">Original Summarize</option>
-                            
 				    	</select>
-                        <div ExtensionmodeOriginal>
-                            <div class="memory_template">
-                                <label for="memory_template">Injection template:</label>
-                                <textarea id="memory_template" class="text_pole textarea_compact" rows="1" placeholder="Use {{summary}} macro to specify the position of summarized text."></textarea>
-                            </div>
-                            <label for="memory_position">Injection position:</label>
-                            <div class="radio_group">
-                                <label>
-                                    <input type="radio" name="memory_position" value="2" />
-                                    Before Main Prompt / Story String
-                                </label>
-                                <label>
-                                    <input type="radio" name="memory_position" value="0" />
-                                    After Main Prompt / Story String
-                                </label>
-                                <label>
-                                    <input type="radio" name="memory_position" value="1" />
-                                    In-chat @ Depth <input id="memory_depth" class="text_pole widthUnset" type="number" min="0" max="999" />
-                                </label>
-                            </div>
-                            </div>
-                            </div>
+                        <div class="flex-container justifyspacebetween alignitemscenter">
+                        
+                            <span class="flex1">Current summary:</span>
+                            <div id="memory_restore" class="menu_button flex1 margin0"><span>Restore Previous</span></div>
+                        
+                        </div>
+                        
+                        <textarea id="memory_contents" class="text_pole textarea_compact" rows="6" placeholder="Summary will be generated here..."></textarea>
+                        <div class="memory_contents_controls">
                             <div id="memory_force_summarize" class="menu_button menu_button_icon">
                                 <i class="fa-solid fa-database"></i>
                                 <span>Summarize now</span>
                             </div>
-
                             <label for="memory_skipWIAN"><input id="memory_skipWIAN" type="checkbox" />No WI/AN</label>
                         </div>
                         <div class="memory_contents_controls">
