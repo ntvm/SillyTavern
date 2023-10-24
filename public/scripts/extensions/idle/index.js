@@ -1,13 +1,12 @@
 import {
     saveSettingsDebounced,
     substituteParams
-} from "../../../../script.js";
-import { debounce } from "../../../utils.js";
-import { promptQuietForLoudResponse, sendMessageAs, sendNarratorMessage } from "../../../slash-commands.js";
-import { extension_settings, getContext, renderExtensionTemplate } from "../../../extensions.js";
-import { registerSlashCommand } from "../../../slash-commands.js";
-
-const extensionName = "third-party/Extension-Idle";
+} from "../../../script.js";
+import { debounce } from "../../utils.js";
+import { promptQuietForLoudResponse, sendMessageAs, sendNarratorMessage } from "../../slash-commands.js";
+import { extension_settings, getContext, renderExtensionTemplate } from "../../extensions.js";
+import { registerSlashCommand } from "../../slash-commands.js";
+const extensionName = "idle";
 
 let idleTimer = null;
 let repeatCount = 0;
