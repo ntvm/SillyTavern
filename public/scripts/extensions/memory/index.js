@@ -705,7 +705,6 @@ function setupListeners() {
     $('#memory_prompt_words_force').off('click').on('input', onMemoryPromptWordsForceInput);
     $('#Extensionmode').val(extension_settings.memory.Extensionmode).trigger('change');
 	$("#summarySettingsBlockToggle").off('click').on('click', function () {
-    $("#summarySettingsBlockToggle").off('click').on('click', function () {
         console.log('saw settings button click')
         $("#summarySettingsBlock").slideToggle(200, "swing"); //toggleClass("hidden");
     });
@@ -746,6 +745,7 @@ jQuery(function () {
                                 <span>Summarize now</span>
                             </div>
                             <label for="memory_skipWIAN"><input id="memory_skipWIAN" type="checkbox" />No WI/AN</label>
+                            <label for="memory_frozen"><input id="memory_frozen" type="checkbox" />Pause summarization</label>
                         </div>
                         <div class="memory_contents_controls">
                             <div id="summarySettingsBlockToggle" class="menu_button">Settings</div>
