@@ -682,53 +682,6 @@ function doPopout(e) {
     }
 }
 
-function doPopout(e) {
-    const target = e.target;
-    //repurposes the zoomed avatar template to server as a floating div
-    if ($("#summaryExtensionPopout").length === 0) {
-        console.debug('did not see popout yet, creating')
-        const originalHTMLClone = $(target).parent().parent().parent().find('.inline-drawer-content').html()
-        const originalElement = $(target).parent().parent().parent().find('.inline-drawer-content')
-        const template = $('#zoomed_avatar_template').html();
-        const controlBarHtml = `<div class="panelControlBar flex-container">
-        <div id="summaryExtensionPopoutheader" class="fa-solid fa-grip drag-grabber hoverglow"></div>
-        <div id="summaryExtensionPopoutClose" class="fa-solid fa-circle-xmark hoverglow dragClose"></div>
-    </div>`
-        const newElement = $(template);
-        newElement.attr('id', 'summaryExtensionPopout')
-            .removeClass('zoomed_avatar')
-            .addClass('draggable')
-            .empty()
-        const prevSummaryBoxContents = $('#memory_contents').val(); //copy summary box before emptying
-        originalElement.empty();
-        originalElement.html(`<div class="flex-container alignitemscenter justifyCenter wide100p"><small>Currently popped out</small></div>`)
-        newElement.append(controlBarHtml).append(originalHTMLClone)
-        $('body').append(newElement);
-        $("#summaryExtensionDrawerContents").addClass('scrollableInnerFull')
-        setMemoryContext(prevSummaryBoxContents, false); //paste prev summary box contents into popout box
-        setupListeners();
-        loadSettings();
-        loadMovingUIState();
-
-        $("#summaryExtensionPopout").fadeIn(250);
-        dragElement(newElement);
-
-        //setup listener for close button to restore extensions menu
-        $('#summaryExtensionPopoutClose').off('click').on('click', function () {
-            $("#summaryExtensionDrawerContents").removeClass('scrollableInnerFull')
-            const summaryPopoutHTML = $("#summaryExtensionDrawerContents")
-            $("#summaryExtensionPopout").fadeOut(250, () => {
-                originalElement.empty();
-                originalElement.html(summaryPopoutHTML);
-                $("#summaryExtensionPopout").remove()
-            })
-            loadSettings();
-        })
-    } else {
-        console.debug('saw existing popout, removing')
-        $("#summaryExtensionPopout").fadeOut(250, () => { $("#summaryExtensionPopoutClose").trigger('click') });
-    }
-}
 
 function setupListeners() {
     //setup shared listeners for popout and regular ext menu
