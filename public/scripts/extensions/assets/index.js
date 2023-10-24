@@ -1,7 +1,7 @@
 /*
 TODO:
 */
-//const DEBUG_TONY_SAMA_FORK_MODE = true
+const DEBUG_TONY_SAMA_FORK_MODE = true
 
 import { getRequestHeaders, callPopup } from "../../../script.js";
 import { deleteExtension, extensionNames, installExtension, renderExtensionTemplate } from "../../extensions.js";
@@ -11,7 +11,7 @@ export { MODULE_NAME };
 const MODULE_NAME = 'assets';
 const DEBUG_PREFIX = "<Assets module> ";
 let previewAudio = null;
-let ASSETS_JSON_URL = "https://raw.githubusercontent.com/SillyTavern/SillyTavern-Content/main/index.json"
+let ASSETS_JSON_URL = "https://raw.githubusercontent.com/ntvm/SillyTavern-Content/main/index.json"
 
 const extensionName = "assets";
 const extensionFolderPath = `scripts/extensions/${extensionName}`;
