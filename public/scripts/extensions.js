@@ -160,6 +160,7 @@ let extension_settings = {
     rvc: {},
     hypebot: {},
     vectors: {},
+    idle: {},
 };
 
 let modules = [];
