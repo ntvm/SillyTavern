@@ -35,7 +35,8 @@ import { extension_settings} from "./extensions.js";
 import {
     promptManagerDefaultPromptOrders,
     chatCompletionDefaultPrompts, Prompt,
-    PromptManagerModule as PromptManager
+    PromptManagerModule as PromptManager,
+    INJECTION_POSITION,
 } from "./PromptManager.js";
 
 import {
@@ -68,7 +69,6 @@ export {
     setOpenAIMessages,
     setOpenAIMessageExamples,
     setupChatCompletionPromptManager,
-    generateOpenAIPromptCache,
     prepareOpenAIMessages,
     sendOpenAIRequest,
     setOpenAIOnlineStatus,
@@ -223,6 +223,7 @@ const default_settings = {
     use_ai21_tokenizer: false,
     exclude_assistant: false,
     use_alt_scale: false,
+    squash_system_messages: false,
 };
 
 
@@ -273,6 +274,7 @@ const oai_settings = {
     use_ai21_tokenizer: false,
     exclude_assistant: false,
     use_alt_scale: false,
+    squash_system_messages: false,
 };
 
 let openai_setting_names;
@@ -355,6 +357,7 @@ function setOpenAIMessages(chat) {
         j++;
     }
 
+/*
 
     // Add chat injections, 100 = maximum depth of injection. ((Why would you ever need more?))  (Well... Yes, but no)
     for (let i = MAX_INJECTION_DEPTH; i >= 0; i--) {
@@ -364,6 +367,8 @@ function setOpenAIMessages(chat) {
             openai_msgs.splice(i, 0, { "role": 'system', 'content': anchor.trim() });
         }
     }
+
+*/
 }
 
 function setOpenAIMessageExamples(mesExamplesArray) {
@@ -427,15 +432,6 @@ function setupChatCompletionPromptManager(openAiSettings) {
     promptManager.render(false);
 
     return promptManager;
-}
-
-function generateOpenAIPromptCache() {
-    openai_msgs = openai_msgs.reverse();
-    openai_msgs.forEach(function (msg, i, arr) {
-        let item = msg["content"];
-        msg["content"] = item;
-        openai_msgs[i] = msg;
-    });
 }
 
 function parseExampleIntoIndividual(messageExampleString) {
@@ -503,6 +499,45 @@ function formatWorldInfo(value) {
 }
 
 /**
+ * This function populates the injections in the conversation.
+ *
+ * @param {Prompt[]} prompts - Array containing injection prompts.
+ */
+function populationInjectionPrompts(prompts) {
+    let totalInsertedMessages = 0;
+
+    for (let i = 0; i <= MAX_INJECTION_DEPTH; i++) {
+        // Get prompts for current depth
+        const depthPrompts = prompts.filter(prompt => prompt.injection_depth === i && prompt.content);
+
+        // Order of priority (most important go lower)
+        const roles = ['system', 'user', 'assistant'];
+        const roleMessages = [];
+
+        for (const role of roles) {
+            // Get prompts for current role
+            const rolePrompts = depthPrompts.filter(prompt => prompt.role === role).map(x => x.content).join('\n');
+            // Get extension prompt (only for system role)
+            const extensionPrompt = role === 'system' ? getExtensionPrompt(extension_prompt_types.IN_CHAT, i) : '';
+
+            const jointPrompt = [rolePrompts, extensionPrompt].filter(x => x).map(x => x.trim()).join('\n');
+
+            if (jointPrompt && jointPrompt.length) {
+                roleMessages.push({ "role": role, 'content': jointPrompt });
+            }
+        }
+
+        if (roleMessages.length) {
+            const injectIdx = i + totalInsertedMessages;
+            openai_msgs.splice(injectIdx, 0, ...roleMessages);
+            totalInsertedMessages += roleMessages.length;
+        }
+    }
+
+    openai_msgs = openai_msgs.reverse();
+}
+
+/**
  * Populates the chat history of the conversation.
  *
  * @param {PromptCollection} prompts - Map object containing all prompts where the key is the prompt identifier and the value is the prompt object.
@@ -511,7 +546,6 @@ function formatWorldInfo(value) {
  * @param cyclePrompt
  */
 function populateChatHistory(prompts, chatCompletion, type = null, cyclePrompt = null) {
-    // Chat History
     chatCompletion.add(new MessageCollection('chatHistory'), prompts.index('chatHistory'));
 
     let names = (selected_group && groups.find(x => x.id === selected_group)?.members.map(member => characters.find(c => c.avatar === member)?.name).filter(Boolean).join(', ')) || '';
@@ -694,20 +728,26 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
     // Add quiet prompt to control prompts
     // This should always be last, even in control prompts. Add all further control prompts BEFORE this prompt
     const quietPromptMessage = Message.fromPrompt(prompts.get('quietPrompt')) ?? null;
-    if (quietPromptMessage) controlPrompts.add(quietPromptMessage);
+    if (quietPromptMessage && quietPromptMessage.content) controlPrompts.add(quietPromptMessage);
 
     chatCompletion.reserveBudget(controlPrompts);
 
     // Add ordered system and user prompts
     const systemPrompts = ['nsfw', 'jailbreak'];
-    const userPrompts = prompts.collection
-        .filter((prompt) => false === prompt.system_prompt)
+    const userRelativePrompts = prompts.collection
+        .filter((prompt) => false === prompt.system_prompt && prompt.injection_position !== INJECTION_POSITION.ABSOLUTE)
         .reduce((acc, prompt) => {
             acc.push(prompt.identifier)
             return acc;
         }, []);
+    const userAbsolutePrompts = prompts.collection
+        .filter((prompt) => false === prompt.system_prompt && prompt.injection_position === INJECTION_POSITION.ABSOLUTE)
+        .reduce((acc, prompt) => {
+            acc.push(prompt)
+            return acc;
+        }, []);
 
-    [...systemPrompts, ...userPrompts].forEach(identifier => addToChatCompletion(identifier));
+    [...systemPrompts, ...userRelativePrompts].forEach(identifier => addToChatCompletion(identifier));
 
     // Add enhance definition instruction
     if (prompts.has('enhanceDefinitions')) addToChatCompletion('enhanceDefinitions');
@@ -782,6 +822,9 @@ function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt, ty
             chatCompletion.insert(Message.fromPrompt(smartContext), 'main', smartContext.position);
         }
     }
+
+    // Add in-chat injections
+    populationInjectionPrompts(userAbsolutePrompts);
 
     // Decide whether dialogue examples should always be added
     if (power_user.pin_examples) {
@@ -1025,6 +1068,10 @@ function prepareOpenAIMessages({
     } finally {
         // Pass chat completion to prompt manager for inspection
         promptManager.setChatCompletion(chatCompletion);
+
+        if (oai_settings.squash_system_messages) {
+            chatCompletion.squashSystemMessages();
+        }
 
         // All information is up-to-date, render.
         if (false === dryRun) promptManager.render(false);
@@ -1735,6 +1782,21 @@ class MessageCollection {
     getTokens() {
         return this.collection.reduce((tokens, message) => tokens + message.getTokens(), 0);
     }
+
+    /**
+     * Combines message collections into a single collection.
+     * @returns {Message[]} The collection of messages flattened into a single array.
+     */
+    flatten() {
+        return this.collection.reduce((acc, message) => {
+            if (message instanceof MessageCollection) {
+                acc.push(...message.flatten());
+            } else {
+                acc.push(message);
+            }
+            return acc;
+        }, []);
+    }
 }
 
 /**
@@ -1748,6 +1810,36 @@ class MessageCollection {
  *
  */
 class ChatCompletion {
+
+    /**
+     * Combines consecutive system messages into one if they have no name attached.
+     */
+    squashSystemMessages() {
+        const excludeList = ['newMainChat', 'newChat', 'groupNudge'];
+        this.messages.collection = this.messages.flatten();
+
+        let lastMessage = null;
+        let squashedMessages = [];
+
+        for (let message of this.messages.collection) {
+            if (!excludeList.includes(message.identifier) && message.role === 'system' && !message.name) {
+                if (lastMessage && lastMessage.role === 'system') {
+                    lastMessage.content += '\n' + message.content;
+                    lastMessage.tokens = tokenHandler.count({ role: lastMessage.role, content: lastMessage.content });
+                }
+                else {
+                    squashedMessages.push(message);
+                    lastMessage = message;
+                }
+            }
+            else {
+                squashedMessages.push(message);
+                lastMessage = message;
+            }
+        }
+
+        this.messages.collection = squashedMessages;
+    }
 
     /**
      * Initializes a new instance of ChatCompletion.
@@ -1832,7 +1924,7 @@ class ChatCompletion {
      *
      * @param {Message} message - The message to insert.
      * @param {string} identifier - The identifier of the collection where to insert the message.
-     * @param {string} position - The position at which to insert the message ('start' or 'end').
+     * @param {string|number} position - The position at which to insert the message ('start' or 'end').
      */
     insert(message, identifier, position = 'end') {
         this.validateMessage(message);
@@ -1841,14 +1933,14 @@ class ChatCompletion {
         const index = this.findMessageIndex(identifier);
         if (message.content) {
             if ('start' === position) this.messages.collection[index].collection.unshift(message);
-            else if ('end' === position) this.messages.collection[index].collection.push(message);
+            else if ('end' === position) this.messages.collection[index].collection.push(message)
+            else if (typeof position === 'number') this.messages.collection[index].collection.splice(position, 0, message);
 
             this.decreaseTokenBudgetBy(message.getTokens());
 
             this.log(`Inserted ${message.identifier} into ${identifier}. Remaining tokens: ${this.tokenBudget}`);
         }
     }
-
 
     /**
      * Remove the last item of the collection
@@ -1908,7 +2000,11 @@ class ChatCompletion {
         for (let item of this.messages.collection) {
             if (item instanceof MessageCollection) {
                 chat.push(...item.getChat());
+            } else if (item instanceof Message && item.content) {
+                const message = { role: item.role, content: item.content, ...(item.name ? { name: item.name } : {}) };
+                chat.push(message);
             } else {
+                this.log(`Item ${item} has an unknown type. Adding as-is`);
                 chat.push(item);
             }
         }
@@ -2083,6 +2179,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.new_example_chat_prompt = settings.new_example_chat_prompt ?? default_settings.new_example_chat_prompt;
     oai_settings.continue_nudge_prompt = settings.continue_nudge_prompt ?? default_settings.continue_nudge_prompt;
     oai_settings.lookaround_nudge_prompt = settings.lookaround_nudge_prompt ?? default_settings.lookaround_nudge_prompt;
+    oai_settings.squash_system_messages = settings.squash_system_messages ?? default_settings.squash_system_messages;
 
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
     if (settings.names_in_completion !== undefined) oai_settings.names_in_completion = !!settings.names_in_completion;
@@ -2119,6 +2216,7 @@ function loadOpenAISettings(data, settings) {
     $('#exclude_assistant').prop('checked', oai_settings.exclude_assistant);
     $('#scale-alt').prop('checked', oai_settings.use_alt_scale);
     $('#openrouter_use_fallback').prop('checked', oai_settings.openrouter_use_fallback);
+    $('#squash_system_messages').prop('checked', oai_settings.squash_system_messages);
     if (settings.impersonation_prompt !== undefined) oai_settings.impersonation_prompt = settings.impersonation_prompt;
 
     $('#impersonation_prompt_textarea').val(oai_settings.impersonation_prompt);
@@ -2320,6 +2418,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         use_ai21_tokenizer: settings.use_ai21_tokenizer,
         exclude_assistant: settings.exclude_assistant,
         use_alt_scale: settings.use_alt_scale,
+        squash_system_messages: settings.squash_system_messages,
     };
 
     const savePresetSettings = await fetch(`/api/presets/save-openai?name=${name}`, {
@@ -2665,14 +2764,14 @@ function onSettingsPresetChange() {
         stream_openai: ['#stream_toggle', 'stream_openai', true],
         prompts: ['', 'prompts', false],
         prompt_order: ['', 'prompt_order', false],
-        use_openrouter: ['#use_openrouter', 'use_openrouter', true],
         api_url_scale: ['#api_url_scale', 'api_url_scale', false],
         show_external_models: ['#openai_show_external_models', 'show_external_models', true],
         proxy_password: ['#openai_proxy_password', 'proxy_password', false],
         assistant_prefill: ['#claude_assistant_prefill', 'assistant_prefill', false],
-        use_ai21_tokenizer: ['#use_ai21_tokenizer', 'use_ai21_tokenizer', false],
-        exclude_assistant: ['#exclude_assistant', 'exclude_assistant', false],
-        use_alt_scale: ['#use_alt_scale', 'use_alt_scale', false],
+        use_ai21_tokenizer: ['#use_ai21_tokenizer', 'use_ai21_tokenizer', true],
+        exclude_assistant: ['#exclude_assistant', 'exclude_assistant', true],
+        use_alt_scale: ['#use_alt_scale', 'use_alt_scale', true],
+        squash_system_messages: ['#squash_system_messages', 'squash_system_messages', true],
     };
 
     const presetName = $('#settings_perset_openai').find(":selected").text();
@@ -3387,6 +3486,11 @@ $(document).ready(async function () {
 
     $('#openrouter_use_fallback').on('input', function () {
         oai_settings.openrouter_use_fallback = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#squash_system_messages').on('input', function () {
+        oai_settings.squash_system_messages = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 

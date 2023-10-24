@@ -628,6 +628,9 @@ app.post("/generate_textgenerationwebui", jsonParser, async function (request, r
                         yield message.text;
                         break;
                     case 'stream_end':
+                        if (message.error) {
+                            yield `\n[API Error] ${message.error}\n`
+                        }
                         websocket.close();
                         return;
                 }
@@ -724,7 +727,7 @@ app.post("/getchat", jsonParser, function (request, response) {
         const lines = data.split('\n');
 
         // Iterate through the array of strings and parse each line as JSON
-        const jsonData = lines.map(tryParse).filter(x => x);
+        const jsonData = lines.map((l) => { try { return JSON.parse(l); } catch (_) { } }).filter(x => x);
         return response.send(jsonData);
     } catch (error) {
         console.error(error);
@@ -856,7 +859,7 @@ function unsetFavFlag(char) {
 
 function readFromV2(char) {
     if (_.isUndefined(char.data)) {
-        console.warn('Spec v2 data missing');
+        console.warn(`Char ${char['name']} has Spec v2 data missing`);
         return char;
     }
 
@@ -891,12 +894,12 @@ function readFromV2(char) {
                 //console.debug(`Spec v2 extension data missing for field: ${charField}, using default value: ${defaultValue}`);
                 char[charField] = defaultValue;
             } else {
-                console.debug(`Spec v2 data missing for unknown field: ${charField}`);
+                console.debug(`Char ${char['name']} has Spec v2 data missing for unknown field: ${charField}`);
                 return;
             }
         }
         if (!_.isUndefined(char[charField]) && !_.isUndefined(v2Value) && String(char[charField]) !== String(v2Value)) {
-            console.debug(`Spec v2 data mismatch with Spec v1 for field: ${charField}`, char[charField], v2Value);
+            console.debug(`Char ${char['name']} has Spec v2 data mismatch with Spec v1 for field: ${charField}`, char[charField], v2Value);
         }
         char[charField] = v2Value;
     });
@@ -1552,8 +1555,8 @@ app.post("/delchat", jsonParser, function (request, response) {
 app.post('/renamebackground', jsonParser, function (request, response) {
     if (!request.body) return response.sendStatus(400);
 
-    const oldFileName = path.join('public/backgrounds/', sanitize(request.body.old_bg));
-    const newFileName = path.join('public/backgrounds/', sanitize(request.body.new_bg));
+    const oldFileName = path.join(DIRECTORIES.backgrounds, sanitize(request.body.old_bg));
+    const newFileName = path.join(DIRECTORIES.backgrounds, sanitize(request.body.new_bg));
 
     if (!fs.existsSync(oldFileName)) {
         console.log('BG file not found');
@@ -1841,15 +1844,18 @@ function convertWorldInfoToCharacterBook(name, entries) {
 }
 
 function readWorldInfoFile(worldInfoName) {
+    const dummyObject = { entries: {} };
+
     if (!worldInfoName) {
-        return { entries: {} };
+        return dummyObject;
     }
 
     const filename = `${worldInfoName}.json`;
     const pathToWorldInfo = path.join(DIRECTORIES.worlds, filename);
 
     if (!fs.existsSync(pathToWorldInfo)) {
-        throw new Error(`World info file ${filename} doesn't exist.`);
+        console.log(`World info file ${filename} doesn't exist.`);
+        return dummyObject;
     }
 
     const worldInfoText = fs.readFileSync(pathToWorldInfo, 'utf8');
@@ -1868,37 +1874,27 @@ function getImages(path) {
         .sort(Intl.Collator().compare);
 }
 
-app.post("/getallchatsofcharacter", jsonParser, function (request, response) {
+app.post("/getallchatsofcharacter", jsonParser, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
 
-    var char_dir = (request.body.avatar_url).replace('.png', '')
-    fs.readdir(chatsPath + char_dir, (err, files) => {
-        if (err) {
-            console.log('found error in history loading');
-            console.error(err);
+    const characterDirectory = (request.body.avatar_url).replace('.png', '');
+
+    try {
+        const chatsDirectory = path.join(chatsPath, characterDirectory);
+        const files = fs.readdirSync(chatsDirectory);
+        const jsonFiles = files.filter(file => path.extname(file) === '.jsonl');
+
+        if (jsonFiles.length === 0) {
             response.send({ error: true });
             return;
         }
 
-        // filter for JSON files
-        const jsonFiles = files.filter(file => path.extname(file) === '.jsonl');
-
-        // sort the files by name
-        //jsonFiles.sort().reverse();
-        // print the sorted file names
-        var chatData = {};
-        let ii = jsonFiles.length;	//this is the number of files belonging to the character
-        if (ii !== 0) {
-            //console.log('found '+ii+' chat logs to load');
-            for (let i = jsonFiles.length - 1; i >= 0; i--) {
-                const file = jsonFiles[i];
-                const fileStream = fs.createReadStream(chatsPath + char_dir + '/' + file);
-
-                const fullPathAndFile = chatsPath + char_dir + '/' + file
-                const stats = fs.statSync(fullPathAndFile);
-                const fileSizeInKB = (stats.size / 1024).toFixed(2) + "kb";
-
-                //console.log(fileSizeInKB);
+        const jsonFilesPromise = jsonFiles.map((file) => {
+            return new Promise(async (res) => {
+                const pathToFile = path.join(chatsPath, characterDirectory, file);
+                const fileStream = fs.createReadStream(pathToFile);
+                const stats = fs.statSync(pathToFile);
+                const fileSizeInKB = `${(stats.size / 1024).toFixed(2)}kb`;
 
                 const rl = readline.createInterface({
                     input: fileStream,
@@ -1912,34 +1908,37 @@ app.post("/getallchatsofcharacter", jsonParser, function (request, response) {
                     lastLine = line;
                 });
                 rl.on('close', () => {
-                    ii--;
-                    if (lastLine) {
+                    rl.close();
 
-                        let jsonData = tryParse(lastLine);
-                        if (jsonData && (jsonData.name !== undefined || jsonData.character_name !== undefined)) {
-                            chatData[i] = {};
-                            chatData[i]['file_name'] = file;
-                            chatData[i]['file_size'] = fileSizeInKB;
-                            chatData[i]['chat_items'] = itemCounter - 1;
-                            chatData[i]['mes'] = jsonData['mes'] || '[The chat is empty]';
-                            chatData[i]['last_mes'] = jsonData['send_date'] || Date.now();
+                    if (lastLine) {
+                        const jsonData = tryParse(lastLine);
+                        if (jsonData && (jsonData.name || jsonData.character_name)) {
+                            const chatData = {};
+
+                            chatData['file_name'] = file;
+                            chatData['file_size'] = fileSizeInKB;
+                            chatData['chat_items'] = itemCounter - 1;
+                            chatData['mes'] = jsonData['mes'] || '[The chat is empty]';
+                            chatData['last_mes'] = jsonData['send_date'] || Date.now();
+
+                            res(chatData);
                         } else {
-                            console.log('Found an invalid or corrupted chat file: ' + fullPathAndFile);
+                            console.log('Found an invalid or corrupted chat file:', pathToFile);
+                            res({});
                         }
                     }
-                    if (ii === 0) {
-                        //console.log('ii count went to zero, responding with chatData');
-                        response.send(chatData);
-                    }
-                    //console.log('successfully closing getallchatsofcharacter');
-                    rl.close();
                 });
-            };
-        } else {
-            //console.log('Found No Chats. Exiting Load Routine.');
-            response.send({ error: true });
-        };
-    })
+            });
+        });
+
+        const chatData = await Promise.all(jsonFilesPromise);
+        const validFiles = chatData.filter(i => i.file_name);
+
+        return response.send(validFiles);
+    } catch (error) {
+        console.log(error);
+        return response.send({ error: true });
+    }
 });
 
 function getPngName(file) {
@@ -2778,7 +2777,7 @@ app.post("/getstatus_openai", jsonParser, async function (request, response_gets
             const data = await response.json();
             response_getstatus_openai.send(data);
 
-            if (request.body.use_openrouter) {
+            if (request.body.use_openrouter && Array.isArray(data?.data)) {
                 let models = [];
 
                 data.data.forEach(model => {
@@ -2793,8 +2792,14 @@ app.post("/getstatus_openai", jsonParser, async function (request, response_gets
 
                 console.log('Available OpenRouter models:', models);
             } else {
-                const modelIds = data?.data?.map(x => x.id)?.sort();
-                console.log('Available OpenAI models:', modelIds);
+                const models = data?.data;
+
+                if (Array.isArray(models)) {
+                    const modelIds = models.filter(x => x && typeof x === 'object').map(x => x.id).sort();
+                    console.log('Available OpenAI models:', modelIds);
+                } else {
+                    console.log('OpenAI endpoint did not return a list of models.')
+                }
             }
         }
         else {
@@ -2803,7 +2808,12 @@ app.post("/getstatus_openai", jsonParser, async function (request, response_gets
         }
     } catch (e) {
         console.error(e);
-        response_getstatus_openai.send({ error: true });
+
+        if (!response_getstatus_openai.headersSent) {
+            response_getstatus_openai.send({ error: true });
+        } else {
+            response_getstatus_openai.end();
+        }
     }
 });
 
@@ -2828,7 +2838,7 @@ app.post("/openai_bias", jsonParser, async function (request, response) {
         }
 
         try {
-            const tokens = tokenizer.encode(entry.text);
+            const tokens = getEntryTokens(entry.text);
 
             for (const token of tokens) {
                 result[token] = entry.value;
@@ -2841,6 +2851,28 @@ app.post("/openai_bias", jsonParser, async function (request, response) {
     // not needed for cached tokenizers
     //tokenizer.free();
     return response.send(result);
+
+    /**
+     * Gets tokenids for a given entry
+     * @param {string} text Entry text
+     * @returns {Uint32Array} Array of token ids
+     */
+    function getEntryTokens(text) {
+        // Get raw token ids from JSON array
+        if (text.trim().startsWith('[') && text.trim().endsWith(']')) {
+            try {
+                const json = JSON.parse(text);
+                if (Array.isArray(json) && json.every(x => typeof x === 'number')) {
+                    return new Uint32Array(json);
+                }
+            } catch {
+                // ignore
+            }
+        }
+
+        // Otherwise, get token ids from tokenizer
+        return tokenizer.encode(text);
+    }
 });
 
 function convertChatMLPrompt(messages) {
