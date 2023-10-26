@@ -12,13 +12,13 @@ Ideas:
     - https://codepen.io/xrocker/pen/abdKVGy
 */
 
-import { saveSettingsDebounced, getRequestHeaders } from "../../../script.js";
-import { getContext, extension_settings, ModuleWorkerWrapper } from "../../extensions.js";
-import { isDataURL } from "../../utils.js";
+import { saveSettingsDebounced, getRequestHeaders } from "../../../../script.js";
+import { getContext, extension_settings, ModuleWorkerWrapper } from "../../../extensions.js";
+import { isDataURL } from "../../../utils.js";
 export { MODULE_NAME };
 
-const extensionName = "audio";
-const extensionFolderPath = `scripts/extensions/${extensionName}`;
+const extensionName = "Extension-Audio";
+const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const MODULE_NAME = 'Audio';
 const DEBUG_PREFIX = "<Audio module> ";
