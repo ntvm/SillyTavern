@@ -278,8 +278,8 @@ export function getGroupCharacterCards(groupId, characterId) {
         const index = characters.findIndex(x => x.avatar === member);
         const character = characters[index];
 
-        let CharStart = "<" + character.name + ">"
-        let CharEnd = "</" + character.name + ">"
+
+
         if (index === -1 || !character) {
             console.debug(`Skipping missing member: ${member}`);
             continue;
@@ -288,6 +288,23 @@ export function getGroupCharacterCards(groupId, characterId) {
         if (group.disabled_members.includes(member) && characterId !== index) {
             console.debug(`Skipping disabled group member: ${member}`);
             continue;
+        }
+
+        switch (character.name) {
+            case '': 
+                var CharStart = "<" + member + ">"
+                var CharEnd = "</" + member + ">"
+                break
+
+            case undefined: 
+                var CharStart = "<" + member + ">"
+                var CharEnd = "</" + member + ">"
+                break
+            
+            default:
+                var CharStart = "<" + character.name + ">"
+                var CharEnd = "</" + character.name + ">"
+                break
         }
 
         switch (character.description.trim()) {
