@@ -66,6 +66,8 @@ import {
     system_avatar,
     isChatSaving,
     setExternalAbortController,
+    baseChatReplace,
+    depth_prompt_depth_default,
 } from "../script.js";
 import { appendTagToList, createTagMapFromList, getTagsList, applyTagsOnCharacterSelect, tag_map, printTagFilters } from './tags.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
@@ -100,6 +102,11 @@ export const group_activation_strategy = {
     NATURAL: 0,
     LIST: 1,
 };
+
+export const group_generation_mode = {
+    SWAP: 0,
+    APPEND: 1,
+}
 
 export const groupCandidatesFilter = new FilterHelper(debounce(printGroupCandidates, 100));
 const groupAutoModeInterval = setInterval(groupChatAutoModeWorker, 5000);
@@ -191,6 +198,177 @@ export async function getGroupChat(groupId) {
     }
 
     eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
+}
+
+/**
+ * Gets depth prompts for group members.
+ * @param {string} groupId Group ID
+ * @param {number} characterId Current Character ID
+ * @returns {{depth: number, text: string}[]} Array of depth prompts
+ */
+export function getGroupDepthPrompts(groupId, characterId) {
+    if (!groupId) {
+        return [];
+    }
+
+    console.debug('getGroupDepthPrompts entered for group: ', groupId);
+    const group = groups.find(x => x.id === groupId);
+
+    if (!group || !Array.isArray(group.members) || !group.members.length) {
+        return [];
+    }
+
+    if (group.generation_mode === group_generation_mode.SWAP) {
+        return [];
+    }
+
+    const depthPrompts = [];
+
+    for (const member of group.members) {
+        const index = characters.findIndex(x => x.avatar === member);
+        const character = characters[index];
+
+        if (index === -1 || !character) {
+            console.debug(`Skipping missing member: ${member}`);
+            continue;
+        }
+
+        if (group.disabled_members.includes(member) && characterId !== index) {
+            console.debug(`Skipping disabled group member: ${member}`);
+            continue;
+        }
+
+        const depthPromptText = baseChatReplace(character.data?.extensions?.depth_prompt?.prompt?.trim(), name1, character.name) || '';
+        const depthPromptDepth = character.data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default;
+
+        if (depthPromptText) {
+            depthPrompts.push({ text: depthPromptText, depth: depthPromptDepth });
+        }
+    }
+
+    return depthPrompts;
+}
+
+/**
+ * Combines group members info a single string. Only for groups with generation mode set to APPEND.
+ * @param {string} groupId Group ID
+ * @param {number} characterId Current Character ID
+ * @returns {{description: string, personality: string, scenario: string, mesExample: string}} Group character cards combined
+ */
+    // Initialize depth prompt for the current character // skip if the current character is not in the group 
+    // Skip if the current character is disabled 
+    // Current character always is first character in the group
+    // All Characters should have <{{char}}>X</{{char}}> in theirs prompts
+export function getGroupCharacterCards(groupId, characterId) {
+    console.debug('getGroupCharacterCards entered for group: ', groupId);
+    const group = groups.find(x => x.id === groupId);
+
+    if (!group || group?.generation_mode !== group_generation_mode.APPEND || !Array.isArray(group.members) || !group.members.length) {
+        return null;
+    }
+
+    const scenarioOverride = chat_metadata['scenario'];
+
+    let descriptions = [];
+    let personalities = [];
+    let scenarios = [];
+    let mesExamples = [];
+
+    for (const member of group.members) {
+        const index = characters.findIndex(x => x.avatar === member);
+        const character = characters[index];
+
+        let CharStart = "<" + character.name + ">"
+        let CharEnd = "</" + character.name + ">"
+        if (index === -1 || !character) {
+            console.debug(`Skipping missing member: ${member}`);
+            continue;
+        }
+
+        if (group.disabled_members.includes(member) && characterId !== index) {
+            console.debug(`Skipping disabled group member: ${member}`);
+            continue;
+        }
+
+        switch (character.description.trim()) {
+            case '':
+                descriptions.push('');
+                break;
+            default:
+                descriptions.push(baseChatReplace('\n' + CharStart + '\n' + character.description.trim() + '\n' + CharEnd + '\n', name1, character.name));
+                break;
+        }
+
+        switch (character.personality.trim()) {
+            case '':
+                personalities.push('');
+                break;
+            default:
+                personalities.push(baseChatReplace(CharStart + '\n' + character.personality.trim()+ '\n' + CharEnd + '\n' , name1, character.name));
+                break;
+        }
+
+        switch (character.scenario.trim()) {
+            case '':
+                scenarios.push('');
+                break;
+            default:
+                scenarios.push(baseChatReplace('\n' + CharStart + character.scenario.trim() + CharEnd + '\n', name1, character.name));
+                break;
+        }
+
+        switch (character.mes_example.trim()) {
+            case '':
+                mesExamples.push('');
+                break;
+            default:
+                mesExamples.push(baseChatReplace('\n' + CharStart + character.mes_example.trim() + CharEnd + '\n', name1, character.name));
+                break;
+        }
+
+    }
+
+    var Df1 = descriptions.join('')
+    switch (Df1) {
+        case '':
+            var description = "";
+            break;
+        default:
+            var description = "<Characters_descriptions>" + '\n' + Df1 + "</Characters_descriptions>";
+            break;
+    }   
+    
+    var Df2 = personalities.join('')
+    switch (Df2) {
+        case '':
+            var personality = "";
+            break;
+        default:
+            var personality = "<Characters_personalities>" + '\n' + Df2 + "</Characters_personalities>";
+            break;
+    }
+    
+    var Df3 = scenarios.join('')
+    switch (Df3) {
+        case '':
+            var scenario = "";
+            break;
+        default:
+            var scenario = scenarioOverride?.trim() || "<Characters_Scenarios>" + '\n' + Df3 + "</Characters_Scenarios>" ;
+            break;
+    }
+    
+    var Df4 = mesExamples.join('')
+    switch (Df4) {
+        case '':
+            var mesExample = "";
+            break;
+        default:
+            var mesExample = "<Characters_MessagesExamples>" + '\n' + Df4 + "</Characters_MessagesExamples>" ;
+            break;
+    }
+
+    return { description, personality, scenario, mesExample };
 }
 
 function getFirstCharacterMessage(character) {
@@ -922,6 +1100,14 @@ async function onGroupActivationStrategyInput(e) {
     }
 }
 
+async function onGroupGenerationModeInput(e) {
+    if (openGroupId) {
+        let _thisGroup = groups.find((x) => x.id == openGroupId);
+        _thisGroup.generation_mode = Number(e.target.value);
+        await editGroup(openGroupId, false, false);
+    }
+}
+
 async function onGroupNameInput() {
     if (openGroupId) {
         let _thisGroup = groups.find((x) => x.id == openGroupId);
@@ -1085,12 +1271,16 @@ function select_group_chats(groupId, skipAnimation) {
     const group = openGroupId && groups.find((x) => x.id == openGroupId);
     const groupName = group?.name ?? "";
     const replyStrategy = Number(group?.activation_strategy ?? group_activation_strategy.NATURAL);
+    const generationMode = Number(group?.generation_mode ?? group_generation_mode.SWAP);
 
     setMenuType(!!group ? 'group_edit' : 'group_create');
     $("#group_avatar_preview").empty().append(getGroupAvatar(group));
     $("#rm_group_restore_avatar").toggle(!!group && isValidImageUrl(group.avatar_url));
     $("#rm_group_filter").val("").trigger("input");
-    $(`input[name="rm_group_activation_strategy"][value="${replyStrategy}"]`).prop('checked', true);
+    $("#rm_group_activation_strategy").val(replyStrategy);
+    $(`#rm_group_activation_strategy option[value="${replyStrategy}"]`).prop('selected', true);
+    $("#rm_group_generation_mode").val(generationMode);
+    $(`#rm_group_generation_mode option[value="${generationMode}"]`).prop('selected', true);
     $("#rm_group_chat_name").val(groupName);
 
     if (!skipAnimation) {
@@ -1311,8 +1501,9 @@ function filterGroupMembers() {
 
 async function createGroup() {
     let name = $("#rm_group_chat_name").val();
-    let allow_self_responses = !!$("#rm_group_allow_self_responses").prop("checked");
-    let activation_strategy = $('input[name="rm_group_activation_strategy"]:checked').val() ?? group_activation_strategy.NATURAL;
+    let allowSelfResponses = !!$("#rm_group_allow_self_responses").prop("checked");
+    let activationStrategy = Number($('#rm_group_activation_strategy').find(':selected').val()) ?? group_activation_strategy.NATURAL;
+    let generationMode = Number($('#rm_group_generation_mode').find(':selected').val()) ?? group_generation_mode.SWAP;
     const members = newGroupMembers;
     const memberNames = characters.filter(x => members.includes(x.avatar)).map(x => x.name).join(", ");
 
@@ -1332,8 +1523,9 @@ async function createGroup() {
             name: name,
             members: members,
             avatar_url: isValidImageUrl(avatar_url) ? avatar_url : default_avatar,
-            allow_self_responses: allow_self_responses,
-            activation_strategy: activation_strategy,
+            allow_self_responses: allowSelfResponses,
+            activation_strategy: activationStrategy,
+            generation_mode: generationMode,
             disabled_members: [],
             chat_metadata: {},
             fav: fav_grp_checked,
@@ -1605,7 +1797,8 @@ jQuery(() => {
     $("#rm_group_delete").off().on("click", onDeleteGroupClick);
     $("#group_favorite_button").on('click', onFavoriteGroupClick);
     $("#rm_group_allow_self_responses").on("input", onGroupSelfResponsesClick);
-    $('input[name="rm_group_activation_strategy"]').on("input", onGroupActivationStrategyInput);
+    $("#rm_group_activation_strategy").on("change", onGroupActivationStrategyInput);
+    $("#rm_group_generation_mode").on("change", onGroupGenerationModeInput);
     $("#group_avatar_button").on("input", uploadGroupAvatar);
     $("#rm_group_restore_avatar").on("click", restoreGroupAvatar);
     $(document).on("click", ".group_member .right_menu_button", onGroupActionClick);
