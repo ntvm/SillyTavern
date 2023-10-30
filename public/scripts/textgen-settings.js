@@ -44,6 +44,8 @@ const textgenerationwebui_settings = {
     length_penalty: 1,
     min_length: 0,
     encoder_rep_pen: 1,
+    freq_pen: 0,
+    presence_pen: 0,
     do_sample: true,
     early_stopping: false,
     seed: -1,
@@ -87,6 +89,8 @@ const setting_names = [
     "length_penalty",
     "min_length",
     "encoder_rep_pen",
+    "freq_pen",
+    "presence_pen",
     "do_sample",
     "early_stopping",
     "seed",
@@ -286,7 +290,7 @@ jQuery(function () {
             }
             else {
                 const value = Number($(this).val());
-                $(`#${id}_counter_textgenerationwebui`).text(value.toFixed(2));
+                $(`#${id}_counter_textgenerationwebui`).val(value);
                 textgenerationwebui_settings[id] = value;
             }
 
@@ -312,7 +316,7 @@ function setSettingByName(i, value, trigger) {
     else {
         const val = parseFloat(value);
         $(`#${i}_textgenerationwebui`).val(val);
-        $(`#${i}_counter_textgenerationwebui`).text(val.toFixed(2));
+        $(`#${i}_counter_textgenerationwebui`).val(val);
     }
 
     if (trigger) {
@@ -413,6 +417,8 @@ export function getTextGenGenerationData(finalPrompt, this_amount_gen, isImperso
         'repetition_penalty': textgenerationwebui_settings.rep_pen,
         'repetition_penalty_range': textgenerationwebui_settings.rep_pen_range,
         'encoder_repetition_penalty': textgenerationwebui_settings.encoder_rep_pen,
+        'frequency_penalty': textgenerationwebui_settings.freq_pen,
+        'presence_penalty': textgenerationwebui_settings.presence_pen,
         'top_k': textgenerationwebui_settings.top_k,
         'min_length': textgenerationwebui_settings.min_length,
         'no_repeat_ngram_size': textgenerationwebui_settings.no_repeat_ngram_size,

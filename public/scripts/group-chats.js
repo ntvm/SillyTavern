@@ -197,7 +197,105 @@ export async function getGroupChat(groupId) {
         updateChatMetadata(metadata, true);
     }
 
-    eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
+    await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
+}
+
+/**
+ * Gets depth prompts for group members.
+ * @param {string} groupId Group ID
+ * @param {number} characterId Current Character ID
+ * @returns {{depth: number, text: string}[]} Array of depth prompts
+ */
+export function getGroupDepthPrompts(groupId, characterId) {
+    if (!groupId) {
+        return [];
+    }
+
+    console.debug('getGroupDepthPrompts entered for group: ', groupId);
+    const group = groups.find(x => x.id === groupId);
+
+    if (!group || !Array.isArray(group.members) || !group.members.length) {
+        return [];
+    }
+
+    if (group.generation_mode === group_generation_mode.SWAP) {
+        return [];
+    }
+
+    const depthPrompts = [];
+
+    for (const member of group.members) {
+        const index = characters.findIndex(x => x.avatar === member);
+        const character = characters[index];
+
+        if (index === -1 || !character) {
+            console.debug(`Skipping missing member: ${member}`);
+            continue;
+        }
+
+        if (group.disabled_members.includes(member) && characterId !== index) {
+            console.debug(`Skipping disabled group member: ${member}`);
+            continue;
+        }
+
+        const depthPromptText = baseChatReplace(character.data?.extensions?.depth_prompt?.prompt?.trim(), name1, character.name) || '';
+        const depthPromptDepth = character.data?.extensions?.depth_prompt?.depth ?? depth_prompt_depth_default;
+
+        if (depthPromptText) {
+            depthPrompts.push({ text: depthPromptText, depth: depthPromptDepth });
+        }
+    }
+
+    return depthPrompts;
+}
+
+/**
+ * Combines group members info a single string. Only for groups with generation mode set to APPEND.
+ * @param {string} groupId Group ID
+ * @param {number} characterId Current Character ID
+ * @returns {{description: string, personality: string, scenario: string, mesExample: string}} Group character cards combined
+ */
+export function getGroupCharacterCards(groupId, characterId) {
+    console.debug('getGroupCharacterCards entered for group: ', groupId);
+    const group = groups.find(x => x.id === groupId);
+
+    if (!group || group?.generation_mode !== group_generation_mode.APPEND || !Array.isArray(group.members) || !group.members.length) {
+        return null;
+    }
+
+    const scenarioOverride = chat_metadata['scenario'];
+
+    let descriptions = [];
+    let personalities = [];
+    let scenarios = [];
+    let mesExamples = [];
+
+    for (const member of group.members) {
+        const index = characters.findIndex(x => x.avatar === member);
+        const character = characters[index];
+
+        if (index === -1 || !character) {
+            console.debug(`Skipping missing member: ${member}`);
+            continue;
+        }
+
+        if (group.disabled_members.includes(member) && characterId !== index) {
+            console.debug(`Skipping disabled group member: ${member}`);
+            continue;
+        }
+
+        descriptions.push(baseChatReplace(character.description.trim(), name1, character.name));
+        personalities.push(baseChatReplace(character.personality.trim(), name1, character.name));
+        scenarios.push(baseChatReplace(character.scenario.trim(), name1, character.name));
+        mesExamples.push(baseChatReplace(character.mes_example.trim(), name1, character.name));
+    }
+
+    const description = descriptions.join('\n');
+    const personality = personalities.join('\n');
+    const scenario = scenarioOverride?.trim() || scenarios.join('\n');
+    const mesExample = mesExamples.join('\n');
+
+    return { description, personality, scenario, mesExample };
 }
 
 /**

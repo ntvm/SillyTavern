@@ -402,6 +402,7 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
             mirostat_eta: request.body.mirostat_eta,
             mirostat_tau: request.body.mirostat_tau,
             grammar: request.body.grammar,
+            sampler_seed: request.body.sampler_seed,
         };
         if (!!request.body.stop_sequence) {
             this_settings['stop_sequence'] = request.body.stop_sequence;
@@ -1835,6 +1836,7 @@ function convertWorldInfoToCharacterBook(name, entries) {
                 probability: entry.probability ?? null,
                 useProbability: entry.useProbability ?? false,
                 depth: entry.depth ?? 4,
+                selectiveLogic: entry.selectiveLogic ?? 0,
             },
         };
 
@@ -2606,6 +2608,7 @@ app.post('/creategroup', jsonParser, (request, response) => {
         avatar_url: request.body.avatar_url,
         allow_self_responses: !!request.body.allow_self_responses,
         activation_strategy: request.body.activation_strategy ?? 0,
+        generation_mode: request.body.generation_mode ?? 0,
         disabled_members: request.body.disabled_members ?? [],
         chat_metadata: request.body.chat_metadata ?? {},
         fav: request.body.fav,

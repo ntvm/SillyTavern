@@ -144,8 +144,7 @@ import {
     onlyUnique,
 } from "./scripts/utils.js";
 
-import { ModuleWorkerWrapper, extension_settings, getContext, loadExtensionSettings, processExtensionHelpers, registerExtensionHelper, renderExtensionTemplate, runGenerationInterceptors, saveMetadataDebounced } from "./scripts/extensions.js";
-
+import { ModuleWorkerWrapper, doDailyExtensionUpdatesCheck, extension_settings, getContext, loadExtensionSettings, processExtensionHelpers, registerExtensionHelper, renderExtensionTemplate, runGenerationInterceptors, saveMetadataDebounced } from "./scripts/extensions.js";
 import { COMMENT_NAME_DEFAULT, executeSlashCommands, getSlashCommandsHelp, registerSlashCommand } from "./scripts/slash-commands.js";
 import {
     tag_map,
@@ -730,6 +729,7 @@ async function firstLoadInit() {
     initRossMods();
     initStats();
     initCfg();
+    doDailyExtensionUpdatesCheck();
 }
 
 function checkOnlineStatus() {
@@ -1159,9 +1159,8 @@ export async function reloadCurrentChat() {
     else {
         resetChatState();
         await printMessages();
+        await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
     }
-
-    await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
 }
 
 function messageFormatting(mes, ch_name, isSystem, isUser) {
@@ -1694,7 +1693,7 @@ function substituteParams(content, _name1, _name2, _original, _group) {
     content = content.replace(/<CHARIFNOTGROUP>/gi, _group);
     content = content.replace(/<GROUP>/gi, _group);
 
-    content = content.replace(/\{\{\/\/(.*?)\}\}/g, "");
+    content = content.replace(/\{\{\/\/([\s\S]*?)\}\}/gm, "");
 
     content = content.replace(/{{time}}/gi, moment().format('LT'));
     content = content.replace(/{{date}}/gi, moment().format('LL'));
@@ -1842,6 +1841,10 @@ function getStoppingStrings(isImpersonate) {
     if (power_user.custom_stopping_strings) {
         const customStoppingStrings = getCustomStoppingStrings();
         result.push(...customStoppingStrings);
+    }
+
+    if (power_user.single_line) {
+        result.unshift('\n');
     }
 
     return result.filter(onlyUnique);
@@ -2404,7 +2407,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
     if (interruptedByCommand) {
         $("#send_textarea").val('').trigger('input');
-        is_send_press = false;
+        unblockGeneration();
         return;
     }
 
@@ -2414,18 +2417,18 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         textgenerationwebui_settings.type === textgen_types.OOBA &&
         !textgenerationwebui_settings.streaming_url) {
         toastr.error('Streaming URL is not set. Look it up in the console window when starting TextGen Web UI');
-        is_send_press = false;
+        unblockGeneration();
         return;
     }
 
     if (main_api == 'kobold' && kai_settings.streaming_kobold && !kai_flags.can_use_streaming) {
         toastr.error('Streaming is enabled, but the version of Kobold used does not support token streaming.', undefined, { timeOut: 10000, preventDuplicates: true, });
-        is_send_press = false;
+        unblockGeneration();
         return;
     }
 
     if (isHordeGenerationNotAllowed()) {
-        is_send_press = false;
+        unblockGeneration();
         return;
     }
 
@@ -2465,7 +2468,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             setCharacterName('');
         } else {
             console.log('No enabled members found');
-            is_send_press = false;
+            unblockGeneration();
             return;
         }
     }
@@ -2552,14 +2555,16 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         let mesExamples = baseChatReplace(characters[this_chid].mes_example.trim(), name1, name2);
         let systemPrompt = power_user.prefer_character_prompt ? baseChatReplace(characters[this_chid].data?.system_prompt?.trim(), name1, name2) : '';
         let jailbreakPrompt = power_user.prefer_character_jailbreak ? baseChatReplace(characters[this_chid].data?.post_history_instructions?.trim(), name1, name2) : '';
-		let personaDescription = baseChatReplace(power_user.persona_description.trim(), name1, name2);
+        let personaDescription = baseChatReplace(power_user.persona_description.trim(), name1, name2);
+
         if (isInstruct) {
             systemPrompt = power_user.prefer_character_prompt && systemPrompt ? systemPrompt : baseChatReplace(power_user.instruct.system_prompt, name1, name2);
             systemPrompt = formatInstructModeSystemPrompt(substituteParams(systemPrompt, name1, name2, power_user.instruct.system_prompt));
         }
 
         if (selected_group) {
-            const groupCards = getGroupCharacterCards(selected_group);
+
+            const groupCards = getGroupCharacterCards(selected_group, Number(this_chid));
 
             if (groupCards) {
                 charDescription = groupCards.description;
@@ -2571,7 +2576,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
         // Depth prompt (character-specific A/N)
         removeDepthPrompts();
-        const groupDepthPrompts = getGroupDepthPrompts(selected_group);
+        const groupDepthPrompts = getGroupDepthPrompts(selected_group, Number(this_chid));
 
         if (selected_group && Array.isArray(groupDepthPrompts) && groupDepthPrompts.length > 0) {
             groupDepthPrompts.forEach((value, index) => {
@@ -2617,7 +2622,13 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
         if (!dryRun) {
             console.debug('Running extension interceptors');
-            await runGenerationInterceptors(coreChat, this_max_context);
+            const aborted = await runGenerationInterceptors(coreChat, this_max_context);
+
+            if (aborted) {
+                console.debug('Generation aborted by extension interceptors');
+                unblockGeneration();
+                return;
+            }
         } else {
             console.debug('Skipping extension interceptors for dry run');
         }
@@ -2670,7 +2681,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                 adjustedParams = await adjustHordeGenerationParams(max_context, amount_gen);
             }
             catch {
-                activateSendButtons();
+                unblockGeneration();
                 return;
             }
             if (horde_settings.auto_adjust_context_length) {
@@ -3420,6 +3431,14 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
     //console.log('generate ending');
 } //generate ends
 
+function unblockGeneration() {
+    is_send_press = false;
+    activateSendButtons();
+    showSwipeButtons();
+    setGenerationProgress(0);
+    $("#send_textarea").removeAttr('disabled');
+}
+
 function getNextMessageId(type) {
     return type == 'swipe' ? Number(count_view_mes - 1) : Number(count_view_mes);
 }
@@ -3884,11 +3903,7 @@ function getGenerateUrl(api) {
 function throwCircuitBreakerError() {
     callPopup(`Could not extract reply in ${MAX_GENERATION_LOOPS} attempts. Try generating again`, 'text');
     generate_loop_counter = 0;
-    $("#send_textarea").removeAttr('disabled');
-    is_send_press = false;
-    activateSendButtons();
-    setGenerationProgress(0);
-    showSwipeButtons();
+    unblockGeneration();
     throw new Error('Generate circuit breaker interruption');
 }
 
@@ -4196,6 +4211,8 @@ function getGeneratingApi() {
     switch (main_api) {
         case 'openai':
             return oai_settings.chat_completion_source || 'openai';
+        case 'textgenerationwebui':
+            return textgenerationwebui_settings.type === textgen_types.OOBA ? 'textgenerationwebui' : textgenerationwebui_settings.type;
         default:
             return main_api;
     }
@@ -5054,10 +5071,10 @@ async function getSettings(type) {
 
         // Set context size after loading power user (may override the max value)
         $("#max_context").val(max_context);
-        $("#max_context_counter").text(`${max_context}`);
+        $("#max_context_counter").val(max_context);
 
         $("#amount_gen").val(amount_gen);
-        $("#amount_gen_counter").text(`${amount_gen}`);
+        $("#amount_gen_counter").val(amount_gen);
 
         //Load which API we are using
         if (settings.main_api == undefined) {
@@ -5191,7 +5208,7 @@ export function setGenerationParamsFromPreset(preset) {
     if (preset.genamt !== undefined) {
         amount_gen = preset.genamt;
         $("#amount_gen").val(amount_gen);
-        $("#amount_gen_counter").text(`${amount_gen}`);
+        $("#amount_gen_counter").val(amount_gen);
     }
 
     if (preset.max_length !== undefined) {
@@ -5200,7 +5217,7 @@ export function setGenerationParamsFromPreset(preset) {
         max_context = preset.max_length;
 
         $("#max_context").val(max_context);
-        $("#max_context_counter").text(`${max_context}`);
+        $("#max_context_counter").val(max_context);
     }
 }
 
@@ -5417,7 +5434,7 @@ export async function displayPastChats() {
     data.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)));
     console.log(data);
     $("#load_select_chat_div").css("display", "none");
-    $("#ChatHistoryCharName").text(displayName);
+    $("#ChatHistoryCharName").text(`${displayName}'s `);
 
     const displayChats = (searchQuery) => {
         $("#select_chat_div").empty();  // Clear the current chats before appending filtered chats
@@ -5441,13 +5458,13 @@ export async function displayPastChats() {
                 const chat_items = data[key]["chat_items"];
                 const file_size = data[key]["file_size"];
                 const fileName = data[key]['file_name'];
-                const timestamp = timestampToMoment(data[key]['last_mes']).format('LL LT');
+                const timestamp = timestampToMoment(data[key]['last_mes']).format('lll');
                 const template = $('#past_chat_template .select_chat_block_wrapper').clone();
                 template.find('.select_chat_block').attr('file_name', fileName);
                 template.find('.avatar img').attr('src', avatarImg);
                 template.find('.select_chat_block_filename').text(fileName);
-                template.find('.chat_file_size').text(" (" + file_size + ")");
-                template.find('.chat_messages_num').text(" (" + chat_items + " messages)");
+                template.find('.chat_file_size').text(`(${file_size},`);
+                template.find('.chat_messages_num').text(`${chat_items}💬)`);
                 template.find('.select_chat_block_mes').text(mes);
                 template.find('.PastChat_cross').attr('file_name', fileName);
                 template.find('.chat_messages_date').text(timestamp);
@@ -5818,15 +5835,14 @@ export function setScenarioOverride() {
     const isGroup = !!selected_group;
     template.find('[data-group="true"]').toggle(isGroup);
     template.find('[data-character="true"]').toggle(!isGroup);
-    template.find('.chat_scenario').text(metadataValue).on('input', onScenarioOverrideInput);
+    template.find('.chat_scenario').val(metadataValue).on('input', onScenarioOverrideInput);
     template.find('.remove_scenario_override').on('click', onScenarioOverrideRemoveClick);
     callPopup(template, 'text');
 }
 
 function onScenarioOverrideInput() {
-    const value = $(this).val();
-    const metadata = { scenario: value, };
-    updateChatMetadata(metadata, false);
+    const value = String($(this).val());
+    chat_metadata['scenario'] = value;
     saveMetadataDebounced();
 }
 
@@ -7400,7 +7416,7 @@ jQuery(async function () {
             else {
                 //RossAscends: added character name to new chat filenames and replaced Date.now() with humanizedDateTime;
                 chat_metadata = {};
-                characters[this_chid].chat = name2 + " - " + humanizedDateTime();
+                characters[this_chid].chat = name2 + "-" + humanizedDateTime();
                 $("#selected_chat_pole").val(characters[this_chid].chat);
                 await getChat();
                 await createOrEditCharacter();
@@ -7970,7 +7986,7 @@ jQuery(async function () {
             const value = $(this).val();
             const formattedValue = slider.format(value);
             slider.setValue(value);
-            $(slider.counterId).text(formattedValue);
+            $(slider.counterId).val(formattedValue);
             saveSettingsDebounced();
         });
     });
@@ -8771,46 +8787,67 @@ jQuery(async function () {
         }
     });
 
-    $(document).on('input', '.range-block-counter div[contenteditable="true"]', function () {
-        const caretPosition = saveCaretPosition($(this).get(0));
-        const myText = $(this).text().trim();
-        $(this).text(myText); // trim line breaks and spaces
-        const masterSelector = $(this).data('for');
-        const masterElement = document.getElementById(masterSelector);
+    $(document).on('input', '.range-block-counter input', function () {
+        setTimeout(() => {
+            const caretPosition = saveCaretPosition($(this).get(0));
+            const myText = $(this).val().trim();
+            $(this).val(myText); // trim line breaks and spaces
+            const masterSelector = $(this).data('for');
+            const masterElement = document.getElementById(masterSelector);
 
-        if (masterElement == null) {
-            console.error('Master input element not found for the editable label', masterSelector);
-            return;
-        }
+            if (masterElement == null) {
+                console.error('Master input element not found for the editable label', masterSelector);
+                return;
+            }
 
-        const myValue = Number(myText);
+            const myValue = Number(myText);
+            const masterStep = Number(masterElement.getAttribute('step'))
+            const masterMin = Number($(masterElement).attr('min'));
+            const masterMax = Number($(masterElement).attr('max'));
+            const rawStepCompare = myValue / masterStep
+            const closestStep = Math.round(rawStepCompare)
+            const closestStepRaw = (closestStep) * masterStep
 
-        if (Number.isNaN(myValue)) {
-            console.warn('Label input is not a valid number. Resetting the value', myText);
-            $(masterElement).trigger('input');
+            //if text box val is not a number, reset slider val to its previous and wait for better input
+            if (Number.isNaN(myValue)) {
+                console.warn('Label input is not a valid number. Resetting the value to match slider', myText);
+                $(masterElement).trigger('input');
+                restoreCaretPosition($(this).get(0), caretPosition);
+                return;
+            }
+
+            //if textbox val is less than min, set slider to min
+            //PROBLEM: the moment slider gets set to min, textbox also auto-sets to min.
+            //if min = 0, this prevents further typing and locks input at 0 unless users pastes
+            //a multi-character number which is between min and max. adding delay was necessary.
+            if (myValue < masterMin) {
+                console.warn('Label input is less than minimum.', myText, '<', masterMin);
+                $(masterElement).val(masterMin).trigger('input').trigger('mouseup');
+                $(masterElement).val(myValue)
+                restoreCaretPosition($(this).get(0), caretPosition);
+                return;
+            }
+            //Same as above but in reverse. Not a problem because max value has multiple
+            //characters which can be edited.
+            if (myValue > masterMax) {
+                console.warn('Label input is more than maximum.', myText, '>', masterMax);
+                $(masterElement).val(masterMax).trigger('input').trigger('mouseup');
+                $(masterElement).val(myValue)
+                restoreCaretPosition($(this).get(0), caretPosition);
+                return;
+            }
+
+            //round input value to nearest step if between min and max
+            if (!(myValue < masterMin) && !(myValue > masterMax)) {
+                console.debug(`Label value ${myText} is OK, setting slider to closest step (${closestStepRaw})`);
+                $(masterElement).val(closestStepRaw).trigger('input').trigger('mouseup');
+                restoreCaretPosition($(this).get(0), caretPosition);
+                return;
+            }
+
             restoreCaretPosition($(this).get(0), caretPosition);
-            return;
-        }
-
-        const masterMin = Number($(masterElement).attr('min'));
-        const masterMax = Number($(masterElement).attr('max'));
-
-        if (myValue < masterMin) {
-            console.warn('Label input is less than minimum.', myText, '<', masterMin);
-            restoreCaretPosition($(this).get(0), caretPosition);
-            return;
-        }
-
-        if (myValue > masterMax) {
-            console.warn('Label input is more than maximum.', myText, '>', masterMax);
-            restoreCaretPosition($(this).get(0), caretPosition);
-            return;
-        }
-
-        console.debug('Label value OK, setting to the master input control', myText);
-        $(masterElement).val(myValue).trigger('input').trigger('mouseup');
-        restoreCaretPosition($(this).get(0), caretPosition);
-    });
+        }, 2000);
+    })
 
     $(".user_stats_button").on('click', function () {
         userStatsHandler();

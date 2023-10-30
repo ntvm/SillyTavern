@@ -735,8 +735,9 @@ export async function installExtension(url) {
     });
 
     if (!request.ok) {
-        toastr.info(request.statusText, 'Extension installation failed');
-        console.error('Extension installation failed', request.status, request.statusText);
+        const text = await request.text();
+        toastr.warning(text || request.statusText, 'Extension installation failed', { timeOut: 5000 });
+        console.error('Extension installation failed', request.status, request.statusText, text);
         return;
     }
 
@@ -775,10 +776,14 @@ async function loadExtensionSettings(settings, versionChanged) {
     if (extension_settings.autoConnect && extension_settings.apiUrl) {
         connectToApi(extension_settings.apiUrl);
     }
+}
 
-    if (extension_settings.notifyUpdates) {
-        checkForExtensionUpdates(false);
-    }
+export function doDailyExtensionUpdatesCheck() {
+    setTimeout(() => {
+        if (extension_settings.notifyUpdates) {
+            checkForExtensionUpdates(false);
+        }
+    }, 1);
 }
 
 /**
@@ -836,17 +841,37 @@ async function autoUpdateExtensions() {
     }
 }
 
+/**
+ * Runs the generate interceptors for all extensions.
+ * @param {any[]} chat Chat array
+ * @param {number} contextSize Context size
+ * @returns {Promise<boolean>} True if generation should be aborted
+ */
 async function runGenerationInterceptors(chat, contextSize) {
+    let aborted = false;
+    let exitImmediately = false;
+
+    const abort = (/** @type {boolean} */ immediately) => {
+        aborted = true;
+        exitImmediately = immediately;
+    };
+
     for (const manifest of Object.values(manifests)) {
         const interceptorKey = manifest.generate_interceptor;
         if (typeof window[interceptorKey] === 'function') {
             try {
-                await window[interceptorKey](chat, contextSize);
+                await window[interceptorKey](chat, contextSize, abort);
             } catch (e) {
                 console.error(`Failed running interceptor for ${manifest.display_name}`, e);
             }
         }
+
+        if (exitImmediately) {
+            break;
+        }
     }
+
+    return aborted;
 }
 
 jQuery(function () {

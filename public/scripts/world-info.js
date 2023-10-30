@@ -135,10 +135,10 @@ function setWorldInfoSettings(settings, data) {
 
     world_info = settings.world_info ?? {}
 
-    $("#world_info_depth_counter").text(world_info_depth);
+    $("#world_info_depth_counter").val(world_info_depth);
     $("#world_info_depth").val(world_info_depth);
 
-    $("#world_info_budget_counter").text(world_info_budget);
+    $("#world_info_budget_counter").val(world_info_budget);
     $("#world_info_budget").val(world_info_budget);
 
     $("#world_info_recursive").prop('checked', world_info_recursive);
@@ -150,7 +150,7 @@ function setWorldInfoSettings(settings, data) {
     $("#world_info_character_strategy").val(world_info_character_strategy);
 
     $("#world_info_budget_cap").val(world_info_budget_cap);
-    $("#world_info_budget_cap_counter").text(world_info_budget_cap);
+    $("#world_info_budget_cap_counter").val(world_info_budget_cap);
 
     world_names = data.world_names?.length ? data.world_names : [];
 
@@ -1736,6 +1736,7 @@ function convertCharacterBook(characterBook) {
             probability: entry.extensions?.probability ?? null,
             useProbability: entry.extensions?.useProbability ?? false,
             depth: entry.extensions?.depth ?? DEFAULT_DEPTH,
+            selectiveLogic: entry.extensions?.selectiveLogic ?? 0,
         };
     });
 
@@ -2043,13 +2044,13 @@ jQuery(() => {
 
     $(document).on("input", "#world_info_depth", function () {
         world_info_depth = Number($(this).val());
-        $("#world_info_depth_counter").text($(this).val());
+        $("#world_info_depth_counter").val($(this).val());
         saveSettings();
     });
 
     $(document).on("input", "#world_info_budget", function () {
         world_info_budget = Number($(this).val());
-        $("#world_info_budget_counter").text($(this).val());
+        $("#world_info_budget_counter").val($(this).val());
         saveSettings();
     });
 
@@ -2080,7 +2081,7 @@ jQuery(() => {
 
     $('#world_info_budget_cap').on('input', function () {
         world_info_budget_cap = Number($(this).val());
-        $("#world_info_budget_cap_counter").text(world_info_budget_cap);
+        $("#world_info_budget_cap_counter").val(world_info_budget_cap);
         saveSettings();
     });
 
