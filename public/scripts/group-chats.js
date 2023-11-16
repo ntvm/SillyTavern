@@ -272,7 +272,7 @@ export function getGroupCharacterCards(groupId, characterId) {
     let descriptions = [];
     let personalities = [];
     let scenarios = [];
-    let mesExamples = [];
+    let mesExamplesArray = [];
 
     for (const member of group.members) {
         const index = characters.findIndex(x => x.avatar === member);
@@ -336,10 +336,10 @@ export function getGroupCharacterCards(groupId, characterId) {
 
         switch (character.mes_example.trim()) {
             case '':
-                mesExamples.push('');
+                mesExamplesArray.push('');
                 break;
             default:
-                mesExamples.push(baseChatReplace('\n' + CharStart + character.mes_example.trim() + CharEnd + '\n', name1, character.name));
+                mesExamplesArray.push(baseChatReplace('\n' + CharStart + character.mes_example.trim() + CharEnd + '\n', name1, character.name));
                 break;
         }
 
@@ -375,7 +375,7 @@ export function getGroupCharacterCards(groupId, characterId) {
             break;
     }
     
-    var Df4 = mesExamples.join('')
+    var Df4 = mesExamplesArray.join('')
     switch (Df4) {
         case '':
             var mesExample = "";
