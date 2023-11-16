@@ -389,6 +389,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                     var mesExample = "<Characters_MessagesExamples>" + '\n' + Df4 + "</Characters_MessagesExamples>" ;
                     break;
             }
+            break;
         case true:
             var mesExample = '';
 			break;
