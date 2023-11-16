@@ -68,6 +68,7 @@ import {
     setExternalAbortController,
     baseChatReplace,
     depth_prompt_depth_default,
+    loadItemizedPrompts,
 } from "../script.js";
 import { appendTagToList, createTagMapFromList, getTagsList, applyTagsOnCharacterSelect, tag_map, printTagFilters } from './tags.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
@@ -168,6 +169,8 @@ export async function getGroupChat(groupId) {
     const chat_id = group.chat_id;
     const data = await loadGroupChat(chat_id);
 
+    await loadItemizedPrompts(getCurrentChatId());
+
     if (Array.isArray(data) && data.length) {
         data[0].is_group = true;
         for (let key of data) {
@@ -253,7 +256,7 @@ export function getGroupDepthPrompts(groupId, characterId) {
  * Combines group members info a single string. Only for groups with generation mode set to APPEND.
  * @param {string} groupId Group ID
  * @param {number} characterId Current Character ID
- * @returns {{description: string, personality: string, scenario: string, mesExample: string}} Group character cards combined
+ * @returns {{description: string, personality: string, scenario: string, mesExamples: string}} Group character cards combined
  */
     // Initialize depth prompt for the current character // skip if the current character is not in the group 
     // Skip if the current character is disabled 
@@ -272,7 +275,7 @@ export function getGroupCharacterCards(groupId, characterId) {
     let descriptions = [];
     let personalities = [];
     let scenarios = [];
-    let mesExamples = [];
+    let mesExamplesArray = [];
 
     for (const member of group.members) {
         const index = characters.findIndex(x => x.avatar === member);
@@ -336,10 +339,10 @@ export function getGroupCharacterCards(groupId, characterId) {
 
         switch (character.mes_example.trim()) {
             case '':
-                mesExamples.push('');
+                mesExamplesArray.push('');
                 break;
             default:
-                mesExamples.push(baseChatReplace('\n' + CharStart + character.mes_example.trim() + CharEnd + '\n', name1, character.name));
+                mesExamplesArray.push(baseChatReplace('\n' + CharStart + character.mes_example.trim() + CharEnd + '\n', name1, character.name));
                 break;
         }
 
@@ -375,17 +378,17 @@ export function getGroupCharacterCards(groupId, characterId) {
             break;
     }
     
-    var Df4 = mesExamples.join('')
+    var Df4 = mesExamplesArray.join('')
     switch (Df4) {
         case '':
-            var mesExample = "";
+            var mesExamples = "";
             break;
         default:
-            var mesExample = "<Characters_MessagesExamples>" + '\n' + Df4 + "</Characters_MessagesExamples>" ;
+            var mesExamples = "<Characters_MessagesExamples>" + '\n' + Df4 + "</Characters_MessagesExamples>" ;
             break;
     }
 
-    return { description, personality, scenario, mesExample };
+    return { description, personality, scenario, mesExamples };
 }
 
 function getFirstCharacterMessage(character) {
@@ -1003,10 +1006,10 @@ async function deleteGroup(id) {
     }
 
     if (response.ok) {
+        await clearChat();
         selected_group = null;
         delete tag_map[id];
         resetChatState();
-        clearChat();
         await printMessages();
         await getCharacters();
 
@@ -1475,12 +1478,12 @@ export async function openGroupById(groupId) {
 
     if (!is_send_press && !is_group_generating) {
         if (selected_group !== groupId) {
+            await clearChat();
             cancelTtsPlay();
             selected_group = groupId;
             setCharacterId(undefined);
             setCharacterName('');
             setEditedMessageId(undefined);
-            clearChat();
             updateChatMetadata({}, true);
             chat.length = 0;
             await getGroupChat(groupId);
@@ -1574,7 +1577,7 @@ export async function createNewGroupChat(groupId) {
         group.past_metadata = {};
     }
 
-    clearChat();
+    await clearChat();
     chat.length = 0;
     if (oldChatName) {
         group.past_metadata[oldChatName] = Object.assign({}, chat_metadata);
@@ -1627,7 +1630,7 @@ export async function openGroupChat(groupId, chatId) {
         return;
     }
 
-    clearChat();
+    await clearChat();
     chat.length = 0;
     const previousChat = group.chat_id;
     group.past_metadata[previousChat] = Object.assign({}, chat_metadata);

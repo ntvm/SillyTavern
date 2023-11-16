@@ -1,7 +1,7 @@
 import { saveSettingsDebounced, callPopup, getRequestHeaders, substituteParams } from "../../../script.js";
 import { getContext, extension_settings } from "../../extensions.js";
 import { initScrollHeight, resetScrollHeight } from "../../utils.js";
-import { registerSlashCommand } from "../../slash-commands.js";
+import { executeSlashCommands, registerSlashCommand } from "../../slash-commands.js";
 
 export { MODULE_NAME };
 
@@ -21,7 +21,7 @@ const defaultSettings = {
 
 //method from worldinfo
 async function updateQuickReplyPresetList() {
-    var result = await fetch("/getsettings", {
+    const result = await fetch("/getsettings", {
         method: "POST",
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
@@ -152,14 +152,19 @@ async function sendQuickReply(index) {
 
     newText = substituteParams(newText);
 
+    // the prompt starts with '/' - execute slash commands natively
+    if (prompt.startsWith('/')) {
+        await executeSlashCommands(newText);
+        return;
+    }
+
     $("#send_textarea").val(newText);
 
     // Set the focus back to the textarea
     $("#send_textarea").trigger('focus');
 
     // Only trigger send button if quickActionEnabled is not checked or
-    // the prompt starts with '/'
-    if (!extension_settings.quickReply.quickActionEnabled || prompt.startsWith('/')) {
+    if (!extension_settings.quickReply.quickActionEnabled) {
         $("#send_but").trigger('click');
     }
 }
@@ -212,7 +217,8 @@ async function saveQuickReplyPreset() {
         quickReplyEnabled: extension_settings.quickReply.quickReplyEnabled,
         quickReplySlots: extension_settings.quickReply.quickReplySlots,
         numberOfSlots: extension_settings.quickReply.numberOfSlots,
-        selectedPreset: name
+        AutoInputInject: extension_settings.quickReply.AutoInputInject,
+        selectedPreset: name,
     }
 
     const response = await fetch('/savequickreply', {
@@ -288,7 +294,7 @@ function generateQuickReplyElements() {
         quickReplyHtml += `
         <div class="flex-container alignitemsflexstart">
             <input class="text_pole wide30p" id="quickReply${i}Label" placeholder="(Button label)">
-            <textarea id="quickReply${i}Mes" placeholder="(Custom message or /command)" class="text_pole widthUnset flex1" rows="2"></textarea>
+            <textarea id="quickReply${i}Mes" placeholder="(Custom message or /command)" class="text_pole widthUnset flex1 autoSetHeight" rows="2"></textarea>
         </div>
         `;
     }
