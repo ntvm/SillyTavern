@@ -7,7 +7,7 @@ export function showLoader() {
     container.append(loader);
     $('body').append(container);
 	*/
-	const loader = useless
+	const loader = 'useless';
 }
 
 export function hideLoader() {
@@ -29,5 +29,5 @@ export function hideLoader() {
             'opacity': '0',
         })
 	*/
-	const loader2 = useless2
+	const loader2 = 'useless2';
 }
