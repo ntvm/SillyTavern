@@ -72,6 +72,7 @@ import {
 } from "../script.js";
 import { appendTagToList, createTagMapFromList, getTagsList, applyTagsOnCharacterSelect, tag_map, printTagFilters } from './tags.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
+import { extension_settings } from './extensions.js';
 
 export {
     selected_group,
@@ -348,6 +349,9 @@ export function getGroupCharacterCards(groupId, characterId) {
 
     }
 
+
+
+
     var Df1 = descriptions.join('')
     switch (Df1) {
         case '':
@@ -379,14 +383,23 @@ export function getGroupCharacterCards(groupId, characterId) {
     }
     
     var Df4 = mesExamplesArray.join('')
-    switch (Df4) {
-        case '':
-            var mesExamples = "";
-            break;
+	switch (extension_settings.Nvkun.ExamplesExclude){
         default:
-            var mesExamples = "<Characters_MessagesExamples>" + '\n' + Df4 + "</Characters_MessagesExamples>" ;
+            switch (Df4) {
+                case '':
+                    break;
+                default:
+                    var mesExamples = "<Characters_MessagesExamples>" + '\n' + Df4 + "</Characters_MessagesExamples>" ;
+                    break;
+            }
             break;
-    }
+        case true:
+            var mesExamples = '';
+			break;
+	}
+    
+    
+
 
     return { description, personality, scenario, mesExamples };
 }
