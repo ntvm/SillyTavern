@@ -1709,7 +1709,10 @@ app.post('/getsettings', jsonParser, (request, response) => {
     const movingUIPresets = readAndParseFromDirectory(DIRECTORIES.movingUI);
     const quickReplyPresets = readAndParseFromDirectory(DIRECTORIES.quickreplies);
 
+    //repeat same
     const NvPresets = readAndParseFromDirectory(DIRECTORIES.NvSettings);
+    const ProxyManager = readAndParseFromDirectory(DIRECTORIES.ProxyManager);
+
     const instruct = readAndParseFromDirectory(DIRECTORIES.instruct);
     const context = readAndParseFromDirectory(DIRECTORIES.context);
 
@@ -1728,6 +1731,7 @@ app.post('/getsettings', jsonParser, (request, response) => {
         movingUIPresets,
         quickReplyPresets,
         NvPresets,
+        ProxyManager,
 		instruct,
         context,
         enable_extensions: enableExtensions,
@@ -1805,6 +1809,17 @@ app.post('/saveNv', jsonParser, (request, response) => {
 
     return response.sendStatus(200);
 });	
+
+app.post('/saveProxy', jsonParser, (request, response) => {
+    if (!request.body || !request.body.name) {
+        return response.sendStatus(400);
+    }
+
+    const filename = path.join(directories.ProxyManager, sanitize(request.body.name) + '.json');
+    fs.writeFileSync(filename, JSON.stringify(request.body, null, 4), 'utf8');
+
+    return response.sendStatus(200);
+});
 
 /**
  * @param {string} name Name of World Info file
