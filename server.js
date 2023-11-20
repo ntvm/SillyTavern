@@ -1804,7 +1804,7 @@ app.post('/saveNv', jsonParser, (request, response) => {
         return response.sendStatus(400);
     }
 
-    const filename = path.join(directories.NvSettings, sanitize(request.body.name) + '.json');
+    const filename = path.join(DIRECTORIES.NvSettings, sanitize(request.body.name) + '.json');
     fs.writeFileSync(filename, JSON.stringify(request.body, null, 4), 'utf8');
 
     return response.sendStatus(200);
@@ -1815,7 +1815,7 @@ app.post('/saveProxy', jsonParser, (request, response) => {
         return response.sendStatus(400);
     }
 
-    const filename = path.join(directories.ProxyManager, sanitize(request.body.name) + '.json');
+    const filename = path.join(DIRECTORIES.ProxyManager, sanitize(request.body.name) + '.json');
     fs.writeFileSync(filename, JSON.stringify(request.body, null, 4), 'utf8');
 
     return response.sendStatus(200);
