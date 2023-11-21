@@ -1421,7 +1421,6 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
                         generate_data['proxy_password'] = oai_settings.proxy_password;
                         break
                     }
-                    validateReverseProxy();
                     generate_data['reverse_proxy'] = extension_settings.ProxyManager.ProxyURL;
                     generate_data['proxy_password'] = extension_settings.ProxyManager.ProxyPassword;
                 }
