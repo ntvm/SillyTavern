@@ -77,17 +77,26 @@ async function loadRegexScripts() {
         scriptHtml.attr('id', uuidv4());
         scriptHtml.find('.regex_script_name').text(script.scriptName);
         scriptHtml.find('.disable_regex').prop("checked", script.disabled ?? false)
-            .each(function() {
-                $(this).closest('.checkbox').find('span').toggle(this.checked);
-            })
-            .on('click', function() {
-                script.disabled = !script.disabled;
-                $(this).closest('.checkbox').find('span').toggle(this.checked);
+            .on('input', function () {
+                script.disabled = !!$(this).prop("checked");
+                saveSettingsDebounced();
             });
-        scriptHtml.find('.edit_existing_regex').on('click', async function() {
+        scriptHtml.find('.regex-toggle-on').on('click', function () {
+            scriptHtml.find('.disable_regex').prop("checked", true).trigger('input');
+        });
+        scriptHtml.find('.regex-toggle-off').on('click', function () {
+            scriptHtml.find('.disable_regex').prop("checked", false).trigger('input');
+        });
+        scriptHtml.find('.edit_existing_regex').on('click', async function () {
             await onRegexEditorOpenClick(scriptHtml.attr("id"));
         });
-        scriptHtml.find('.delete_regex').on('click', async function() {
+        scriptHtml.find('.delete_regex').on('click', async function () {
+            const confirm = await callPopup("Are you sure you want to delete this regex script?", "confirm");
+
+            if (!confirm) {
+                return;
+            }
+
             await deleteRegexScript({ existingId: scriptHtml.attr("id") });
         });
 
@@ -121,6 +130,9 @@ async function onRegexEditorOpenClick(existingId) {
             editorHtml
                 .find(`input[name="only_format_display"]`)
                 .prop("checked", existingScript.markdownOnly ?? false);
+            editorHtml
+                .find(`input[name="only_format_prompt"]`)
+                .prop("checked", existingScript.promptOnly ?? false);
             editorHtml
                 .find(`input[name="run_on_edit"]`)
                 .prop("checked", existingScript.runOnEdit ?? false);
@@ -162,7 +174,7 @@ async function onRegexEditorOpenClick(existingId) {
                 editorHtml
                     .find(`input[name="replace_position"]`)
                     .filter(":checked")
-                    .map(function() { return parseInt($(this).val()) })
+                    .map(function () { return parseInt($(this).val()) })
                     .get()
                     .filter((e) => e !== NaN) || [],
             disabled:
@@ -172,6 +184,10 @@ async function onRegexEditorOpenClick(existingId) {
             markdownOnly:
                 editorHtml
                     .find(`input[name="only_format_display"]`)
+                    .prop("checked"),
+            promptOnly:
+                editorHtml
+                    .find(`input[name="only_format_prompt"]`)
                     .prop("checked"),
             runOnEdit:
                 editorHtml
@@ -205,6 +221,7 @@ function migrateSettings() {
                 script.placement = script.placement.filter((e) => e !== regex_placement.MD_DISPLAY);
 
             script.markdownOnly = true
+            script.promptOnly = true
 
             performSave = true;
         }
@@ -239,7 +256,7 @@ jQuery(async () => {
 
     const settingsHtml = await $.get("scripts/extensions/regex/dropdown.html");
     $("#extensions_settings2").append(settingsHtml);
-    $("#open_regex_editor").on("click", function() {
+    $("#open_regex_editor").on("click", function () {
         onRegexEditorOpenClick(false);
     });
 

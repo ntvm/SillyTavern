@@ -1,4 +1,5 @@
 import { callPopup, eventSource, event_types, saveSettings, saveSettingsDebounced, getRequestHeaders, substituteParams, renderTemplate } from "../script.js";
+import { hideLoader, showLoader } from "./loader.js";
 import { isSubsetOf } from "./utils.js";
 export {
     getContext,
@@ -162,6 +163,9 @@ let extension_settings = {
     vectors: {},
     idle: {},
     ProxyManager: {},
+    variables: {
+        global: {},
+    },
 };
 
 let modules = [];
@@ -346,14 +350,14 @@ function addExtensionsButtonAndMenu() {
 
     $(document.body).append(extensionsMenuHTML);
 
-    $('#send_but_sheld').prepend(buttonHTML);
+    $('#leftSendForm').prepend(buttonHTML);
 
     const button = $('#extensionsMenuButton');
     const dropdown = $('#extensionsMenu');
     //dropdown.hide();
 
     let popper = Popper.createPopper(button.get(0), dropdown.get(0), {
-        placement: 'top-end',
+        placement: 'top-start',
     });
 
     $(button).on('click', function () {
@@ -582,7 +586,7 @@ async function getExtensionData(extension) {
 function getModuleInformation() {
     let moduleInfo = modules.length ? `<p>${DOMPurify.sanitize(modules.join(', '))}</p>` : '<p class="failure">Not connected to the API!</p>';
     return `
-        <h3>Modules provided by your Extensions API:</h3>
+        <h3>Modules provided by your Extras API:</h3>
         ${moduleInfo}
     `;
 }
@@ -591,35 +595,43 @@ function getModuleInformation() {
  * Generates the HTML strings for all extensions and displays them in a popup.
  */
 async function showExtensionsDetails() {
-    let htmlDefault = '<h3>Default Extensions:</h3>';
-    let htmlExternal = '<h3>External Extensions:</h3>';
+    try {
+        showLoader();
+        let htmlDefault = '<h3>Built-in Extensions:</h3>';
+        let htmlExternal = '<h3>Installed Extensions:</h3>';
 
-    const extensions = Object.entries(manifests).sort((a, b) => a[1].loading_order - b[1].loading_order);
-    const promises = [];
+        const extensions = Object.entries(manifests).sort((a, b) => a[1].loading_order - b[1].loading_order);
+        const promises = [];
 
-    for (const extension of extensions) {
-        promises.push(getExtensionData(extension));
-    }
-
-    const settledPromises = await Promise.allSettled(promises);
-
-    settledPromises.forEach(promise => {
-        if (promise.status === 'fulfilled') {
-            const { isExternal, extensionHtml } = promise.value;
-            if (isExternal) {
-                htmlExternal += extensionHtml;
-            } else {
-                htmlDefault += extensionHtml;
-            }
+        for (const extension of extensions) {
+            promises.push(getExtensionData(extension));
         }
-    });
 
-    const html = `
-        ${getModuleInformation()}
-        ${htmlDefault}
-        ${htmlExternal}
-    `;
-    callPopup(`<div class="extensions_info">${html}</div>`, 'text');
+        const settledPromises = await Promise.allSettled(promises);
+
+        settledPromises.forEach(promise => {
+            if (promise.status === 'fulfilled') {
+                const { isExternal, extensionHtml } = promise.value;
+                if (isExternal) {
+                    htmlExternal += extensionHtml;
+                } else {
+                    htmlDefault += extensionHtml;
+                }
+            }
+        });
+
+        const html = `
+            ${getModuleInformation()}
+            ${htmlDefault}
+            ${htmlExternal}
+        `;
+        callPopup(`<div class="extensions_info">${html}</div>`, 'text');
+    } catch (error) {
+        toastr.error('Error loading extensions. See browser console for details.');
+        console.error(error);
+    } finally {
+        hideLoader();
+    }
 }
 
 
@@ -736,8 +748,9 @@ export async function installExtension(url) {
     });
 
     if (!request.ok) {
-        toastr.info(request.statusText, 'Extension installation failed');
-        console.error('Extension installation failed', request.status, request.statusText);
+        const text = await request.text();
+        toastr.warning(text || request.statusText, 'Extension installation failed', { timeOut: 5000 });
+        console.error('Extension installation failed', request.status, request.statusText, text);
         return;
     }
 
@@ -776,10 +789,14 @@ async function loadExtensionSettings(settings, versionChanged) {
     if (extension_settings.autoConnect && extension_settings.apiUrl) {
         connectToApi(extension_settings.apiUrl);
     }
+}
 
-    if (extension_settings.notifyUpdates) {
-        checkForExtensionUpdates(false);
-    }
+export function doDailyExtensionUpdatesCheck() {
+    setTimeout(() => {
+        if (extension_settings.notifyUpdates) {
+            checkForExtensionUpdates(false);
+        }
+    }, 1);
 }
 
 /**
@@ -837,17 +854,37 @@ async function autoUpdateExtensions() {
     }
 }
 
+/**
+ * Runs the generate interceptors for all extensions.
+ * @param {any[]} chat Chat array
+ * @param {number} contextSize Context size
+ * @returns {Promise<boolean>} True if generation should be aborted
+ */
 async function runGenerationInterceptors(chat, contextSize) {
+    let aborted = false;
+    let exitImmediately = false;
+
+    const abort = (/** @type {boolean} */ immediately) => {
+        aborted = true;
+        exitImmediately = immediately;
+    };
+
     for (const manifest of Object.values(manifests)) {
         const interceptorKey = manifest.generate_interceptor;
         if (typeof window[interceptorKey] === 'function') {
             try {
-                await window[interceptorKey](chat, contextSize);
+                await window[interceptorKey](chat, contextSize, abort);
             } catch (e) {
                 console.error(`Failed running interceptor for ${manifest.display_name}`, e);
             }
         }
+
+        if (exitImmediately) {
+            break;
+        }
     }
+
+    return aborted;
 }
 
 jQuery(function () {
