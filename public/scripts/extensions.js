@@ -162,6 +162,7 @@ let extension_settings = {
     hypebot: {},
     vectors: {},
     idle: {},
+    ProxyManager: {},
     variables: {
         global: {},
     },

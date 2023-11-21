@@ -427,7 +427,7 @@ function setOpenAIMessages(chat) {
     }
         // Check the value of AlwaysCharnames
         switch (AlwaysCharnames) {
-            // If it is on, use Anons code
+            // If it turned on, use Anons code
             case true:
                 // for groups or sendas command - prepend a character's name
                 content = `${chat[j].name}: ${content}`;
@@ -1040,7 +1040,7 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
         position: getPromptPosition(authorsNote.position),
     });
 
-    //(Multicharacters descriptions in prompt (On case if I'll would add that function. Low probably through))
+    //(Uh. maybe something else later)
     /*if (inject1 && Inject1.MulChar) systemPrompts.push({
         role: 'system',
         content: Inject1.MulChar,
@@ -1598,11 +1598,29 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
     }
 
     // Proxy is only supported for Claude and OpenAI
-    if (oai_settings.reverse_proxy && [chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI].includes(oai_settings.chat_completion_source)) {
-        validateReverseProxy();
-        generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
-        generate_data['proxy_password'] = oai_settings.proxy_password;
-    }
+            switch (extension_settings.ProxyManager.ProxyPrior) {
+                default:
+                    if (oai_settings.reverse_proxy && [chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI].includes(oai_settings.chat_completion_source)) {
+                        validateReverseProxy();
+                        generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
+                        generate_data['proxy_password'] = oai_settings.proxy_password;
+                    }
+                    break;
+        
+                case true:
+        
+                if (oai_settings.reverse_proxy && [chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI].includes(oai_settings.chat_completion_source)) {
+                    if (!extension_settings.ProxyManager.ProxyURL && !extension_settings.ProxyManager.ProxyPassword) {
+                        validateReverseProxy();
+                        generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
+                        generate_data['proxy_password'] = oai_settings.proxy_password;
+                        break
+                    }
+                    generate_data['reverse_proxy'] = extension_settings.ProxyManager.ProxyURL;
+                    generate_data['proxy_password'] = extension_settings.ProxyManager.ProxyPassword;
+                }
+                break;
+            }
 
     if (isClaude) {
         generate_data['use_claude'] = true;

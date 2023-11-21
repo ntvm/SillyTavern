@@ -22,6 +22,7 @@ const DIRECTORIES = {
     context: 'public/context',
     backups: 'backups/',
     NvSettings: 'public/NvSettings',
+    ProxyManager: 'public/ProxyManager',
     quickreplies: 'public/QuickReplies',
     assets: 'public/assets',
 };
