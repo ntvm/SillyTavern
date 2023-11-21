@@ -428,6 +428,9 @@ async function rvcVoiceConversion(response, character, text) {
     return apiResult;
 }
 
+window['rvcVoiceConversion'] = rvcVoiceConversion;
+
+
 //#############################//
 //  Module Worker              //
 //#############################//

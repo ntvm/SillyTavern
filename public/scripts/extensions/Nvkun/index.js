@@ -32,6 +32,7 @@ let defaultPrompt = '';
 
 const defaultSettings = {
     
+    RegexLogging: false,
     Inputer_frozen: false,
     Inputer_prompt: defaultPrompt,
     position: extension_prompt_types.AFTER_SCENARIO,
@@ -40,7 +41,8 @@ const defaultSettings = {
     selectedPreset: '',
     exclude_Prefill: false,
     CurrentGroup: selected_group,
-    MulChar: ''
+    MulChar: '',
+    ExamplesExclude: false
 };
 
 
@@ -61,6 +63,8 @@ function loadSettings() {
     $('#Inputer_frozen').prop('checked', extension_settings.Nvkun.Inputer_frozen).trigger('input');
     $('#Inputer_prompt').val(extension_settings.Nvkun.Inputer_prompt).trigger('input');
     $('#exclude_Prefill').prop('checked', extension_settings.Nvkun.exclude_Prefill).trigger('input');
+    $('#Regex_Logging').prop('checked', extension_settings.Nvkun.RegexLogging).trigger('input');
+    $('#ExamplesExclude').prop('checked', extension_settings.Nvkun.ExamplesExclude).trigger('input');
 }
 
 
@@ -74,8 +78,6 @@ function onAlwaysCharnamesChange(event) {
     saveSettingsDebounced();
 }
 
-
-
 function onInputerFrozenInput() {
     const value = Boolean($(this).prop('checked'));
     extension_settings.Nvkun.Inputer_frozen = value;
@@ -85,6 +87,17 @@ function onInputerFrozenInput() {
 function onExclude_Prefill() {
     const value = Boolean($(this).prop('checked'));
     extension_settings.Nvkun.exclude_Prefill = value;
+    saveSettingsDebounced();
+}
+
+function onRegexLogging() {
+    const value = Boolean($(this).prop('checked'));
+    extension_settings.Nvkun.RegexLogging = value;
+    saveSettingsDebounced();
+}
+function onExamplesExclude() {
+    const value = Boolean($(this).prop('checked'));
+    extension_settings.Nvkun.ExamplesExclude = value;
     saveSettingsDebounced();
 }
 
@@ -152,11 +165,12 @@ async function onChatEvent() {
 
 
 
-    
+/*    
 function GetCharsName() {
 const GId = CurrentGroup
 getGroupChatNames(GId)
-}
+*/ 
+  
 
 //GroupchatPush
 
@@ -179,6 +193,8 @@ const NvPreset = {
     depth: extension_settings.Nvkun.depth,
 	AlwaysCharnames: extension_settings.Nvkun.AlwaysCharnames,
     exclude_Prefill: extension_settings.Nvkun.exclude_Prefill,
+    Regex_logging: extension_settings.Nvkun.RegexLogging,
+    ExamplesExclude: extension_settings.Nvkun.ExamplesExclude,
 }
 
 const response = await fetch('/saveNv', {
@@ -288,6 +304,12 @@ jQuery(function () {
                         <label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />Activate AfterScenario prompt</label>
                     </div>
                     <div>
+                         <label for="RegexLogging"><input id="Regex_Logging" type="checkbox" />Activate Regex logging</label>
+                    </div>
+                    <div>
+                         <label for="ExamplesExclude"><input id="ExamplesExclude" type="checkbox" />Exclude examples from group conjoined mode</label>
+                    </div>
+                    <div>
                         <select id="NvPresets" name="preset">
                         </select>
                         <i id="PresetSaveButton" class="fa-solid fa-save"></i>
@@ -308,8 +330,10 @@ jQuery(function () {
             applyNvPreset(NvPresetSelected);
             saveSettingsDebounced();
 		});
+        $('#Regex_Logging').on('input', onRegexLogging);
+        $('#ExamplesExclude').on('input', onExamplesExclude);
     }
-
+	
     addExtensionControls();
     loadSettings();
     eventSource.on(event_types.CHAT_CHANGED, onChatEvent);

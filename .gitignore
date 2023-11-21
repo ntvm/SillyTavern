@@ -1,3 +1,4 @@
+stash/
 node_modules/
 public/chats/
 public/characters/
@@ -14,6 +15,8 @@ public/KoboldAI Settings/
 public/NovelAI Settings/
 public/TextGen Settings/
 public/instruct/
+public/context/
+public/scripts/extensions/third-party/
 public/stats.json
 /uploads/
 *.jsonl
@@ -24,6 +27,7 @@ public/settings.json
 /thumbnails
 whitelist.txt
 .vscode
+.idea/
 secrets.json
 /dist
 /backups/
@@ -41,4 +45,17 @@ public/notes/content.md
 public/notes/faq.md.html
 public/notes/update.html
 public/assets/
-
+access.log
+/vectors/
+/cache/
+public/characters/Assistente.png
+public/characters/Character generator.png
+public/characters/Character Provider.png
+public/characters/Aqua.png
+public/characters/Assistente.png
+public/characters/Bing-chan.png
+public/characters/Character generator.png
+public/characters/Character Provider.png
+public/characters/Darkness.png
+public/characters/Megumin.png
+public/css/user.css

@@ -1,19 +1,21 @@
 Автор не имеет доступа к всевозможным ключам и прочей информации с вашей копии.
 
 О Форке.
-Добавляю сюда интересные куски кода для Таверны которые встретил надваче или еще где-либо и адаптирую различные кустарные переделки в основной код. Вытягиваю обновления из основного SillyTavern 1-2 раза в день. Форк не должен подтягиваться на основную витку в исходном виде(И не будет), Однако, Вы можете попросить реализовать функции отсюда самого Cohee
+Добавляю сюда интересные куски кода для Таверны которые встретил на дваче, написал или достал где-либо еще, и адаптирую различные кустарные переделки в основной код. Вытягиваю обновления из основного SillyTavern по мере повления полезных функций, фикса багов. Форк не должен подтягиваться на основную витку в исходном виде(И не будет), Однако, Вы можете попросить реализовать функции отсюда самого Cohee
 
-Обновлена ветка Prompt manager, (Можно менять местами где конкретно находятся разные части промпта. Однако как и в оргигинале, есть подвох, Main NSFW jail не автоэкспортируюся).
 
 ----------------------
 Мини инструкция. 
 
 Lookaround работает из коробки.; 
 
+Рефакторинг Мультикарточной системы в групповых чатах.;
 
 AlwaysCharnames (Теперь в отдельном меню расширений)(Включает перманентное имя карточки в промпте); 
 
+Фикс Русского языка;
 
+Команды внутри чата таверны: /UpdateST - Обновить SillyTavern. /RebootST - Полная перезагрузка процесса таверны; 
 
 В корне Таверны, config.conf: HumAssistOff (Убирает'Human:' и 'Assistant' из таверны) выключен. P.S. Самый изначальный Human и Assistant в последнем сообщении Юзера убрать невозможно, ибо они необходимы для API;  
 Systemful (Возвращает роль System для Claude)(Работает только в режиме с присутствующими Humans и assistants) включено (Как выключить? В config.conf (РЯДОМ С Start.bat) меняешь Systemful = true; на Systemful = false;); 
@@ -32,7 +34,7 @@ English | [中文](readme-zh_cn.md)
 
 ![image](https://github.com/SillyTavern/SillyTavern/assets/18619528/8c41a061-7f72-4d2b-9d54-e6d058209e7b)
 
-Mobile-friendly, Multi-API (KoboldAI/CPP, Horde, NovelAI, Ooba, OpenAI, OpenRouter, Claude, Scale), VN-like Waifu Mode, Horde SD, System TTS, WorldInfo (lorebooks), customizable UI, auto-translate, and more prompt options than you'd ever want or need. Optional Extras server for more SD/TTS options + ChromaDB/Summarize.
+Mobile-friendly layout, Multi-API (KoboldAI/CPP, Horde, NovelAI, Ooba, OpenAI, OpenRouter, Claude, Scale), VN-like Waifu Mode, Stable Diffusion, TTS, WorldInfo (lorebooks), customizable UI, auto-translate, and more prompt options than you'd ever want or need + ability to install third-party extensions.
 
 Based on a fork of TavernAI 1.2.8
 
@@ -71,8 +73,6 @@ Since Tavern is only a user interface, it has tiny hardware requirements, it wil
 
 <https://rentry.org/STAI-Termux>
 
-**.webp character cards import/export is not supported in Termux. Use either JSON or PNG formats instead.**
-
 ## Questions or suggestions?
 
 ### We now have a community Discord server
@@ -101,7 +101,6 @@ Get in touch with the developers directly:
 * [Oobabooga's TextGen WebUI](https://github.com/oobabooga/text-generation-webui) API connection
 * [AI Horde](https://horde.koboldai.net/) connection
 * Prompt generation formatting tweaking
-* webp character card interoperability (PNG is still an internal format)
 
 ## Extensions
 
@@ -113,7 +112,6 @@ SillyTavern has extensibility support, with some additional AI modules hosted vi
 * Sending images to chat, and the AI interpreting the content
 * Stable Diffusion image generation (5 chat-related presets plus 'free mode')
 * Text-to-speech for AI response messages (via ElevenLabs, Silero, or the OS's System TTS)
-* ChromaDB vector storage for smarter chat prompt formatting
 
 A full list of included extensions and tutorials on how to use them can be found in the [Docs](https://docs.sillytavern.app/extras/extensions/).
 
@@ -325,6 +323,7 @@ GNU Affero General Public License for more details.**
 * RossAscends' additions: AGPL v3
 * Portions of CncAnon's TavernAITurbo mod: Unknown license
 * kingbri's various commits and suggestions (<https://github.com/bdashore3>)
+* city_unit's extensions and various QoL features (<https://github.com/city-unit>)
 * StefanDanielSchwarz's various commits and bug reports (<https://github.com/StefanDanielSchwarz>)
 * Waifu mode inspired by the work of PepperTaco (<https://github.com/peppertaco/Tavern/>)
 * Thanks Pygmalion University for being awesome testers and suggesting cool features!

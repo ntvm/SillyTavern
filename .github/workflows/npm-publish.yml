@@ -4,7 +4,7 @@
 name: Node.js Package
 
 on:
-  ReleaseV2:
+  release:
     types: [created]
 
 jobs:

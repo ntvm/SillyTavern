@@ -235,6 +235,7 @@ function loadSettings() {
     chat_metadata[metadata_keys.depth] = chat_metadata[metadata_keys.depth] ?? extension_settings.note.defaultDepth ?? DEFAULT_DEPTH;
     $('#extension_floating_prompt').val(chat_metadata[metadata_keys.prompt]);
     $('#extension_floating_interval').val(chat_metadata[metadata_keys.interval]);
+    $('#extension_floating_allow_wi_scan').prop('checked', extension_settings.note.allowWIScan ?? false);
     $('#extension_floating_depth').val(chat_metadata[metadata_keys.depth]);
     $(`input[name="extension_floating_position"][value="${chat_metadata[metadata_keys.position]}"]`).prop('checked', true);
 
@@ -389,10 +390,16 @@ function onChatChanged() {
     $('#extension_floating_default_token_counter').text(tokenCounter3);
 }
 
-// Inject extension when extensions_activating is fired
+function onAllowWIScanCheckboxChanged() {
+    extension_settings.note.allowWIScan = !!$(this).prop('checked');
+    updateSettings();
+}
+
+/**
+ * Inject author's note options and setup event listeners.
+ */
 // Inserts the extension first since it's statically imported
-jQuery(async () => {
-    await waitUntilCondition(() => eventSource !== undefined);
+export function initAuthorsNote() {
     $('#extension_floating_prompt').on('input', onExtensionFloatingPromptInput);
     $('#extension_floating_interval').on('input', onExtensionFloatingIntervalInput);
     $('#extension_floating_depth').on('input', onExtensionFloatingDepthInput);
@@ -401,6 +408,7 @@ jQuery(async () => {
     $('#extension_floating_default').on('input', onExtensionFloatingDefaultInput);
     $('#extension_default_depth').on('input', onDefaultDepthInput);
     $('#extension_default_interval').on('input', onDefaultIntervalInput);
+    $('#extension_floating_allow_wi_scan').on('input', onAllowWIScanCheckboxChanged);
     $('input[name="extension_floating_position"]').on('change', onExtensionFloatingPositionInput);
     $('input[name="extension_default_position"]').on('change', onDefaultPositionInput);
     $('input[name="extension_floating_char_position"]').on('change', onExtensionFloatingCharPositionInput);
@@ -419,4 +427,4 @@ jQuery(async () => {
     registerSlashCommand('freq', setNoteIntervalCommand, ['interval'], "<span class='monospace'>(number)</span> – sets an author's note insertion frequency", true, true);
     registerSlashCommand('pos', setNotePositionCommand, ['position'], "(<span class='monospace'>chat</span> or <span class='monospace'>scenario</span>) – sets an author's note position", true, true);
     eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
-});
+}

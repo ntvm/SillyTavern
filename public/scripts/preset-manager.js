@@ -18,13 +18,13 @@ import {
 import { groups, selected_group } from "./group-chats.js";
 import { instruct_presets } from "./instruct-mode.js";
 import { kai_settings } from "./kai-settings.js";
-import { power_user } from "./power-user.js";
+import { context_presets, getContextSettings, power_user } from "./power-user.js";
 import {
     textgenerationwebui_preset_names,
     textgenerationwebui_presets,
     textgenerationwebui_settings,
 } from "./textgen-settings.js";
-import { deepClone, download, parseJsonFile, waitUntilCondition } from "./utils.js";
+import { download, parseJsonFile, waitUntilCondition } from "./utils.js";
 
 const presetManagers = {};
 
@@ -104,6 +104,7 @@ class PresetManager {
 
     async updatePreset() {
         const selected = $(this.select).find("option:selected");
+        console.log(selected)
 
         if (selected.val() == 'gui') {
             toastr.info('Cannot update GUI preset');
@@ -133,7 +134,7 @@ class PresetManager {
     async savePreset(name, settings) {
         const preset = settings ?? this.getPresetSettings(name);
 
-        const res = await fetch(`/save_preset`, {
+        const res = await fetch(`/api/presets/save`, {
             method: "POST",
             headers: getRequestHeaders(),
             body: JSON.stringify({ preset, name, apiId: this.apiId })
@@ -167,6 +168,10 @@ class PresetManager {
                 presets = textgenerationwebui_presets;
                 preset_names = textgenerationwebui_preset_names;
                 break;
+            case "context":
+                presets = context_presets;
+                preset_names = context_presets.map(x => x.name);
+                break;
             case "instruct":
                 presets = instruct_presets;
                 preset_names = instruct_presets.map(x => x.name);
@@ -179,11 +184,11 @@ class PresetManager {
     }
 
     isKeyedApi() {
-        return this.apiId == "textgenerationwebui" || this.apiId == "instruct";
+        return this.apiId == "textgenerationwebui" || this.apiId == "context" || this.apiId == "instruct";
     }
 
     isNonGenericApi() {
-        return this.apiId == "instruct";
+        return this.apiId == "context" || this.apiId == "instruct";
     }
 
     updateList(name, preset) {
@@ -231,10 +236,14 @@ class PresetManager {
                     return nai_settings;
                 case "textgenerationwebui":
                     return textgenerationwebui_settings;
+                case "context":
+                    const context_preset = getContextSettings();
+                    context_preset['name'] = name || power_user.context.preset;
+                    return context_preset;
                 case "instruct":
-                    const preset = deepClone(power_user.instruct);
-                    preset['name'] = name || power_user.instruct.preset;
-                    return preset;
+                    const instruct_preset = structuredClone(power_user.instruct);
+                    instruct_preset['name'] = name || power_user.instruct.preset;
+                    return instruct_preset;
                 default:
                     console.warn(`Unknown API ID ${apiId}`);
                     return {};
@@ -245,13 +254,13 @@ class PresetManager {
             'preset',
             'streaming_url',
             'stopping_strings',
-            'use_stop_sequence',
             'can_use_tokenization',
             'can_use_streaming',
             'preset_settings_novel',
             'streaming_novel',
             'nai_preamble',
             'model_novel',
+            'streaming_kobold',
             "enabled",
         ];
         const settings = Object.assign({}, getSettingsByApiId(this.apiId));
@@ -295,7 +304,7 @@ class PresetManager {
             $(this.select).trigger('change');
         }
 
-        const response = await fetch('/delete_preset', {
+        const response = await fetch('/api/presets/delete', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify({ name: nameToDelete, apiId: this.apiId }),
@@ -374,8 +383,10 @@ jQuery(async () => {
             return;
         }
 
-        const name = file.name.replace('.json', '').replace('.settings', '');
+        const fileName = file.name.replace('.json', '').replace('.settings', '');
         const data = await parseJsonFile(file);
+        const name = data?.name ?? fileName;
+        data['name'] = name;
 
         await presetManager.savePreset(name, data);
         toastr.success('Preset imported');
@@ -388,6 +399,11 @@ jQuery(async () => {
 
         if (!presetManager) {
             console.warn(`Preset Manager not found for API: ${apiId}`);
+            return;
+        }
+
+        // default context preset cannot be deleted
+        if (apiId == "context" && power_user.default_context === power_user.context.preset) {
             return;
         }
 

@@ -1,38 +1,29 @@
 import {
     getRequestHeaders,
     getStoppingStrings,
-    max_context,
     novelai_setting_names,
     saveSettingsDebounced,
     setGenerationParamsFromPreset
 } from "../script.js";
-import { getCfgPrompt } from "./extensions/cfg/util.js";
+import { getCfgPrompt } from "./cfg-scale.js";
 import { MAX_CONTEXT_DEFAULT } from "./power-user.js";
 import { getTextTokens, tokenizers } from "./tokenizers.js";
 import {
     getSortableDelay,
     getStringHash,
+    onlyUnique,
     uuidv4,
 } from "./utils.js";
-
-export {
-    nai_settings,
-    loadNovelPreset,
-    loadNovelSettings,
-    getNovelTier,
-};
 
 const default_preamble = "[ Style: chat, complex, sensory, visceral ]";
 const default_order = [1, 5, 0, 2, 3, 4];
 const maximum_output_length = 150;
 const default_presets = {
-    "euterpe-v2": "Classic-Euterpe",
-    "krake-v2": "Classic-Krake",
     "clio-v1": "Talker-Chat-Clio",
     "kayra-v1": "Carefree-Kayra"
 }
 
-const nai_settings = {
+export const nai_settings = {
     temperature: 1.5,
     repetition_penalty: 2.25,
     repetition_penalty_range: 2048,
@@ -84,11 +75,33 @@ export function getKayraMaxContextTokens() {
     return null;
 }
 
-function getNovelTier(tier) {
-    return nai_tiers[tier] ?? 'no_connection';
+export function getNovelTier() {
+    return nai_tiers[novel_data?.tier] ?? 'no_connection';
 }
 
-function loadNovelPreset(preset) {
+export function getNovelAnlas() {
+    return novel_data?.trainingStepsLeft?.fixedTrainingStepsLeft ?? 0;
+}
+
+export function getNovelUnlimitedImageGeneration() {
+    return novel_data?.perks?.unlimitedImageGeneration ?? false;
+}
+
+export async function loadNovelSubscriptionData() {
+    const result = await fetch('/api/novelai/status', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+    });
+
+    if (result.ok) {
+        const data = await result.json();
+        setNovelData(data);
+    }
+
+    return result.ok;
+}
+
+export function loadNovelPreset(preset) {
     if (preset.genamt === undefined) {
         const needsUnlock = preset.max_context > MAX_CONTEXT_DEFAULT;
         $("#amount_gen").val(preset.max_length).trigger('input');
@@ -99,7 +112,6 @@ function loadNovelPreset(preset) {
         setGenerationParamsFromPreset(preset);
     }
 
-    $("#rep_pen_size_novel").attr('max', max_context);
     nai_settings.temperature = preset.temperature;
     nai_settings.repetition_penalty = preset.repetition_penalty;
     nai_settings.repetition_penalty_range = preset.repetition_penalty_range;
@@ -125,7 +137,7 @@ function loadNovelPreset(preset) {
     loadNovelSettingsUi(nai_settings);
 }
 
-function loadNovelSettings(settings) {
+export function loadNovelSettings(settings) {
     //load the rest of the Novel settings without any checks
     nai_settings.model_novel = settings.model_novel;
     $('#model_novel_select').val(nai_settings.model_novel);
@@ -168,7 +180,6 @@ function loadNovelSettingsUi(ui_settings) {
     $("#rep_pen_novel").val(ui_settings.repetition_penalty);
     $("#rep_pen_counter_novel").text(Number(ui_settings.repetition_penalty).toFixed(2));
     $("#rep_pen_size_novel").val(ui_settings.repetition_penalty_range);
-    $("#rep_pen_size_novel").attr('max', max_context);
     $("#rep_pen_size_counter_novel").text(Number(ui_settings.repetition_penalty_range).toFixed(0));
     $("#rep_pen_slope_novel").val(ui_settings.repetition_penalty_slope);
     $("#rep_pen_slope_counter_novel").text(Number(`${ui_settings.repetition_penalty_slope}`).toFixed(2));
@@ -392,7 +403,7 @@ function getBadWordPermutations(text) {
     // Ditto + leading space
     result.push(` ${text.toLowerCase()}`);
 
-    return result;
+    return result.filter(onlyUnique);
 }
 
 export function getNovelGenerationData(finalPrompt, this_settings, this_amount_gen, isImpersonate, cfgValues) {
@@ -405,7 +416,7 @@ export function getNovelGenerationData(finalPrompt, this_settings, this_amount_g
 
     const tokenizerType = kayra ? tokenizers.NERD2 : (clio ? tokenizers.NERD : tokenizers.NONE);
     const stopSequences = (tokenizerType !== tokenizers.NONE)
-        ? getStoppingStrings(isImpersonate, false)
+        ? getStoppingStrings(isImpersonate)
             .map(t => getTextTokens(tokenizerType, t))
         : undefined;
 
@@ -455,7 +466,7 @@ export function getNovelGenerationData(finalPrompt, this_settings, this_amount_g
 }
 
 // Check if the prefix needs to be overriden to use instruct mode
-function selectPrefix(selected_prefix, finalPromt) {
+function selectPrefix(selected_prefix, finalPrompt) {
     let useInstruct = false;
     const clio = nai_settings.model_novel.includes('clio');
     const kayra = nai_settings.model_novel.includes('kayra');
@@ -463,7 +474,7 @@ function selectPrefix(selected_prefix, finalPromt) {
 
     if (isNewModel) {
         // NovelAI claims they scan backwards 1000 characters (not tokens!) to look for instruct brackets. That's really short.
-        const tail = finalPromt.slice(-1500);
+        const tail = finalPrompt.slice(-1500);
         useInstruct = tail.includes("}");
         return useInstruct ? "special_instruct" : selected_prefix;
     }
@@ -560,6 +571,10 @@ function createLogitBiasListItem(entry) {
     $('.novelai_logit_bias_list').prepend(template);
 }
 
+/**
+ * Calculates logit bias for Novel AI
+ * @returns {object[]} Array of logit bias objects
+ */
 function calculateLogitBias() {
     const bias_preset = nai_settings.logit_bias;
 
@@ -571,12 +586,62 @@ function calculateLogitBias() {
     const kayra = nai_settings.model_novel.includes('kayra');
     const tokenizerType = kayra ? tokenizers.NERD2 : (clio ? tokenizers.NERD : tokenizers.NONE);
 
-    return bias_preset.filter(b => b.text?.length > 0).map(bias => ({
-        bias: bias.value,
-        ensure_sequence_finish: false,
-        generate_once: false,
-        sequence: getTextTokens(tokenizerType, bias.text)
-    }));
+    /**
+     * Creates a bias object for Novel AI
+     * @param {number} bias Bias value
+     * @param {number[]} sequence Sequence of token ids
+     */
+    function getBiasObject(bias, sequence) {
+        return {
+            bias: bias,
+            ensure_sequence_finish: false,
+            generate_once: false,
+            sequence: sequence
+        };
+    }
+
+    const result = [];
+
+    for (const entry of bias_preset) {
+        if (entry.text?.length > 0) {
+            const text = entry.text.trim();
+
+            // Skip empty lines
+            if (text.length === 0) {
+                continue;
+            }
+
+            // Verbatim text
+            if (text.startsWith('{') && text.endsWith('}')) {
+                const tokens = getTextTokens(tokenizerType, text.slice(1, -1));
+                result.push(getBiasObject(entry.value, tokens));
+            }
+
+            // Raw token ids, JSON serialized
+            else if (text.startsWith('[') && text.endsWith(']')) {
+                try {
+                    const tokens = JSON.parse(text);
+
+                    if (Array.isArray(tokens) && tokens.every(t => Number.isInteger(t))) {
+                        result.push(getBiasObject(entry.value, tokens));
+                    } else {
+                        throw new Error('Not an array of integers');
+                    }
+                } catch (err) {
+                    console.log(`Failed to parse logit bias token list: ${text}`, err);
+                }
+            }
+
+            // Text with a leading space
+            else {
+                const biasText = ` ${text}`;
+                const tokens = getTextTokens(tokenizerType, biasText);
+                result.push(getBiasObject(entry.value, tokens));
+            }
+        }
+    }
+
+    return result;
 }
 
 /**
@@ -594,10 +659,28 @@ export function adjustNovelInstructionPrompt(prompt) {
     return stripedPrompt;
 }
 
+function tryParseStreamingError(decoded) {
+    try {
+        const data = JSON.parse(decoded);
+
+        if (!data) {
+            return;
+        }
+
+        if (data.message && data.statusCode >= 400) {
+            toastr.error(data.message, 'Error');
+            throw new Error(data);
+        }
+    }
+    catch {
+        // No JSON. Do nothing.
+    }
+}
+
 export async function generateNovelWithStreaming(generate_data, signal) {
     generate_data.streaming = nai_settings.streaming_novel;
 
-    const response = await fetch('/generate_novelai', {
+    const response = await fetch('/api/novelai/generate', {
         headers: getRequestHeaders(),
         body: JSON.stringify(generate_data),
         method: 'POST',
@@ -611,12 +694,14 @@ export async function generateNovelWithStreaming(generate_data, signal) {
         let messageBuffer = "";
         while (true) {
             const { done, value } = await reader.read();
-            let response = decoder.decode(value);
+            let decoded = decoder.decode(value);
             let eventList = [];
+
+            tryParseStreamingError(decoded);
 
             // ReadableStream's buffer is not guaranteed to contain full SSE messages as they arrive in chunks
             // We need to buffer chunks until we have one or more full messages (separated by double newlines)
-            messageBuffer += response;
+            messageBuffer += decoded;
             eventList = messageBuffer.split("\n\n");
             // Last element will be an empty string or a leftover partial message
             messageBuffer = eventList.pop();

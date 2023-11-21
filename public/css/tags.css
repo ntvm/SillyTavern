@@ -109,6 +109,7 @@
     overflow: hidden;
     text-align: left;
     white-space: nowrap;
+    text-shadow: none !important;
 }
 
 .tags_inline .tag {
@@ -128,10 +129,16 @@
     cursor: pointer;
     opacity: 0.6;
     filter: brightness(0.8);
+    transition: opacity 200ms;
 }
 
-.tags_view,
-.open_alternate_greetings {
+.rm_tag_filter .tag:hover {
+
+    opacity: 1;
+    filter: brightness(1);
+}
+
+.tags_view {
     margin: 0;
     aspect-ratio: 1 / 1;
 }

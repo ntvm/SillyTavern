@@ -12,7 +12,20 @@ export const PAGINATION_TEMPLATE = '<%= rangeStart %>-<%= rangeEnd %> of <%= tot
  * Navigation options for pagination.
  * @enum {number}
  */
-export const navigation_option = { none: 0, previous: 1, last: 2, };
+export const navigation_option = { none: -2000, previous: -1000, };
+
+export function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+export function isValidUrl(value) {
+    try {
+        new URL(value);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
 
 /**
  * Determines if a value is unique in an array.
@@ -43,6 +56,17 @@ export function isDigitsOnly(str) {
  */
 export function getSortableDelay() {
     return isMobile() ? 750 : 50;
+}
+
+export async function bufferToBase64(buffer) {
+    // use a FileReader to generate a base64 data URI:
+    const base64url = await new Promise(resolve => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.readAsDataURL(new Blob([buffer]))
+    });
+    // remove the `data:...;base64,` part from the start
+    return base64url.slice(base64url.indexOf(',') + 1);
 }
 
 /**
@@ -414,9 +438,9 @@ export function sortByCssOrder(a, b) {
  * @param {boolean} include_newline Whether to include a newline character in the trimmed string.
  * @returns {string} The trimmed string.
  * @example
- * end_trim_to_sentence('Hello, world! I am from'); // 'Hello, world!'
+ * trimToEndSentence('Hello, world! I am from'); // 'Hello, world!'
  */
-export function end_trim_to_sentence(input, include_newline = false) {
+export function trimToEndSentence(input, include_newline = false) {
     const punctuation = new Set(['.', '!', '?', '*', '"', ')', '}', '`', ']', '$', '。', '！', '？', '”', '）', '】', '】', '’', '」', '】']); // extend this as you see fit
     let last = -1;
 
@@ -441,6 +465,26 @@ export function end_trim_to_sentence(input, include_newline = false) {
     return input.substring(0, last + 1).trimEnd();
 }
 
+export function trimToStartSentence(input) {
+    let p1 = input.indexOf(".");
+    let p2 = input.indexOf("!");
+    let p3 = input.indexOf("?");
+    let p4 = input.indexOf("\n");
+    let first = p1;
+    let skip1 = false;
+    if (p2 > 0 && p2 < first) { first = p2; }
+    if (p3 > 0 && p3 < first) { first = p3; }
+    if (p4 > 0 && p4 < first) { first = p4; skip1 = true; }
+    if (first > 0) {
+        if (skip1) {
+            return input.substring(first + 1);
+        } else {
+            return input.substring(first + 2);
+        }
+    }
+    return input;
+}
+
 /**
  * Counts the number of occurrences of a character in a string.
  * @param {string} string The string to count occurrences in.
@@ -454,7 +498,7 @@ export function countOccurrences(string, character) {
     let count = 0;
 
     for (let i = 0; i < string.length; i++) {
-        if (string[i] === character) {
+        if (string.substring(i, i + character.length) === character) {
             count++;
         }
     }
@@ -826,11 +870,43 @@ export async function saveBase64AsFile(base64Data, characterName, filename = "",
     // If the response is successful, get the saved image path from the server's response
     if (response.ok) {
         const responseData = await response.json();
-        return responseData.path;
+        return responseData.path.replace(/\\/g, '/'); // Replace backslashes with forward slashes
     } else {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to upload the image to the server');
     }
+}
+
+/**
+ * Loads either a CSS or JS file and appends it to the appropriate document section.
+ *
+ * @param {string} url - The URL of the file to be loaded.
+ * @param {string} type - The type of file to load: "css" or "js".
+ * @returns {Promise} - Resolves when the file has loaded, rejects if there's an error or invalid type.
+ */
+export function loadFileToDocument(url, type) {
+    return new Promise((resolve, reject) => {
+        let element;
+
+        if (type === "css") {
+            element = document.createElement("link");
+            element.rel = "stylesheet";
+            element.href = url;
+        } else if (type === "js") {
+            element = document.createElement("script");
+            element.src = url;
+        } else {
+            reject("Invalid type specified");
+            return;
+        }
+
+        element.onload = resolve;
+        element.onerror = reject;
+
+        type === "css"
+            ? document.head.appendChild(element)
+            : document.body.appendChild(element);
+    });
 }
 
 /**
@@ -911,13 +987,4 @@ export function uuidv4() {
         const v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
-}
-
-/**
- * Clones an object using JSON serialization.
- * @param {any} obj The object to clone.
- * @returns {any} A deep clone of the object.
- */
-export function deepClone(obj) {
-    return JSON.parse(JSON.stringify(obj));
 }

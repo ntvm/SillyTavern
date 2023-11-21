@@ -68,7 +68,6 @@
         "tokenizer": 99,
         "token_padding": 64,
         "collapse_newlines": false,
-        "pygmalion_formatting": 0,
         "pin_examples": false,
         "strip_examples": false,
         "trim_sentences": false,
@@ -76,9 +75,6 @@
         "always_force_name2": true,
         "user_prompt_bias": "",
         "show_user_prompt_bias": true,
-        "multigen": false,
-        "multigen_first_chunk": 50,
-        "multigen_next_chunks": 30,
         "markdown_escape_strings": "",
         "fast_ui_mode": false,
         "avatar_style": 0,
@@ -139,8 +135,10 @@
             "system_prompt": "Avoid repetition, don't loop. Develop the plot slowly, always stay in character. Describe all actions in full, elaborate, explicit, graphic, and vivid detail. Mention all relevant sensory perceptions.",
             "input_sequence": "\n### Instruction:",
             "output_sequence": "\n### Response:",
+            "first_output_sequence": "",
             "last_output_sequence": "\n### Response (2 paragraphs, engaging, natural, authentic, descriptive, creative):",
-            "system_sequence": "",
+            "system_sequence_prefix": "",
+            "system_sequence_suffix": "",
             "stop_sequence": "",
             "separator_sequence": "",
             "wrap": true,
@@ -149,6 +147,7 @@
             "names_force_groups": true,
             "activation_regex": ""
         },
+        "default_context": "Default",
         "context": {
             "preset": "Default",
             "story_string": "{{#if system}}{{system}}\n{{/if}}{{#if wiBefore}}{{wiBefore}}\n{{/if}}{{#if description}}{{description}}\n{{/if}}{{#if personality}}{{char}}'s personality: {{personality}}\n{{/if}}{{#if scenario}}Scenario: {{scenario}}\n{{/if}}{{#if wiAfter}}{{wiAfter}}\n{{/if}}{{#if persona}}{{persona}}\n{{/if}}",
@@ -163,9 +162,9 @@
         "persona_show_notifications": true,
         "custom_stopping_strings": "",
         "custom_stopping_strings_macro": true,
-        "fuzzy_search": false,
+        "fuzzy_search": true,
         "encode_tags": false,
-        "lazy_load": 0
+        "ui_mode": 1
     },
     "extension_settings": {
         "apiUrl": "http://localhost:5100",
@@ -422,7 +421,6 @@
         "tfs": 1,
         "rep_pen_slope": 0,
         "single_line": false,
-        "use_stop_sequence": false,
         "streaming_kobold": false,
         "sampler_order": [
             6,
@@ -432,7 +430,12 @@
             3,
             4,
             5
-        ]
+        ],
+        "mirostat": 0,
+        "mirostat_tau": 5,
+        "mirostat_eta": 0.1,
+        "use_default_badwordsids": false,
+        "grammar": ""
     },
     "oai_settings": {
         "preset_settings_openai": "Default",
@@ -615,7 +618,6 @@
         "proxy_password": "",
         "assistant_prefill": "",
         "use_ai21_tokenizer": false,
-        "exclude_assistant": false,
-        "nsfw_avoidance_prompt": "Avoid writing a NSFW/Smut reply. Creatively write around it NSFW/Smut scenarios in character."
+        "exclude_assistant": false
     }
 }

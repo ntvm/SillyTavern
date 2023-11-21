@@ -12,6 +12,30 @@
         "type": "character"
     },
     {
+        "filename": "Aqua.png",
+        "type": "character"
+    },
+    {
+        "filename": "Assistente.png",
+        "type": "character"
+    },
+    {
+        "filename": "Bing-chan.png",
+        "type": "character"
+    },
+    {
+        "filename": "Character generator.png",
+        "type": "character"
+    },
+    {
+        "filename": "Character Provider.png",
+        "type": "character"
+    },
+    {
+        "filename": "Darkness.png",
+        "type": "character"
+    },
+    {
         "filename": "Seraphina",
         "type": "sprites"
     },
