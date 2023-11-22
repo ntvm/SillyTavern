@@ -199,6 +199,8 @@ jQuery(function () {
                     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
+                        <select id="ProxyPresets" name="preset">
+                        </select>
                     <div>
                     <label for="ProxyURL">Current proxy URL: </label>
                     <textarea id="ProxyURL" class="text_pole textarea_compact" rows="2" placeholder="Put proxy URL here..."></textarea>
@@ -209,8 +211,6 @@ jQuery(function () {
                         <label for="ProxyPrior"><input id="ProxyPrior" type="checkbox" />Activate proxy manager</label>
                     </div>
                     <div>
-                        <select id="ProxyPresets" name="preset">
-                        </select>
                         <i id="ProxySaveButton" class="fa-solid fa-save"></i>
                         <i id="ProxyDeleteButton" class="fa-solid fa-trash" style="float: right;"></i>
                     </div>
