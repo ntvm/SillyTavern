@@ -159,7 +159,34 @@ async function updatePresetList() {
     }
 }
 
+async function deleteProxyPreset() {
+    const selectedPresetName = extension_settings.ProxyManager.selectedPreset;
+    if (!selectedPresetName || selectedPresetName === '') {
+        toastr.warning('No preset selected for deletion. Select a preset first.');
+        return;
+    }
 
+    const confirmation = await callPopup('Are you sure you want to DELETE the selected proxy preset? This action cannot be undone.', 'confirm');
+    if (!confirmation){
+        toastr.info('Deletion cancelled.');
+        return;
+    }
+
+    const response = await fetch('/deleteProxy', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ name: selectedPresetName })
+    });
+
+    if(response.ok){
+        presets = presets.filter(preset => preset.name !== selectedPresetName);
+        $(`#ProxyPresets option[value="${selectedPresetName}"]`).remove();
+        toastr.success(`The preset '${selectedPresetName}' has been deleted.`);
+        saveSettingsDebounced();
+    } else {
+        toastr.error('Failed to delete the preset. Something borked.');
+    }
+}
 
 
 jQuery(function () {
@@ -185,6 +212,7 @@ jQuery(function () {
                         <select id="ProxyPresets" name="preset">
                         </select>
                         <i id="ProxySaveButton" class="fa-solid fa-save"></i>
+                        <i id="ProxyDeleteButton" class="fa-solid fa-trash" style="float: right;"></i>
                     </div>
                 </div>
             </div>
@@ -195,6 +223,7 @@ jQuery(function () {
         $('#ProxyPrior').on('input', onProxyPrior);
         $('#ProxyURL').on('input', onProxyURLInput);
         $('#ProxyPassword').on('input', onProxyPasswordInput);
+        $("#ProxyDeleteButton").on('click', deleteProxyPreset);
         $("#ProxyPresets").on('change', async function () {
             const ProxyPresetSelected = $(this).find(':selected').val();
             extension_settings.ProxyPreset = ProxyPresetSelected;
