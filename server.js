@@ -1811,6 +1811,20 @@ app.post('/saveProxy', jsonParser, (request, response) => {
     return response.sendStatus(200);
 });
 
+app.post('/deleteProxy', jsonParser,(request,response)=>{
+    if(!request.body || !request.body.name){
+        return response.sendStatus(400);
+    }
+
+    const filename = path.join(DIRECTORIES.ProxyManager,sanitize(request.body.name)+'.json');
+    if(fs.existsSync(filename)){
+        fs.unlinkSync(filename);
+        return response.sendStatus(200);
+    } else {
+        return response.sendStatus(404);
+    }
+});
+
 /**
  * @param {string} name Name of World Info file
  * @param {object} entries Entries object
