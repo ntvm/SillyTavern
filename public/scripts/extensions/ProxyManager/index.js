@@ -166,7 +166,7 @@ async function deleteProxyPreset() {
         return;
     }
 
-    const confirmation = await callPopup('Are you sure you want to DELETE the selected proxy preset? This action cannot be undone.', 'confirm');
+    const confirmation = await callPopup(`Are you sure you want to DELETE the selected proxy preset? This action cannot be undone. Make sure You wanna delete '${selectedPresetName}' `, 'confirm');
     if (!confirmation){
         toastr.info('Deletion cancelled.');
         return;
