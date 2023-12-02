@@ -208,7 +208,7 @@ jQuery(function () {
                     <label for="ProxyPassword">Current proxy password: </label>
                     <textarea id="ProxyPassword" class="text_pole textarea_compact" rows="2" placeholder="Put proxy password here..."></textarea>
                     <div>
-                        <label for="ProxyPrior"><input id="ProxyPrior" type="checkbox" />Activate proxy manager</label>
+                        <label class="checkbox_label for="ProxyPrior"><input id="ProxyPrior" type="checkbox" />Activate proxy manager</label>
                     </div>
                     <div>
                         <i id="ProxySaveButton" class="fa-solid fa-save"></i>
