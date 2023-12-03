@@ -1,6 +1,7 @@
 const fetch = require('node-fetch').default;
 const https = require('https');
 const { readSecret, SECRET_KEYS } = require('./secrets');
+const { getConfigValue } = require('./util');
 
 const DEEPLX_URL_DEFAULT = 'http://127.0.0.1:1188/translate';
 const ONERING_URL_DEFAULT = 'http://127.0.0.1:4990/translate';
@@ -30,15 +31,15 @@ function registerEndpoints(app, jsonParser) {
 
         try {
             const result = await fetch(url, {
-                method: "POST",
+                method: 'POST',
                 body: JSON.stringify({
                     q: text,
-                    source: "auto",
+                    source: 'auto',
                     target: lang,
-                    format: "text",
-                    api_key: key
+                    format: 'text',
+                    api_key: key,
                 }),
-                headers: { "Content-Type": "application/json" }
+                headers: { 'Content-Type': 'application/json' },
             });
 
             if (!result.ok) {
@@ -52,40 +53,50 @@ function registerEndpoints(app, jsonParser) {
 
             return response.send(json.translatedText);
         } catch (error) {
-            console.log("Translation error: " + error.message);
+            console.log('Translation error: ' + error.message);
             return response.sendStatus(500);
         }
     });
 
     app.post('/api/translate/google', jsonParser, async (request, response) => {
-        const { generateRequestUrl, normaliseResponse } = require('google-translate-api-browser');
-        const text = request.body.text;
-        const lang = request.body.lang;
+        try {
+            const { generateRequestUrl, normaliseResponse } = require('google-translate-api-browser');
+            const text = request.body.text;
+            const lang = request.body.lang;
 
-        if (!text || !lang) {
-            return response.sendStatus(400);
-        }
+            if (!text || !lang) {
+                return response.sendStatus(400);
+            }
 
-        console.log('Input text: ' + text);
+            console.log('Input text: ' + text);
 
-        const url = generateRequestUrl(text, { to: lang });
+            const url = generateRequestUrl(text, { to: lang });
 
-        https.get(url, (resp) => {
-            let data = '';
+            https.get(url, (resp) => {
+                let data = '';
 
-            resp.on('data', (chunk) => {
-                data += chunk;
+                resp.on('data', (chunk) => {
+                    data += chunk;
+                });
+
+                resp.on('end', () => {
+                    try {
+                        const result = normaliseResponse(JSON.parse(data));
+                        console.log('Translated text: ' + result.text);
+                        return response.send(result.text);
+                    } catch (error) {
+                        console.log('Translation error', error);
+                        return response.sendStatus(500);
+                    }
+                });
+            }).on('error', (err) => {
+                console.log('Translation error: ' + err.message);
+                return response.sendStatus(500);
             });
-
-            resp.on('end', () => {
-                const result = normaliseResponse(JSON.parse(data));
-                console.log('Translated text: ' + result.text);
-                return response.send(result.text);
-            });
-        }).on("error", (err) => {
-            console.log("Translation error: " + err.message);
+        } catch (error) {
+            console.log('Translation error', error);
             return response.sendStatus(500);
-        });
+        }
     });
 
     app.post('/api/translate/deepl', jsonParser, async (request, response) => {
@@ -97,6 +108,7 @@ function registerEndpoints(app, jsonParser) {
 
         const text = request.body.text;
         const lang = request.body.lang;
+        const formality = getConfigValue('deepl.formality', 'default');
 
         if (!text || !lang) {
             return response.sendStatus(400);
@@ -107,6 +119,11 @@ function registerEndpoints(app, jsonParser) {
         const params = new URLSearchParams();
         params.append('text', text);
         params.append('target_lang', lang);
+
+        if (['de', 'fr', 'it', 'es', 'nl', 'ja', 'ru'].includes(lang)) {
+            // We don't specify a Portuguese variant, so ignore formality for it.
+            params.append('formality', formality);
+        }
 
         try {
             const result = await fetch('https://api-free.deepl.com/v2/translate', {
@@ -131,7 +148,7 @@ function registerEndpoints(app, jsonParser) {
 
             return response.send(json.translations[0].text);
         } catch (error) {
-            console.log("Translation error: " + error.message);
+            console.log('Translation error: ' + error.message);
             return response.sendStatus(500);
         }
     });
@@ -184,7 +201,7 @@ function registerEndpoints(app, jsonParser) {
 
             return response.send(data.result);
         } catch (error) {
-            console.log("Translation error: " + error.message);
+            console.log('Translation error: ' + error.message);
             return response.sendStatus(500);
         }
     });
@@ -205,7 +222,7 @@ function registerEndpoints(app, jsonParser) {
         const text = request.body.text;
         let lang = request.body.lang;
         if (request.body.lang === 'zh-CN') {
-            lang = 'ZH'
+            lang = 'ZH';
         }
 
         if (!text || !lang) {
@@ -240,7 +257,7 @@ function registerEndpoints(app, jsonParser) {
 
             return response.send(json.data);
         } catch (error) {
-            console.log("DeepLX translation error: " + error.message);
+            console.log('DeepLX translation error: ' + error.message);
             return response.sendStatus(500);
         }
     });
@@ -251,7 +268,7 @@ function registerEndpoints(app, jsonParser) {
         let lang = request.body.lang;
 
         if (request.body.lang === 'zh-CN') {
-            lang = 'zh-Hans'
+            lang = 'zh-Hans';
         }
 
         if (!text || !lang) {
@@ -264,7 +281,7 @@ function registerEndpoints(app, jsonParser) {
             console.log('Translated text: ' + result.translation);
             return response.send(result.translation);
         }).catch(err => {
-            console.log("Translation error: " + err.message);
+            console.log('Translation error: ' + err.message);
             return response.sendStatus(500);
         });
     });

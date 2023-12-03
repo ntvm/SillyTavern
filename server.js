@@ -3,7 +3,7 @@
 // native node modules
 const crypto = require('crypto');
 const fs = require('fs');
-const http = require("http");
+const http = require('http');
 const https = require('https');
 const path = require('path');
 const readline = require('readline');
@@ -23,17 +23,16 @@ const doubleCsrf = require('csrf-csrf').doubleCsrf;
 const express = require('express');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
-const multer = require("multer");
+const multer = require('multer');
 const responseTime = require('response-time');
 
 // net related library imports
-const net = require("net");
+const net = require('net');
 const dns = require('dns');
-const DeviceDetector = require("device-detector-js");
+const DeviceDetector = require('device-detector-js');
 const fetch = require('node-fetch').default;
 const ipaddr = require('ipaddr.js');
 const ipMatching = require('ip-matching');
-const json5 = require('json5');
 
 // image processing related library imports
 const encode = require('png-chunks-encode');
@@ -55,7 +54,7 @@ const characterCardParser = require('./src/character-card-parser.js');
 const contentManager = require('./src/content-manager');
 const statsHelpers = require('./statsHelpers.js');
 const { readSecret, migrateSecrets, SECRET_KEYS } = require('./src/secrets');
-const { delay, getVersion, deepMerge } = require('./src/util');
+const { delay, getVersion, deepMerge, getConfigValue, color, uuidv4 } = require('./src/util');
 const { invalidateThumbnail, ensureThumbnailCache } = require('./src/thumbnails');
 const { getTokenizerModel, getTiktokenTokenizer, loadTokenizers, TEXT_COMPLETION_MODELS, getSentencepiceTokenizer, sentencepieceTokenizers } = require('./src/tokenizers');
 const { convertClaudePrompt } = require('./src/chat-completion');
@@ -72,22 +71,30 @@ if (process.versions && process.versions.node && process.versions.node.match(/20
 dns.setDefaultResultOrder('ipv4first');
 
 const cliArguments = yargs(hideBin(process.argv))
-    .option('disableCsrf', {
+    .option('autorun', {
+        type: 'boolean',
+        default: null,
+        describe: 'Automatically launch SillyTavern in the browser.',
+    }).option('corsProxy', {
         type: 'boolean',
         default: false,
-        describe: 'Disables CSRF protection'
+        describe: 'Enables CORS proxy',
+    }).option('disableCsrf', {
+        type: 'boolean',
+        default: false,
+        describe: 'Disables CSRF protection',
     }).option('ssl', {
         type: 'boolean',
         default: false,
-        describe: 'Enables SSL'
+        describe: 'Enables SSL',
     }).option('certPath', {
         type: 'string',
         default: 'certs/cert.pem',
-        describe: 'Path to your certificate file.'
+        describe: 'Path to your certificate file.',
     }).option('keyPath', {
         type: 'string',
         default: 'certs/privkey.pem',
-        describe: 'Path to your private key file.'
+        describe: 'Path to your private key file.',
     }).parseSync();
 
 // change all relative paths
@@ -101,58 +108,37 @@ app.use(responseTime());
 
 // impoort from statsHelpers.js
 
-const config = require(path.join(process.cwd(), './config.conf'));
+const server_port = process.env.SILLY_TAVERN_PORT || getConfigValue('port', 8000);
 
-const server_port = process.env.SILLY_TAVERN_PORT || config.port;
-
-const whitelistPath = path.join(process.cwd(), "./whitelist.txt");
-let whitelist = config.whitelist;
+const whitelistPath = path.join(process.cwd(), './whitelist.txt');
+let whitelist = getConfigValue('whitelist', []);
 
 if (fs.existsSync(whitelistPath)) {
     try {
         let whitelistTxt = fs.readFileSync(whitelistPath, 'utf-8');
-        whitelist = whitelistTxt.split("\n").filter(ip => ip).map(ip => ip.trim());
-    } catch (e) { }
+        whitelist = whitelistTxt.split('\n').filter(ip => ip).map(ip => ip.trim());
+    } catch (e) {
+        // Ignore errors that may occur when reading the whitelist (e.g. permissions)
+    }
 }
 
-const whitelistMode = config.whitelistMode;
-const autorun = config.autorun && !cliArguments.ssl;
-const enableExtensions = config.enableExtensions;
-const listen = config.listen;
+const whitelistMode = getConfigValue('whitelistMode', true);
+const autorun = getConfigValue('autorun', false) && cliArguments.autorun !== false && !cliArguments.ssl;
+const enableExtensions = getConfigValue('enableExtensions', true);
+const listen = getConfigValue('listen', false);
 
-const API_OPENAI = "https://api.openai.com/v1";
-const API_CLAUDE = "https://api.anthropic.com/v1";
-
-// These should be gone and come from the frontend. But for now, they're here.
-let api_server = "http://0.0.0.0:5000";
-let main_api = "kobold";
+const API_OPENAI = 'https://api.openai.com/v1';
+const API_CLAUDE = 'https://api.anthropic.com/v1';
 
 let characters = {};
 let response_dw_bg;
-
-
-let color = {
-    byNum: (mess, fgNum) => {
-        mess = mess || '';
-        fgNum = fgNum === undefined ? 31 : fgNum;
-        return '\u001b[' + fgNum + 'm' + mess + '\u001b[39m';
-    },
-    black: (mess) => color.byNum(mess, 30),
-    red: (mess) => color.byNum(mess, 31),
-    green: (mess) => color.byNum(mess, 32),
-    yellow: (mess) => color.byNum(mess, 33),
-    blue: (mess) => color.byNum(mess, 34),
-    magenta: (mess) => color.byNum(mess, 35),
-    cyan: (mess) => color.byNum(mess, 36),
-    white: (mess) => color.byNum(mess, 37)
-};
 
 function getMancerHeaders() {
     const apiKey = readSecret(SECRET_KEYS.MANCER);
 
     return apiKey ? ({
-        "X-API-KEY": apiKey,
-        "Authorization": `Bearer ${apiKey}`,
+        'X-API-KEY': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
     }) : {};
 }
 
@@ -160,13 +146,23 @@ function getAphroditeHeaders() {
     const apiKey = readSecret(SECRET_KEYS.APHRODITE);
 
     return apiKey ? ({
-        "X-API-KEY": apiKey,
-        "Authorization": `Bearer ${apiKey}`,
+        'X-API-KEY': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
+    }) : {};
+}
+
+function getTabbyHeaders() {
+    const apiKey = readSecret(SECRET_KEYS.TABBY);
+
+    return apiKey ? ({
+        'x-api-key': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
     }) : {};
 }
 
 function getOverrideHeaders(urlHost) {
-    const overrideHeaders = config.requestOverrides?.find((e) => e.hosts?.includes(urlHost))?.headers;
+    const requestOverrides = getConfigValue('requestOverrides', []);
+    const overrideHeaders = requestOverrides?.find((e) => e.hosts?.includes(urlHost))?.headers;
     if (overrideHeaders && urlHost) {
         return overrideHeaders;
     } else {
@@ -187,6 +183,8 @@ function setAdditionalHeaders(request, args, server) {
         headers = getMancerHeaders();
     } else if (request.body.use_aphrodite) {
         headers = getAphroditeHeaders();
+    } else if (request.body.use_tabby) {
+        headers = getTabbyHeaders();
     } else {
         headers = server ? getOverrideHeaders((new URL(server))?.host) : {};
     }
@@ -203,19 +201,19 @@ function humanizedISO8601DateTime(date) {
     let humanMinute = (baseDate.getMinutes() < 10 ? '0' : '') + baseDate.getMinutes();
     let humanSecond = (baseDate.getSeconds() < 10 ? '0' : '') + baseDate.getSeconds();
     let humanMillisecond = (baseDate.getMilliseconds() < 10 ? '0' : '') + baseDate.getMilliseconds();
-    let HumanizedDateTime = (humanYear + "-" + humanMonth + "-" + humanDate + " @" + humanHour + "h " + humanMinute + "m " + humanSecond + "s " + humanMillisecond + "ms");
+    let HumanizedDateTime = (humanYear + '-' + humanMonth + '-' + humanDate + ' @' + humanHour + 'h ' + humanMinute + 'm ' + humanSecond + 's ' + humanMillisecond + 'ms');
     return HumanizedDateTime;
-};
+}
 
 var charactersPath = 'public/characters/';
 var chatsPath = 'public/chats/';
 const SETTINGS_FILE = './public/settings.json';
 const AVATAR_WIDTH = 400;
 const AVATAR_HEIGHT = 600;
-const jsonParser = express.json({ limit: '100mb' });
-const urlencodedParser = express.urlencoded({ extended: true, limit: '100mb' });
+const jsonParser = express.json({ limit: '200mb' });
+const urlencodedParser = express.urlencoded({ extended: true, limit: '200mb' });
 const { DIRECTORIES, UPLOADS_PATH, PALM_SAFETY } = require('./src/constants');
-const { TavernCardValidator } = require("./src/validator/TavernCardValidator");
+const { TavernCardValidator } = require('./src/validator/TavernCardValidator');
 
 // CSRF Protection //
 if (cliArguments.disableCsrf === false) {
@@ -224,29 +222,29 @@ if (cliArguments.disableCsrf === false) {
 
     const { generateToken, doubleCsrfProtection } = doubleCsrf({
         getSecret: () => CSRF_SECRET,
-        cookieName: "X-CSRF-Token",
+        cookieName: 'X-CSRF-Token',
         cookieOptions: {
             httpOnly: true,
-            sameSite: "strict",
-            secure: false
+            sameSite: 'strict',
+            secure: false,
         },
         size: 64,
-        getTokenFromRequest: (req) => req.headers["x-csrf-token"]
+        getTokenFromRequest: (req) => req.headers['x-csrf-token'],
     });
 
-    app.get("/csrf-token", (req, res) => {
+    app.get('/csrf-token', (req, res) => {
         res.json({
-            "token": generateToken(res, req)
+            'token': generateToken(res, req),
         });
     });
 
     app.use(cookieParser(COOKIES_SECRET));
     app.use(doubleCsrfProtection);
 } else {
-    console.warn("\nCSRF protection is disabled. This will make your server vulnerable to CSRF attacks.\n");
-    app.get("/csrf-token", (req, res) => {
+    console.warn('\nCSRF protection is disabled. This will make your server vulnerable to CSRF attacks.\n');
+    app.get('/csrf-token', (req, res) => {
         res.json({
-            "token": 'disabled'
+            'token': 'disabled',
         });
     });
 }
@@ -254,12 +252,12 @@ if (cliArguments.disableCsrf === false) {
 // CORS Settings //
 const CORS = cors({
     origin: 'null',
-    methods: ['OPTIONS']
+    methods: ['OPTIONS'],
 });
 
 app.use(CORS);
 
-if (listen && config.basicAuthMode) app.use(basicAuthMiddleware);
+if (listen && getConfigValue('basicAuthMode', false)) app.use(basicAuthMiddleware);
 
 // IP Whitelist //
 let knownIPs = new Set();
@@ -298,14 +296,63 @@ app.use(function (req, res, next) {
 
     //clientIp = req.connection.remoteAddress.split(':').pop();
     if (whitelistMode === true && !whitelist.some(x => ipMatching.matches(clientIp, ipMatching.getMatch(x)))) {
-        console.log(color.red('Forbidden: Connection attempt from ' + clientIp + '. If you are attempting to connect, please add your IP address in whitelist or disable whitelist mode in config.conf in root of SillyTavern folder.\n'));
-        return res.status(403).send('<b>Forbidden</b>: Connection attempt from <b>' + clientIp + '</b>. If you are attempting to connect, please add your IP address in whitelist or disable whitelist mode in config.conf in root of SillyTavern folder.');
+        console.log(color.red('Forbidden: Connection attempt from ' + clientIp + '. If you are attempting to connect, please add your IP address in whitelist or disable whitelist mode in config.yaml in root of SillyTavern folder.\n'));
+        return res.status(403).send('<b>Forbidden</b>: Connection attempt from <b>' + clientIp + '</b>. If you are attempting to connect, please add your IP address in whitelist or disable whitelist mode in config.yaml in root of SillyTavern folder.');
     }
     next();
 });
 
+if (getConfigValue('enableCorsProxy', false) === true || cliArguments.corsProxy === true) {
+    const bodyParser = require('body-parser');
+    app.use(bodyParser.json());
+    console.log('Enabling CORS proxy');
 
-app.use(express.static(process.cwd() + "/public", {}));
+    app.use('/proxy/:url(*)', async (req, res) => {
+        const url = req.params.url; // get the url from the request path
+
+        // Disallow circular requests
+        const serverUrl = req.protocol + '://' + req.get('host');
+        if (url.startsWith(serverUrl)) {
+            return res.status(400).send('Circular requests are not allowed');
+        }
+
+        try {
+            const headers = JSON.parse(JSON.stringify(req.headers));
+            delete headers['x-csrf-token'];
+            delete headers['host'];
+            delete headers['referer'];
+            delete headers['origin'];
+            delete headers['cookie'];
+            delete headers['sec-fetch-mode'];
+            delete headers['sec-fetch-site'];
+            delete headers['sec-fetch-dest'];
+
+            const bodyMethods = ['POST', 'PUT', 'PATCH'];
+
+            const response = await fetch(url, {
+                method: req.method,
+                headers: headers,
+                body: bodyMethods.includes(req.method) ? JSON.stringify(req.body) : undefined,
+            });
+
+            // Copy over relevant response params to the proxy response
+            res.statusCode = response.status;
+            res.statusMessage = response.statusText;
+            response.body.pipe(res);
+
+        } catch (error) {
+            res.status(500).send('Error occurred while trying to proxy to: ' + url + ' ' + error);
+        }
+    });
+} else {
+    app.use('/proxy/:url(*)', async (_, res) => {
+        const message = 'CORS proxy is disabled. Enable it in config.yaml or use the --corsProxy flag.';
+        console.log(message);
+        res.status(404).send(message);
+    });
+}
+
+app.use(express.static(process.cwd() + '/public', {}));
 
 app.use('/backgrounds', (req, res) => {
     const filePath = decodeURIComponent(path.join(process.cwd(), 'public/backgrounds', req.url.replace(/%20/g, ' ')));
@@ -329,27 +376,31 @@ app.use('/characters', (req, res) => {
         res.send(data);
     });
 });
-app.use(multer({ dest: UPLOADS_PATH, limits: { fieldSize: 10 * 1024 * 1024 } }).single("avatar"));
-app.get("/", function (request, response) {
-    response.sendFile(process.cwd() + "/public/index.html");
+app.use(multer({ dest: UPLOADS_PATH, limits: { fieldSize: 10 * 1024 * 1024 } }).single('avatar'));
+app.get('/', function (request, response) {
+    response.sendFile(process.cwd() + '/public/index.html');
 });
-app.get("/notes/*", function (request, response) {
-    response.sendFile(process.cwd() + "/public" + request.url + ".html");
+app.get('/notes/*', function (request, response) {
+    response.sendFile(process.cwd() + '/public' + request.url + '.html');
 });
 app.get('/deviceinfo', function (request, response) {
     const userAgent = request.header('user-agent');
     const deviceDetector = new DeviceDetector();
-    const deviceInfo = deviceDetector.parse(userAgent || "");
+    const deviceInfo = deviceDetector.parse(userAgent || '');
     return response.send(deviceInfo);
 });
 app.get('/version', async function (_, response) {
     const data = await getVersion();
     response.send(data);
-})
+});
 
 //**************Kobold api
-app.post("/generate", jsonParser, async function (request, response_generate) {
+app.post('/generate', jsonParser, async function (request, response_generate) {
     if (!request.body) return response_generate.sendStatus(400);
+
+    if (request.body.api_server.indexOf('localhost') != -1) {
+        request.body.api_server = request.body.api_server.replace('localhost', '127.0.0.1');
+    }
 
     const request_prompt = request.body.prompt;
     const controller = new AbortController();
@@ -359,7 +410,7 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
             try {
                 console.log('Aborting Kobold generation...');
                 // send abort signal to koboldcpp
-                const abortResponse = await fetch(`${api_server}/extra/abort`, {
+                const abortResponse = await fetch(`${request.body.api_server}/extra/abort`, {
                     method: 'POST',
                 });
 
@@ -412,7 +463,7 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
             grammar: request.body.grammar,
             sampler_seed: request.body.sampler_seed,
         };
-        if (!!request.body.stop_sequence) {
+        if (request.body.stop_sequence) {
             this_settings['stop_sequence'] = request.body.stop_sequence;
         }
     }
@@ -421,8 +472,8 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
     const args = {
         body: JSON.stringify(this_settings),
         headers: Object.assign(
-            { "Content-Type": "application/json" },
-            getOverrideHeaders((new URL(api_server))?.host)
+            { 'Content-Type': 'application/json' },
+            getOverrideHeaders((new URL(request.body.api_server))?.host),
         ),
         signal: controller.signal,
     };
@@ -431,7 +482,7 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
     const delayAmount = 2500;
     for (let i = 0; i < MAX_RETRIES; i++) {
         try {
-            const url = request.body.streaming ? `${api_server}/extra/generate/stream` : `${api_server}/v1/generate`;
+            const url = request.body.streaming ? `${request.body.api_server}/extra/generate/stream` : `${request.body.api_server}/v1/generate`;
             const response = await fetch(url, { method: 'POST', timeout: 0, ...args });
 
             if (request.body.streaming) {
@@ -441,7 +492,7 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
                 });
 
                 response.body.on('end', function () {
-                    console.log("Streaming request finished");
+                    console.log('Streaming request finished');
                     response_generate.end();
                 });
 
@@ -462,7 +513,7 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
                 }
 
                 const data = await response.json();
-                console.log("Endpoint response:", data);
+                console.log('Endpoint response:', data);
                 return response_generate.send(data);
             }
         } catch (error) {
@@ -487,7 +538,7 @@ app.post("/generate", jsonParser, async function (request, response_generate) {
 });
 
 //************** Text generation web UI
-app.post("/api/textgenerationwebui/status", jsonParser, async function (request, response) {
+app.post('/api/textgenerationwebui/status', jsonParser, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
 
     try {
@@ -501,7 +552,7 @@ app.post("/api/textgenerationwebui/status", jsonParser, async function (request,
         const baseUrl = String(request.body.api_server).replace(/\/$/, '').replace(/\/v1$/, '');
 
         const args = {
-            headers: { "Content-Type": "application/json" },
+            headers: { 'Content-Type': 'application/json' },
         };
 
         setAdditionalHeaders(request, args, baseUrl);
@@ -510,16 +561,22 @@ app.post("/api/textgenerationwebui/status", jsonParser, async function (request,
         let result = '';
 
         if (request.body.legacy_api) {
-            url += "/v1/model";
+            url += '/v1/model';
         }
         else if (request.body.use_ooba) {
-            url += "/v1/models";
+            url += '/v1/models';
         }
         else if (request.body.use_aphrodite) {
-            url += "/v1/models";
+            url += '/v1/models';
         }
         else if (request.body.use_mancer) {
-            url += "/oai/v1/models";
+            url += '/oai/v1/models';
+        }
+        else if (request.body.use_tabby) {
+            url += '/v1/model/list';
+        }
+        else if (request.body.use_koboldcpp) {
+            url += '/v1/models';
         }
 
         const modelsReply = await fetch(url, args);
@@ -537,7 +594,7 @@ app.post("/api/textgenerationwebui/status", jsonParser, async function (request,
         }
 
         if (!Array.isArray(data.data)) {
-            console.log('Models response is not an array.')
+            console.log('Models response is not an array.');
             return response.status(400);
         }
 
@@ -560,7 +617,28 @@ app.post("/api/textgenerationwebui/status", jsonParser, async function (request,
                     result = modelName || result;
                 }
             } catch (error) {
-                console.error('Failed to get Ooba model info:', error);
+                console.error(`Failed to get Ooba model info: ${error}`);
+            }
+        }
+
+        if (request.body.use_tabby) {
+            try {
+                const modelInfoUrl = baseUrl + '/v1/model';
+                const modelInfoReply = await fetch(modelInfoUrl, args);
+
+                if (modelInfoReply.ok) {
+                    const modelInfo = await modelInfoReply.json();
+                    console.log('Tabby model info:', modelInfo);
+
+                    const modelName = modelInfo?.id;
+                    result = modelName || result;
+                } else {
+                    // TabbyAPI returns an error 400 if a model isn't loaded
+
+                    result = 'None';
+                }
+            } catch (error) {
+                console.error(`Failed to get TabbyAPI model info: ${error}`);
             }
         }
 
@@ -571,7 +649,7 @@ app.post("/api/textgenerationwebui/status", jsonParser, async function (request,
     }
 });
 
-app.post("/api/textgenerationwebui/generate", jsonParser, async function (request, response_generate) {
+app.post('/api/textgenerationwebui/generate', jsonParser, async function (request, response_generate) {
     if (!request.body) return response_generate.sendStatus(400);
 
     try {
@@ -592,19 +670,19 @@ app.post("/api/textgenerationwebui/generate", jsonParser, async function (reques
         let url = String(baseUrl).replace(/\/$/, '').replace(/\/v1$/, '');
 
         if (request.body.legacy_api) {
-            url += "/v1/generate";
+            url += '/v1/generate';
         }
-        else if (request.body.use_aphrodite || request.body.use_ooba) {
-            url += "/v1/completions";
+        else if (request.body.use_aphrodite || request.body.use_ooba || request.body.use_tabby || request.body.use_koboldcpp) {
+            url += '/v1/completions';
         }
         else if (request.body.use_mancer) {
-            url += "/oai/v1/completions";
+            url += '/oai/v1/completions';
         }
 
         const args = {
             method: 'POST',
             body: JSON.stringify(request.body),
-            headers: { "Content-Type": "application/json" },
+            headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
             timeout: 0,
         };
@@ -622,7 +700,7 @@ app.post("/api/textgenerationwebui/generate", jsonParser, async function (reques
             });
 
             completionsStream.body.on('end', function () {
-                console.log("Streaming request finished");
+                console.log('Streaming request finished');
                 response_generate.end();
             });
         }
@@ -631,7 +709,7 @@ app.post("/api/textgenerationwebui/generate", jsonParser, async function (reques
 
             if (completionsReply.ok) {
                 const data = await completionsReply.json();
-                console.log("Endpoint response:", data);
+                console.log('Endpoint response:', data);
 
                 // Wrap legacy response to OAI completions format
                 if (request.body.legacy_api) {
@@ -653,7 +731,7 @@ app.post("/api/textgenerationwebui/generate", jsonParser, async function (reques
         }
     } catch (error) {
         let value = { error: true, status: error?.status, response: error?.statusText };
-        console.log("Endpoint error:", error);
+        console.log('Endpoint error:', error);
 
         if (!response_generate.headersSent) {
             return response_generate.send(value);
@@ -663,21 +741,21 @@ app.post("/api/textgenerationwebui/generate", jsonParser, async function (reques
     }
 });
 
-app.post("/savechat", jsonParser, function (request, response) {
+app.post('/savechat', jsonParser, function (request, response) {
     try {
         var dir_name = String(request.body.avatar_url).replace('.png', '');
         let chat_data = request.body.chat;
         let jsonlData = chat_data.map(JSON.stringify).join('\n');
         writeFileAtomicSync(`${chatsPath + sanitize(dir_name)}/${sanitize(String(request.body.file_name))}.jsonl`, jsonlData, 'utf8');
-        backupChat(dir_name, jsonlData)
-        return response.send({ result: "ok" });
+        backupChat(dir_name, jsonlData);
+        return response.send({ result: 'ok' });
     } catch (error) {
         response.send(error);
         return console.log(error);
     }
 });
 
-app.post("/getchat", jsonParser, function (request, response) {
+app.post('/getchat', jsonParser, function (request, response) {
     try {
         const dirName = String(request.body.avatar_url).replace('.png', '');
         const chatDirExists = fs.existsSync(chatsPath + dirName);
@@ -704,7 +782,7 @@ app.post("/getchat", jsonParser, function (request, response) {
         const lines = data.split('\n');
 
         // Iterate through the array of strings and parse each line as JSON
-        const jsonData = lines.map((l) => { try { return JSON.parse(l); } catch (_) { } }).filter(x => x);
+        const jsonData = lines.map((l) => { try { return JSON.parse(l); } catch (_) { return; } }).filter(x => x);
         return response.send(jsonData);
     } catch (error) {
         console.error(error);
@@ -713,33 +791,32 @@ app.post("/getchat", jsonParser, function (request, response) {
 });
 
 // Only called for kobold
-app.post("/getstatus", jsonParser, async function (request, response) {
+app.post('/getstatus', jsonParser, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
-    api_server = request.body.api_server;
-    main_api = request.body.main_api;
+    let api_server = request.body.api_server;
     if (api_server.indexOf('localhost') != -1) {
         api_server = api_server.replace('localhost', '127.0.0.1');
     }
 
     const args = {
-        headers: { "Content-Type": "application/json" }
+        headers: { 'Content-Type': 'application/json' },
     };
 
     setAdditionalHeaders(request, args, api_server);
 
-    const url = api_server + "/v1/model";
+    const url = api_server + '/v1/model';
     let version = '';
     let koboldVersion = {};
 
-    if (main_api == "kobold") {
+    if (request.body.main_api == 'kobold') {
         try {
-            version = (await fetchJSON(api_server + "/v1/info/version")).result
+            version = (await fetchJSON(api_server + '/v1/info/version')).result;
         }
         catch {
             version = '0.0.0';
         }
         try {
-            koboldVersion = (await fetchJSON(api_server + "/extra/version"));
+            koboldVersion = (await fetchJSON(api_server + '/extra/version'));
         }
         catch {
             koboldVersion = {
@@ -756,8 +833,8 @@ app.post("/getstatus", jsonParser, async function (request, response) {
             data = {};
         }
 
-        if (data.result == "ReadOnly") {
-            data.result = "no_connection";
+        if (data.result == 'ReadOnly') {
+            data.result = 'no_connection';
         }
 
         data.version = version;
@@ -766,14 +843,14 @@ app.post("/getstatus", jsonParser, async function (request, response) {
         return response.send(data);
     } catch (error) {
         console.log(error);
-        return response.send({ result: "no_connection" });
+        return response.send({ result: 'no_connection' });
     }
 });
 
 
 function tryParse(str) {
     try {
-        return json5.parse(str);
+        return JSON.parse(str);
     } catch {
         return undefined;
     }
@@ -868,10 +945,10 @@ function charaFormatData(data) {
 
     // Checks if data.alternate_greetings is an array, a string, or neither, and acts accordingly. (expected to be an array of strings)
     const getAlternateGreetings = data => {
-        if (Array.isArray(data.alternate_greetings)) return data.alternate_greetings
-        if (typeof data.alternate_greetings === 'string') return [data.alternate_greetings]
-        return []
-    }
+        if (Array.isArray(data.alternate_greetings)) return data.alternate_greetings;
+        if (typeof data.alternate_greetings === 'string') return [data.alternate_greetings];
+        return [];
+    };
 
     // Spec V1 fields
     _.set(char, 'name', data.ch_name);
@@ -943,7 +1020,7 @@ function charaFormatData(data) {
     return char;
 }
 
-app.post("/createcharacter", urlencodedParser, async function (request, response) {
+app.post('/createcharacter', urlencodedParser, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
 
     request.body.ch_name = sanitize(request.body.ch_name);
@@ -989,7 +1066,7 @@ app.post('/renamechat', jsonParser, async function (request, response) {
     return response.send({ ok: true });
 });
 
-app.post("/renamecharacter", jsonParser, async function (request, response) {
+app.post('/renamecharacter', jsonParser, async function (request, response) {
     if (!request.body.avatar_url || !request.body.new_name) {
         return response.sendStatus(400);
     }
@@ -1008,9 +1085,9 @@ app.post("/renamecharacter", jsonParser, async function (request, response) {
     try {
         // Read old file, replace name int it
         const rawOldData = await charaRead(oldAvatarPath);
-        if (rawOldData === undefined) throw new Error("Failed to read character file");
+        if (rawOldData === undefined) throw new Error('Failed to read character file');
 
-        const oldData = getCharaCardV2(json5.parse(rawOldData));
+        const oldData = getCharaCardV2(JSON.parse(rawOldData));
         _.set(oldData, 'data.name', newName);
         _.set(oldData, 'name', newName);
         const newData = JSON.stringify(oldData);
@@ -1035,7 +1112,7 @@ app.post("/renamecharacter", jsonParser, async function (request, response) {
     }
 });
 
-app.post("/editcharacter", urlencodedParser, async function (request, response) {
+app.post('/editcharacter', urlencodedParser, async function (request, response) {
     if (!request.body) {
         console.error('Error: no response body detected');
         response.status(400).send('Error: no response body detected');
@@ -1082,7 +1159,7 @@ app.post("/editcharacter", urlencodedParser, async function (request, response) 
  * @param {Object} response - The HTTP response object.
  * @returns {void}
  */
-app.post("/editcharacterattribute", jsonParser, async function (request, response) {
+app.post('/editcharacterattribute', jsonParser, async function (request, response) {
     console.log(request.body);
     if (!request.body) {
         console.error('Error: no response body detected');
@@ -1099,9 +1176,9 @@ app.post("/editcharacterattribute", jsonParser, async function (request, respons
     try {
         const avatarPath = path.join(charactersPath, request.body.avatar_url);
         let charJSON = await charaRead(avatarPath);
-        if (typeof charJSON !== 'string') throw new Error("Failed to read character file");
+        if (typeof charJSON !== 'string') throw new Error('Failed to read character file');
 
-        let char = JSON.parse(charJSON)
+        let char = JSON.parse(charJSON);
         //check if the field exists
         if (char[request.body.field] === undefined && char.data[request.body.field] === undefined) {
             console.error('Error: invalid field.');
@@ -1128,7 +1205,7 @@ app.post("/editcharacterattribute", jsonParser, async function (request, respons
  *
  * @returns {void}
  * */
-app.post("/v2/editcharacterattribute", jsonParser, async function (request, response) {
+app.post('/v2/editcharacterattribute', jsonParser, async function (request, response) {
     const update = request.body;
     const avatarPath = path.join(charactersPath, update.avatar);
 
@@ -1145,10 +1222,10 @@ app.post("/v2/editcharacterattribute", jsonParser, async function (request, resp
                 JSON.stringify(character),
                 (update.avatar).replace('.png', ''),
                 response,
-                'Character saved'
+                'Character saved',
             );
         } else {
-            console.log(validator.lastValidationError)
+            console.log(validator.lastValidationError);
             response.status(400).send({ message: `Validation failed for ${character.name}`, error: validator.lastValidationError });
         }
     } catch (exception) {
@@ -1156,7 +1233,7 @@ app.post("/v2/editcharacterattribute", jsonParser, async function (request, resp
     }
 });
 
-app.post("/deletecharacter", jsonParser, async function (request, response) {
+app.post('/deletecharacter', jsonParser, async function (request, response) {
     if (!request.body || !request.body.avatar_url) {
         return response.sendStatus(400);
     }
@@ -1182,7 +1259,7 @@ app.post("/deletecharacter", jsonParser, async function (request, response) {
 
     if (request.body.delete_chats == true) {
         try {
-            await fs.promises.rm(path.join(chatsPath, sanitize(dir_name)), { recursive: true, force: true })
+            await fs.promises.rm(path.join(chatsPath, sanitize(dir_name)), { recursive: true, force: true });
         } catch (err) {
             console.error(err);
             return response.sendStatus(500);
@@ -1209,10 +1286,10 @@ async function charaWrite(img_url, data, target_img, response = undefined, mes =
         for (let tEXtChunk of tEXtChunks) {
             chunks.splice(chunks.indexOf(tEXtChunk), 1);
         }
-        // Add new chunks before the IEND chunk
+        // Add new chunks before the IEND chunk
         const base64EncodedData = Buffer.from(data, 'utf8').toString('base64');
         chunks.splice(-1, 0, PNGtext.encode('chara', base64EncodedData));
-        //chunks.splice(-1, 0, text.encode('lorem', 'ipsum'));
+        //chunks.splice(-1, 0, text.encode('lorem', 'ipsum'));
 
         writeFileAtomicSync(charactersPath + target_img + '.png', Buffer.from(encode(chunks)));
         if (response !== undefined) response.send(mes);
@@ -1227,15 +1304,15 @@ async function charaWrite(img_url, data, target_img, response = undefined, mes =
 async function tryReadImage(img_url, crop) {
     try {
         let rawImg = await jimp.read(img_url);
-        let final_width = rawImg.bitmap.width, final_height = rawImg.bitmap.height
+        let final_width = rawImg.bitmap.width, final_height = rawImg.bitmap.height;
 
         // Apply crop if defined
         if (typeof crop == 'object' && [crop.x, crop.y, crop.width, crop.height].every(x => typeof x === 'number')) {
             rawImg = rawImg.crop(crop.x, crop.y, crop.width, crop.height);
             // Apply standard resize if requested
             if (crop.want_resize) {
-                final_width = AVATAR_WIDTH
-                final_height = AVATAR_HEIGHT
+                final_width = AVATAR_WIDTH;
+                final_height = AVATAR_HEIGHT;
             } else {
                 final_width = crop.width;
                 final_height = crop.height;
@@ -1277,12 +1354,12 @@ const calculateChatSize = (charDir) => {
     }
 
     return { chatSize, dateLastChat };
-}
+};
 
 // Calculate the total string length of the data object
 const calculateDataSize = (data) => {
     return typeof data === 'object' ? Object.values(data).reduce((acc, val) => acc + new String(val).length, 0) : 0;
-}
+};
 
 /**
  * processCharacter - Process a given character, read its data and calculate its statistics.
@@ -1294,9 +1371,9 @@ const calculateDataSize = (data) => {
 const processCharacter = async (item, i) => {
     try {
         const img_data = await charaRead(charactersPath + item);
-        if (img_data === undefined) throw new Error("Failed to read character file");
+        if (img_data === undefined) throw new Error('Failed to read character file');
 
-        let jsonObject = getCharaCardV2(json5.parse(img_data));
+        let jsonObject = getCharaCardV2(JSON.parse(img_data));
         jsonObject.avatar = item;
         characters[i] = jsonObject;
         characters[i]['json_data'] = img_data;
@@ -1314,18 +1391,18 @@ const processCharacter = async (item, i) => {
         characters[i] = {
             date_added: 0,
             date_last_chat: 0,
-            chat_size: 0
+            chat_size: 0,
         };
 
         console.log(`Could not process character: ${item}`);
 
         if (err instanceof SyntaxError) {
-            console.log("String [" + i + "] is not valid JSON!");
+            console.log('String [' + i + '] is not valid JSON!');
         } else {
-            console.log("An unexpected error occurred: ", err);
+            console.log('An unexpected error occurred: ', err);
         }
     }
-}
+};
 
 
 /**
@@ -1342,7 +1419,7 @@ const processCharacter = async (item, i) => {
  * @param  {object}   response The HTTP response object.
  * @return {undefined}         Does not return a value.
  */
-app.post("/getcharacters", jsonParser, function (request, response) {
+app.post('/getcharacters', jsonParser, function (request, response) {
     fs.readdir(charactersPath, async (err, files) => {
         if (err) {
             console.error(err);
@@ -1365,7 +1442,7 @@ app.post("/getcharacters", jsonParser, function (request, response) {
     });
 });
 
-app.post("/getonecharacter", jsonParser, async function (request, response) {
+app.post('/getonecharacter', jsonParser, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
     const item = request.body.avatar_url;
     const filePath = path.join(charactersPath, item);
@@ -1390,7 +1467,7 @@ app.post("/getonecharacter", jsonParser, async function (request, response) {
  * @param {Object} response - The HTTP response object.
  * @returns {void}
  */
-app.post("/getstats", jsonParser, function (request, response) {
+app.post('/getstats', jsonParser, function (request, response) {
     response.send(JSON.stringify(statsHelpers.getCharStats()));
 });
 
@@ -1404,7 +1481,7 @@ app.post("/getstats", jsonParser, function (request, response) {
  * @param {Object} request - Express request object.
  * @param {Object} response - Express response object.
  */
-app.post("/recreatestats", jsonParser, function (request, response) {
+app.post('/recreatestats', jsonParser, function (request, response) {
     if (statsHelpers.loadStatsFile(DIRECTORIES.chats, DIRECTORIES.characters, true)) {
         return response.sendStatus(200);
     } else {
@@ -1424,7 +1501,7 @@ app.post("/recreatestats", jsonParser, function (request, response) {
  * @returns {void}
  *
 */
-app.post("/updatestats", jsonParser, function (request, response) {
+app.post('/updatestats', jsonParser, function (request, response) {
     if (!request.body) return response.sendStatus(400);
     statsHelpers.setCharStats(request.body);
     return response.sendStatus(200);
@@ -1451,14 +1528,14 @@ app.post("/getReboot", jsonParser, function (request, response) {
 
 });
 
-app.post("/getbackgrounds", jsonParser, function (request, response) {
-    var images = getImages("public/backgrounds");
+app.post('/getbackgrounds', jsonParser, function (request, response) {
+    var images = getImages('public/backgrounds');
     response.send(JSON.stringify(images));
 
 });
 
-app.post("/getuseravatars", jsonParser, function (request, response) {
-    var images = getImages("public/User Avatars");
+app.post('/getuseravatars', jsonParser, function (request, response) {
+    var images = getImages('public/User Avatars');
     response.send(JSON.stringify(images));
 
 });
@@ -1481,7 +1558,7 @@ app.post('/deleteuseravatar', jsonParser, function (request, response) {
     return response.sendStatus(404);
 });
 
-app.post("/setbackground", jsonParser, function (request, response) {
+app.post('/setbackground', jsonParser, function (request, response) {
     try {
         const bg = `#bg1 {background-image: url('../backgrounds/${request.body.bg}');}`;
         writeFileAtomicSync('public/css/bg_load.css', bg, 'utf8');
@@ -1492,7 +1569,7 @@ app.post("/setbackground", jsonParser, function (request, response) {
     }
 });
 
-app.post("/delbackground", jsonParser, function (request, response) {
+app.post('/delbackground', jsonParser, function (request, response) {
     if (!request.body) return response.sendStatus(400);
 
     if (request.body.bg !== sanitize(request.body.bg)) {
@@ -1512,7 +1589,7 @@ app.post("/delbackground", jsonParser, function (request, response) {
     return response.send('ok');
 });
 
-app.post("/delchat", jsonParser, function (request, response) {
+app.post('/delchat', jsonParser, function (request, response) {
     console.log('/delchat entered');
     if (!request.body) {
         console.log('no request body seen');
@@ -1564,7 +1641,7 @@ app.post('/renamebackground', jsonParser, function (request, response) {
     return response.send('ok');
 });
 
-app.post("/downloadbackground", urlencodedParser, function (request, response) {
+app.post('/downloadbackground', urlencodedParser, function (request, response) {
     response_dw_bg = response;
     if (!request.body || !request.file) return response.sendStatus(400);
 
@@ -1582,10 +1659,10 @@ app.post("/downloadbackground", urlencodedParser, function (request, response) {
     }
 });
 
-app.post("/savesettings", jsonParser, function (request, response) {
+app.post('/savesettings', jsonParser, function (request, response) {
     try {
         writeFileAtomicSync('public/settings.json', JSON.stringify(request.body, null, 4), 'utf8');
-        response.send({ result: "ok" });
+        response.send({ result: 'ok' });
     } catch (err) {
         console.log(err);
         response.send(err);
@@ -1612,7 +1689,7 @@ function readAndParseFromDirectory(directoryPath, fileExtension = '.json') {
     files.forEach(item => {
         try {
             const file = fs.readFileSync(path.join(directoryPath, item), 'utf-8');
-            parsedFiles.push(fileExtension == '.json' ? json5.parse(file) : file);
+            parsedFiles.push(fileExtension == '.json' ? JSON.parse(file) : file);
         }
         catch {
             // skip
@@ -1622,10 +1699,6 @@ function readAndParseFromDirectory(directoryPath, fileExtension = '.json') {
     return parsedFiles;
 }
 
-function sortByModifiedDate(directory) {
-    return (a, b) => +(new Date(fs.statSync(`${directory}/${b}`).mtime)) - +(new Date(fs.statSync(`${directory}/${a}`).mtime));
-}
-
 function sortByName(_) {
     return (a, b) => a.localeCompare(b);
 }
@@ -1633,17 +1706,18 @@ function sortByName(_) {
 function readPresetsFromDirectory(directoryPath, options = {}) {
     const {
         sortFunction,
-        removeFileExtension = false
+        removeFileExtension = false,
+        fileExtension = '.json',
     } = options;
 
-    const files = fs.readdirSync(directoryPath).sort(sortFunction);
+    const files = fs.readdirSync(directoryPath).sort(sortFunction).filter(x => path.parse(x).ext == fileExtension);
     const fileContents = [];
     const fileNames = [];
 
     files.forEach(item => {
         try {
             const file = fs.readFileSync(path.join(directoryPath, item), 'utf8');
-            json5.parse(file);
+            JSON.parse(file);
             fileContents.push(file);
             fileNames.push(removeFileExtension ? item.replace(/\.[^/.]+$/, '') : item);
         } catch {
@@ -1657,7 +1731,7 @@ function readPresetsFromDirectory(directoryPath, options = {}) {
 
 // Wintermute's code
 app.post('/getsettings', jsonParser, (request, response) => {
-    let settings
+    let settings;
     try {
         settings = fs.readFileSync('public/settings.json', 'utf8');
     } catch (e) {
@@ -1668,26 +1742,26 @@ app.post('/getsettings', jsonParser, (request, response) => {
     const { fileContents: novelai_settings, fileNames: novelai_setting_names }
         = readPresetsFromDirectory(DIRECTORIES.novelAI_Settings, {
             sortFunction: sortByName(DIRECTORIES.novelAI_Settings),
-            removeFileExtension: true
+            removeFileExtension: true,
         });
 
     // OpenAI Settings
     const { fileContents: openai_settings, fileNames: openai_setting_names }
         = readPresetsFromDirectory(DIRECTORIES.openAI_Settings, {
-            sortFunction: sortByModifiedDate(DIRECTORIES.openAI_Settings), removeFileExtension: true
+            sortFunction: sortByName(DIRECTORIES.openAI_Settings), removeFileExtension: true,
         });
 
     // TextGenerationWebUI Settings
     const { fileContents: textgenerationwebui_presets, fileNames: textgenerationwebui_preset_names }
         = readPresetsFromDirectory(DIRECTORIES.textGen_Settings, {
-            sortFunction: sortByName(DIRECTORIES.textGen_Settings), removeFileExtension: true
+            sortFunction: sortByName(DIRECTORIES.textGen_Settings), removeFileExtension: true,
         });
 
     //Kobold
     const { fileContents: koboldai_settings, fileNames: koboldai_setting_names }
         = readPresetsFromDirectory(DIRECTORIES.koboldAI_Settings, {
-            sortFunction: sortByName(DIRECTORIES.koboldAI_Settings), removeFileExtension: true
-        })
+            sortFunction: sortByName(DIRECTORIES.koboldAI_Settings), removeFileExtension: true,
+        });
 
     const worldFiles = fs
         .readdirSync(DIRECTORIES.worlds)
@@ -1880,7 +1954,7 @@ function readWorldInfoFile(worldInfoName) {
     }
 
     const worldInfoText = fs.readFileSync(pathToWorldInfo, 'utf8');
-    const worldInfo = json5.parse(worldInfoText);
+    const worldInfo = JSON.parse(worldInfoText);
     return worldInfo;
 }
 
@@ -1895,7 +1969,7 @@ function getImages(path) {
         .sort(Intl.Collator().compare);
 }
 
-app.post("/getallchatsofcharacter", jsonParser, async function (request, response) {
+app.post('/getallchatsofcharacter', jsonParser, async function (request, response) {
     if (!request.body) return response.sendStatus(400);
 
     const characterDirectory = (request.body.avatar_url).replace('.png', '');
@@ -1919,7 +1993,7 @@ app.post("/getallchatsofcharacter", jsonParser, async function (request, respons
 
                 const rl = readline.createInterface({
                     input: fileStream,
-                    crlfDelay: Infinity
+                    crlfDelay: Infinity,
                 });
 
                 let lastLine;
@@ -1972,7 +2046,7 @@ function getPngName(file) {
     return file;
 }
 
-app.post("/importcharacter", urlencodedParser, async function (request, response) {
+app.post('/importcharacter', urlencodedParser, async function (request, response) {
 
     if (!request.body || request.file === undefined) return response.sendStatus(400);
 
@@ -1993,14 +2067,14 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     response.send({ error: true });
                 }
 
-                let jsonData = json5.parse(data);
+                let jsonData = JSON.parse(data);
 
                 if (jsonData.spec !== undefined) {
                     console.log('importing from v2 json');
                     importRisuSprites(jsonData);
                     unsetFavFlag(jsonData);
                     jsonData = readFromV2(jsonData);
-                    jsonData["create_date"] = humanizedISO8601DateTime();
+                    jsonData['create_date'] = humanizedISO8601DateTime();
                     png_name = getPngName(jsonData.data?.name || jsonData.name);
                     let char = JSON.stringify(jsonData);
                     charaWrite(defaultAvatarPath, char, png_name, response, { file_name: png_name });
@@ -2008,23 +2082,23 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     console.log('importing from v1 json');
                     jsonData.name = sanitize(jsonData.name);
                     if (jsonData.creator_notes) {
-                        jsonData.creator_notes = jsonData.creator_notes.replace("Creator's notes go here.", "");
+                        jsonData.creator_notes = jsonData.creator_notes.replace('Creator\'s notes go here.', '');
                     }
                     png_name = getPngName(jsonData.name);
                     let char = {
-                        "name": jsonData.name,
-                        "description": jsonData.description ?? '',
-                        "creatorcomment": jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
-                        "personality": jsonData.personality ?? '',
-                        "first_mes": jsonData.first_mes ?? '',
-                        "avatar": 'none',
-                        "chat": jsonData.name + " - " + humanizedISO8601DateTime(),
-                        "mes_example": jsonData.mes_example ?? '',
-                        "scenario": jsonData.scenario ?? '',
-                        "create_date": humanizedISO8601DateTime(),
-                        "talkativeness": jsonData.talkativeness ?? 0.5,
-                        "creator": jsonData.creator ?? '',
-                        "tags": jsonData.tags ?? '',
+                        'name': jsonData.name,
+                        'description': jsonData.description ?? '',
+                        'creatorcomment': jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
+                        'personality': jsonData.personality ?? '',
+                        'first_mes': jsonData.first_mes ?? '',
+                        'avatar': 'none',
+                        'chat': jsonData.name + ' - ' + humanizedISO8601DateTime(),
+                        'mes_example': jsonData.mes_example ?? '',
+                        'scenario': jsonData.scenario ?? '',
+                        'create_date': humanizedISO8601DateTime(),
+                        'talkativeness': jsonData.talkativeness ?? 0.5,
+                        'creator': jsonData.creator ?? '',
+                        'tags': jsonData.tags ?? '',
                     };
                     char = convertToV2(char);
                     let charJSON = JSON.stringify(char);
@@ -2033,23 +2107,23 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     console.log('importing from gradio json');
                     jsonData.char_name = sanitize(jsonData.char_name);
                     if (jsonData.creator_notes) {
-                        jsonData.creator_notes = jsonData.creator_notes.replace("Creator's notes go here.", "");
+                        jsonData.creator_notes = jsonData.creator_notes.replace('Creator\'s notes go here.', '');
                     }
                     png_name = getPngName(jsonData.char_name);
                     let char = {
-                        "name": jsonData.char_name,
-                        "description": jsonData.char_persona ?? '',
-                        "creatorcomment": jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
-                        "personality": '',
-                        "first_mes": jsonData.char_greeting ?? '',
-                        "avatar": 'none',
-                        "chat": jsonData.name + " - " + humanizedISO8601DateTime(),
-                        "mes_example": jsonData.example_dialogue ?? '',
-                        "scenario": jsonData.world_scenario ?? '',
-                        "create_date": humanizedISO8601DateTime(),
-                        "talkativeness": jsonData.talkativeness ?? 0.5,
-                        "creator": jsonData.creator ?? '',
-                        "tags": jsonData.tags ?? '',
+                        'name': jsonData.char_name,
+                        'description': jsonData.char_persona ?? '',
+                        'creatorcomment': jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
+                        'personality': '',
+                        'first_mes': jsonData.char_greeting ?? '',
+                        'avatar': 'none',
+                        'chat': jsonData.name + ' - ' + humanizedISO8601DateTime(),
+                        'mes_example': jsonData.example_dialogue ?? '',
+                        'scenario': jsonData.world_scenario ?? '',
+                        'create_date': humanizedISO8601DateTime(),
+                        'talkativeness': jsonData.talkativeness ?? 0.5,
+                        'creator': jsonData.creator ?? '',
+                        'tags': jsonData.tags ?? '',
                     };
                     char = convertToV2(char);
                     let charJSON = JSON.stringify(char);
@@ -2064,7 +2138,7 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                 var img_data = await charaRead(uploadPath, format);
                 if (img_data === undefined) throw new Error('Failed to read character data');
 
-                let jsonData = json5.parse(img_data);
+                let jsonData = JSON.parse(img_data);
 
                 jsonData.name = sanitize(jsonData.data?.name || jsonData.name);
                 png_name = getPngName(jsonData.name);
@@ -2074,7 +2148,7 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     importRisuSprites(jsonData);
                     unsetFavFlag(jsonData);
                     jsonData = readFromV2(jsonData);
-                    jsonData["create_date"] = humanizedISO8601DateTime();
+                    jsonData['create_date'] = humanizedISO8601DateTime();
                     const char = JSON.stringify(jsonData);
                     await charaWrite(uploadPath, char, png_name, response, { file_name: png_name });
                     fs.unlinkSync(uploadPath);
@@ -2082,23 +2156,23 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     console.log('Found a v1 character file.');
 
                     if (jsonData.creator_notes) {
-                        jsonData.creator_notes = jsonData.creator_notes.replace("Creator's notes go here.", "");
+                        jsonData.creator_notes = jsonData.creator_notes.replace('Creator\'s notes go here.', '');
                     }
 
                     let char = {
-                        "name": jsonData.name,
-                        "description": jsonData.description ?? '',
-                        "creatorcomment": jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
-                        "personality": jsonData.personality ?? '',
-                        "first_mes": jsonData.first_mes ?? '',
-                        "avatar": 'none',
-                        "chat": jsonData.name + " - " + humanizedISO8601DateTime(),
-                        "mes_example": jsonData.mes_example ?? '',
-                        "scenario": jsonData.scenario ?? '',
-                        "create_date": humanizedISO8601DateTime(),
-                        "talkativeness": jsonData.talkativeness ?? 0.5,
-                        "creator": jsonData.creator ?? '',
-                        "tags": jsonData.tags ?? '',
+                        'name': jsonData.name,
+                        'description': jsonData.description ?? '',
+                        'creatorcomment': jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
+                        'personality': jsonData.personality ?? '',
+                        'first_mes': jsonData.first_mes ?? '',
+                        'avatar': 'none',
+                        'chat': jsonData.name + ' - ' + humanizedISO8601DateTime(),
+                        'mes_example': jsonData.mes_example ?? '',
+                        'scenario': jsonData.scenario ?? '',
+                        'create_date': humanizedISO8601DateTime(),
+                        'talkativeness': jsonData.talkativeness ?? 0.5,
+                        'creator': jsonData.creator ?? '',
+                        'tags': jsonData.tags ?? '',
                     };
                     char = convertToV2(char);
                     const charJSON = JSON.stringify(char);
@@ -2116,10 +2190,10 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
     }
 });
 
-app.post("/dupecharacter", jsonParser, async function (request, response) {
+app.post('/dupecharacter', jsonParser, async function (request, response) {
     try {
         if (!request.body.avatar_url) {
-            console.log("avatar URL not found in request body");
+            console.log('avatar URL not found in request body');
             console.log(request.body);
             return response.sendStatus(400);
         }
@@ -2140,15 +2214,15 @@ app.post("/dupecharacter", jsonParser, async function (request, response) {
 
         if (!isNaN(Number(lastPart)) && nameParts.length > 1) {
             suffix = parseInt(lastPart) + 1;
-            baseName = nameParts.slice(0, -1).join("_"); // construct baseName without suffix
+            baseName = nameParts.slice(0, -1).join('_'); // construct baseName without suffix
         } else {
-            baseName = nameParts.join("_"); // original filename is completely the baseName
+            baseName = nameParts.join('_'); // original filename is completely the baseName
         }
 
         newFilename = path.join(DIRECTORIES.characters, `${baseName}_${suffix}${path.extname(filename)}`);
 
         while (fs.existsSync(newFilename)) {
-            let suffixStr = "_" + suffix;
+            let suffixStr = '_' + suffix;
             newFilename = path.join(DIRECTORIES.characters, `${baseName}${suffixStr}${path.extname(filename)}`);
             suffix++;
         }
@@ -2163,7 +2237,7 @@ app.post("/dupecharacter", jsonParser, async function (request, response) {
     }
 });
 
-app.post("/exportchat", jsonParser, async function (request, response) {
+app.post('/exportchat', jsonParser, async function (request, response) {
     if (!request.body.file || (!request.body.avatar_url && request.body.is_group === false)) {
         return response.sendStatus(400);
     }
@@ -2171,11 +2245,11 @@ app.post("/exportchat", jsonParser, async function (request, response) {
         ? DIRECTORIES.groupChats
         : path.join(DIRECTORIES.chats, String(request.body.avatar_url).replace('.png', ''));
     let filename = path.join(pathToFolder, request.body.file);
-    let exportfilename = request.body.exportfilename
+    let exportfilename = request.body.exportfilename;
     if (!fs.existsSync(filename)) {
         const errorMessage = {
-            message: `Could not find JSONL file to export. Source chat file: ${filename}.`
-        }
+            message: `Could not find JSONL file to export. Source chat file: ${filename}.`,
+        };
         console.log(errorMessage.message);
         return response.status(404).json(errorMessage);
     }
@@ -2187,7 +2261,7 @@ app.post("/exportchat", jsonParser, async function (request, response) {
                 const successMessage = {
                     message: `Chat saved to ${exportfilename}`,
                     result: rawFile,
-                }
+                };
 
                 console.log(`Chat exported as ${exportfilename}`);
                 return response.status(200).json(successMessage);
@@ -2195,8 +2269,8 @@ app.post("/exportchat", jsonParser, async function (request, response) {
             catch (err) {
                 console.error(err);
                 const errorMessage = {
-                    message: `Could not read JSONL file to export. Source chat file: ${filename}.`
-                }
+                    message: `Could not read JSONL file to export. Source chat file: ${filename}.`,
+                };
                 console.log(errorMessage.message);
                 return response.status(500).json(errorMessage);
             }
@@ -2219,19 +2293,19 @@ app.post("/exportchat", jsonParser, async function (request, response) {
             const successMessage = {
                 message: `Chat saved to ${exportfilename}`,
                 result: buffer,
-            }
+            };
             console.log(`Chat exported as ${exportfilename}`);
             return response.status(200).json(successMessage);
         });
     }
     catch (err) {
-        console.log("chat export failed.")
+        console.log('chat export failed.');
         console.log(err);
         return response.sendStatus(400);
     }
-})
+});
 
-app.post("/exportcharacter", jsonParser, async function (request, response) {
+app.post('/exportcharacter', jsonParser, async function (request, response) {
     if (!request.body.format || !request.body.avatar_url) {
         return response.sendStatus(400);
     }
@@ -2249,8 +2323,8 @@ app.post("/exportcharacter", jsonParser, async function (request, response) {
             try {
                 let json = await charaRead(filename);
                 if (json === undefined) return response.sendStatus(400);
-                let jsonObject = getCharaCardV2(json5.parse(json));
-                return response.type('json').send(jsonObject)
+                let jsonObject = getCharaCardV2(JSON.parse(json));
+                return response.type('json').send(jsonObject);
             }
             catch {
                 return response.sendStatus(400);
@@ -2261,7 +2335,7 @@ app.post("/exportcharacter", jsonParser, async function (request, response) {
     return response.sendStatus(400);
 });
 
-app.post("/importgroupchat", urlencodedParser, function (request, response) {
+app.post('/importgroupchat', urlencodedParser, function (request, response) {
     try {
         const filedata = request.file;
 
@@ -2281,7 +2355,7 @@ app.post("/importgroupchat", urlencodedParser, function (request, response) {
     }
 });
 
-app.post("/importchat", urlencodedParser, function (request, response) {
+app.post('/importchat', urlencodedParser, function (request, response) {
     if (!request.body) return response.sendStatus(400);
 
     var format = request.body.file_type;
@@ -2298,7 +2372,7 @@ app.post("/importchat", urlencodedParser, function (request, response) {
         const data = fs.readFileSync(path.join(UPLOADS_PATH, filedata.filename), 'utf8');
 
         if (format === 'json') {
-            const jsonData = json5.parse(data);
+            const jsonData = JSON.parse(data);
             if (jsonData.histories !== undefined) {
                 //console.log('/importchat confirms JSON histories are defined');
                 const chat = {
@@ -2315,10 +2389,10 @@ app.post("/importchat", urlencodedParser, function (request, response) {
                                     is_user: message.src.is_human,
                                     send_date: humanizedISO8601DateTime(),
                                     mes: message.text,
-                                })
+                                }),
                             )];
-                    }
-                }
+                    },
+                };
 
                 const newChats = [];
                 (jsonData.histories.histories ?? []).forEach((history) => {
@@ -2386,7 +2460,7 @@ app.post("/importchat", urlencodedParser, function (request, response) {
         if (format === 'jsonl') {
             const line = data.split('\n')[0];
 
-            let jsonData = json5.parse(line);
+            let jsonData = JSON.parse(line);
 
             if (jsonData.user_name !== undefined || jsonData.name !== undefined) {
                 fs.copyFileSync(path.join(UPLOADS_PATH, filedata.filename), (`${chatsPath + avatar_url}/${ch_name} - ${humanizedISO8601DateTime()}.jsonl`));
@@ -2418,7 +2492,7 @@ app.post('/importworldinfo', urlencodedParser, (request, response) => {
     }
 
     try {
-        const worldContent = json5.parse(fileContents);
+        const worldContent = JSON.parse(fileContents);
         if (!('entries' in worldContent)) {
             throw new Error('File must contain a world info entries list');
         }
@@ -2516,30 +2590,31 @@ function ensureDirectoryExistence(filePath) {
 app.post('/uploadimage', jsonParser, async (request, response) => {
     // Check for image data
     if (!request.body || !request.body.image) {
-        return response.status(400).send({ error: "No image data provided" });
-    }
-
-    // Extracting the base64 data and the image format
-    const match = request.body.image.match(/^data:image\/(png|jpg|webp|jpeg|gif);base64,(.+)$/);
-    if (!match) {
-        return response.status(400).send({ error: "Invalid image format" });
-    }
-
-    const [, format, base64Data] = match;
-
-    // Constructing filename and path
-    let filename = `${Date.now()}.${format}`;
-    if (request.body.filename) {
-        filename = `${request.body.filename}.${format}`;
-    }
-
-    // if character is defined, save to a sub folder for that character
-    let pathToNewFile = path.join(DIRECTORIES.userImages, filename);
-    if (request.body.ch_name) {
-        pathToNewFile = path.join(DIRECTORIES.userImages, request.body.ch_name, filename);
+        return response.status(400).send({ error: 'No image data provided' });
     }
 
     try {
+        // Extracting the base64 data and the image format
+        const splitParts = request.body.image.split(',');
+        const format = splitParts[0].split(';')[0].split('/')[1];
+        const base64Data = splitParts[1];
+        const validFormat = ['png', 'jpg', 'webp', 'jpeg', 'gif'].includes(format);
+        if (!validFormat) {
+            return response.status(400).send({ error: 'Invalid image format' });
+        }
+
+        // Constructing filename and path
+        let filename = `${Date.now()}.${format}`;
+        if (request.body.filename) {
+            filename = `${request.body.filename}.${format}`;
+        }
+
+        // if character is defined, save to a sub folder for that character
+        let pathToNewFile = path.join(DIRECTORIES.userImages, filename);
+        if (request.body.ch_name) {
+            pathToNewFile = path.join(DIRECTORIES.userImages, request.body.ch_name, filename);
+        }
+
         ensureDirectoryExistence(pathToNewFile);
         const imageBuffer = Buffer.from(base64Data, 'base64');
         await fs.promises.writeFile(pathToNewFile, imageBuffer);
@@ -2548,7 +2623,7 @@ app.post('/uploadimage', jsonParser, async (request, response) => {
         response.send({ path: pathToNewFile });
     } catch (error) {
         console.log(error);
-        response.status(500).send({ error: "Failed to save the image" });
+        response.status(500).send({ error: 'Failed to save the image' });
     }
 });
 
@@ -2564,7 +2639,7 @@ app.post('/listimgfiles/:folder', (req, res) => {
         return res.send(images);
     } catch (error) {
         console.error(error);
-        return res.status(500).send({ error: "Unable to retrieve files" });
+        return res.status(500).send({ error: 'Unable to retrieve files' });
     }
 });
 
@@ -2583,7 +2658,7 @@ app.post('/getgroups', jsonParser, (_, response) => {
         try {
             const filePath = path.join(DIRECTORIES.groups, file);
             const fileContents = fs.readFileSync(filePath, 'utf8');
-            const group = json5.parse(fileContents);
+            const group = JSON.parse(fileContents);
             const groupStat = fs.statSync(filePath);
             group['date_added'] = groupStat.birthtimeMs;
             group['create_date'] = humanizedISO8601DateTime(groupStat.birthtimeMs);
@@ -2721,7 +2796,7 @@ app.post('/deletegroup', jsonParser, async (request, response) => {
 
     try {
         // Delete group chats
-        const group = json5.parse(fs.readFileSync(pathToGroup, 'utf8'));
+        const group = JSON.parse(fs.readFileSync(pathToGroup, 'utf8'));
 
         if (group && Array.isArray(group.chats)) {
             for (const chat of group.chats) {
@@ -2765,7 +2840,7 @@ function cleanUploads() {
 }
 
 /* OpenAI */
-app.post("/getstatus_openai", jsonParser, async function (request, response_getstatus_openai) {
+app.post('/getstatus_openai', jsonParser, async function (request, response_getstatus_openai) {
     if (!request.body) return response_getstatus_openai.sendStatus(400);
 
     let api_url;
@@ -2788,10 +2863,10 @@ app.post("/getstatus_openai", jsonParser, async function (request, response_gets
     }
 
     try {
-        const response = await fetch(api_url + "/models", {
+        const response = await fetch(api_url + '/models', {
             method: 'GET',
             headers: {
-                "Authorization": "Bearer " + api_key_openai,
+                'Authorization': 'Bearer ' + api_key_openai,
                 ...headers,
             },
         });
@@ -2821,7 +2896,7 @@ app.post("/getstatus_openai", jsonParser, async function (request, response_gets
                     const modelIds = models.filter(x => x && typeof x === 'object').map(x => x.id).sort();
                     console.log('Available OpenAI models:', modelIds);
                 } else {
-                    console.log('OpenAI endpoint did not return a list of models.')
+                    console.log('OpenAI endpoint did not return a list of models.');
                 }
             }
         }
@@ -2840,7 +2915,7 @@ app.post("/getstatus_openai", jsonParser, async function (request, response_gets
     }
 });
 
-app.post("/openai_bias", jsonParser, async function (request, response) {
+app.post('/openai_bias', jsonParser, async function (request, response) {
     if (!request.body || !Array.isArray(request.body))
         return response.sendStatus(400);
 
@@ -2920,16 +2995,16 @@ function convertChatMLPrompt(messages) {
     const messageStrings = [];
     messages.forEach(m => {
         if (m.role === 'system' && m.name === undefined) {
-            messageStrings.push("System: " + m.content);
+            messageStrings.push('System: ' + m.content);
         }
         else if (m.role === 'system' && m.name !== undefined) {
-            messageStrings.push(m.name + ": " + m.content);
+            messageStrings.push(m.name + ': ' + m.content);
         }
         else {
-            messageStrings.push(m.role + ": " + m.content);
+            messageStrings.push(m.role + ': ' + m.content);
         }
     });
-    return messageStrings.join("\n") + '\nassistant:';
+    return messageStrings.join('\n') + '\nassistant:';
 }
 
 async function sendScaleRequest(request, response) {
@@ -2952,7 +3027,7 @@ async function sendScaleRequest(request, response) {
         });
 
         const generateResponse = await fetch(api_url, {
-            method: "POST",
+            method: 'POST',
             body: JSON.stringify({ input: { input: requestPrompt } }),
             headers: {
                 'Content-Type': 'application/json',
@@ -2969,7 +3044,7 @@ async function sendScaleRequest(request, response) {
         const generateResponseJson = await generateResponse.json();
         console.log('Scale response:', generateResponseJson);
 
-        const reply = { choices: [{ "message": { "content": generateResponseJson.output, } }] };
+        const reply = { choices: [{ 'message': { 'content': generateResponseJson.output } }] };
         return response.send(reply);
     } catch (error) {
         console.log(error);
@@ -2979,7 +3054,7 @@ async function sendScaleRequest(request, response) {
     }
 }
 
-app.post("/generate_altscale", jsonParser, function (request, response_generate_scale) {
+app.post('/generate_altscale', jsonParser, function (request, response_generate_scale) {
     if (!request.body) return response_generate_scale.sendStatus(400);
 
     fetch('https://dashboard.scale.com/spellbook/api/trpc/v2.variant.run', {
@@ -2993,14 +3068,14 @@ app.post("/generate_altscale", jsonParser, function (request, response_generate_
                 variant: {
                     name: 'New Variant',
                     appId: '',
-                    taxonomy: null
+                    taxonomy: null,
                 },
                 prompt: {
                     id: '',
                     template: '{{input}}\n',
                     exampleVariables: {},
                     variablesSourceDataId: null,
-                    systemMessage: request.body.sysprompt
+                    systemMessage: request.body.sysprompt,
                 },
                 modelParameters: {
                     id: '',
@@ -3008,20 +3083,20 @@ app.post("/generate_altscale", jsonParser, function (request, response_generate_
                     modelType: 'OpenAi',
                     maxTokens: request.body.max_tokens,
                     temperature: request.body.temp,
-                    stop: "user:",
+                    stop: 'user:',
                     suffix: null,
                     topP: request.body.top_p,
                     logprobs: null,
-                    logitBias: request.body.logit_bias
+                    logitBias: request.body.logit_bias,
                 },
                 inputs: [
                     {
                         index: '-1',
                         valueByName: {
-                            input: request.body.prompt
-                        }
-                    }
-                ]
+                            input: request.body.prompt,
+                        },
+                    },
+                ],
             },
             meta: {
                 values: {
@@ -3029,18 +3104,18 @@ app.post("/generate_altscale", jsonParser, function (request, response_generate_
                     'prompt.variablesSourceDataId': ['undefined'],
                     'modelParameters.suffix': ['undefined'],
                     'modelParameters.logprobs': ['undefined'],
-                }
-            }
-        })
+                },
+            },
+        }),
     })
         .then(response => response.json())
         .then(data => {
-            console.log(data.result.data.json.outputs[0])
+            console.log(data.result.data.json.outputs[0]);
             return response_generate_scale.send({ output: data.result.data.json.outputs[0] });
         })
         .catch((error) => {
-            console.error('Error:', error)
-            return response_generate_scale.send({ error: true })
+            console.error('Error:', error);
+            return response_generate_scale.send({ error: true });
         });
 
 });
@@ -3064,16 +3139,17 @@ async function sendClaudeRequest(request, response) {
         request.socket.on('close', function () {
             controller.abort();
         });
-        const { HumAssistOff } = require('./config.conf');
-        const { SystemFul  } = require('./config.conf');
-        let requestPrompt = convertClaudePrompt(request.body.messages, true, !request.body.exclude_assistant, HumAssistOff, SystemFul);
+        const { HumAssistOff } = require('./config.yaml');
+        const { SystemFul  } = require('./config.yaml');
+        let doSystemPrompt = request.body.model === 'claude-2' || request.body.model === 'claude-2.1';
+        let requestPrompt = convertClaudePrompt(request.body.messages, true, !request.body.exclude_assistant, doSystemPrompt, HumAssistOff, SystemFul);
 
         if (request.body.assistant_prefill && !request.body.exclude_assistant) {
             requestPrompt += request.body.assistant_prefill;
         }
 
         console.log('Claude request:', requestPrompt);
-        const stop_sequences = ["\n\nHuman:", "\n\nSystem:", "\n\nAssistant:"];
+        const stop_sequences = ['\n\nHuman:', '\n\nSystem:', '\n\nAssistant:'];
 
         // Add custom stop sequences
         if (Array.isArray(request.body.stop)) {
@@ -3081,7 +3157,7 @@ async function sendClaudeRequest(request, response) {
         }
 
         const generateResponse = await fetch(api_url + '/complete', {
-            method: "POST",
+            method: 'POST',
             signal: controller.signal,
             body: JSON.stringify({
                 prompt: requestPrompt,
@@ -3094,9 +3170,9 @@ async function sendClaudeRequest(request, response) {
                 stream: request.body.stream,
             }),
             headers: {
-                "Content-Type": "application/json",
-                "anthropic-version": '2023-06-01',
-                "x-api-key": api_key_claude,
+                'Content-Type': 'application/json',
+                'anthropic-version': '2023-06-01',
+                'x-api-key': api_key_claude,
             },
             timeout: 0,
         });
@@ -3111,7 +3187,7 @@ async function sendClaudeRequest(request, response) {
             });
 
             generateResponse.body.on('end', function () {
-                console.log("Streaming request finished");
+                console.log('Streaming request finished');
                 response.end();
             });
         } else {
@@ -3125,7 +3201,7 @@ async function sendClaudeRequest(request, response) {
             console.log('Claude response:', responseText);
 
             // Wrap it back to OAI format
-            const reply = { choices: [{ "message": { "content": responseText, } }] };
+            const reply = { choices: [{ 'message': { 'content': responseText } }] };
             return response.send(reply);
         }
     } catch (error) {
@@ -3171,9 +3247,9 @@ async function sendPalmRequest(request, response) {
 
         const generateResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${api_key_palm}`, {
             body: JSON.stringify(body),
-            method: "POST",
+            method: 'POST',
             headers: {
-                "Content-Type": "application/json"
+                'Content-Type': 'application/json',
             },
             signal: controller.signal,
             timeout: 0,
@@ -3202,7 +3278,7 @@ async function sendPalmRequest(request, response) {
         console.log('Palm response:', responseText);
 
         // Wrap it back to OAI format
-        const reply = { choices: [{ "message": { "content": responseText, } }] };
+        const reply = { choices: [{ 'message': { 'content': responseText } }] };
         return response.send(reply);
     } catch (error) {
         console.log('Error communicating with Palm API: ', error);
@@ -3212,7 +3288,7 @@ async function sendPalmRequest(request, response) {
     }
 }
 
-app.post("/generate_openai", jsonParser, function (request, response_generate_openai) {
+app.post('/generate_openai', jsonParser, function (request, response_generate_openai) {
     if (!request.body) return response_generate_openai.status(400).send({ error: true });
 
     if (request.body.use_claude) {
@@ -3241,12 +3317,16 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
         api_key_openai = request.body.reverse_proxy ? request.body.proxy_password : readSecret(SECRET_KEYS.OPENAI);
         headers = {};
         bodyParams = {};
+
+        if (getConfigValue('openai.randomizeUserId', false)) {
+            bodyParams['user'] = uuidv4();
+        }
     } else {
         api_url = 'https://openrouter.ai/api/v1';
         api_key_openai = readSecret(SECRET_KEYS.OPENROUTER);
         // OpenRouter needs to pass the referer: https://openrouter.ai/docs
         headers = { 'HTTP-Referer': request.headers.referer };
-        bodyParams = { 'transforms': ["middle-out"] };
+        bodyParams = { 'transforms': ['middle-out'] };
 
         if (request.body.use_fallback) {
             bodyParams['route'] = 'fallback';
@@ -3281,18 +3361,19 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
             ...headers,
         },
         body: JSON.stringify({
-            "messages": isTextCompletion === false ? request.body.messages : undefined,
-            "prompt": isTextCompletion === true ? textPrompt : undefined,
-            "model": request.body.model,
-            "temperature": request.body.temperature,
-            "max_tokens": request.body.max_tokens,
-            "stream": request.body.stream,
-            "presence_penalty": request.body.presence_penalty,
-            "frequency_penalty": request.body.frequency_penalty,
-            "top_p": request.body.top_p,
-            "top_k": request.body.top_k,
-            "stop": isTextCompletion === false ? request.body.stop : undefined,
-            "logit_bias": request.body.logit_bias,
+            'messages': isTextCompletion === false ? request.body.messages : undefined,
+            'prompt': isTextCompletion === true ? textPrompt : undefined,
+            'model': request.body.model,
+            'temperature': request.body.temperature,
+            'max_tokens': request.body.max_tokens,
+            'stream': request.body.stream,
+            'presence_penalty': request.body.presence_penalty,
+            'frequency_penalty': request.body.frequency_penalty,
+            'top_p': request.body.top_p,
+            'top_k': request.body.top_k,
+            'stop': isTextCompletion === false ? request.body.stop : undefined,
+            'logit_bias': request.body.logit_bias,
+            'seed': request.body.seed,
             ...bodyParams,
         }),
         signal: controller.signal,
@@ -3313,7 +3394,7 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
      */
     async function makeRequest(config, response_generate_openai, request, retries = 5, timeout = 5000) {
         try {
-            const fetchResponse = await fetch(endpointUrl, config)
+            const fetchResponse = await fetch(endpointUrl, config);
 
             if (fetchResponse.ok) {
                 if (request.body.stream) {
@@ -3324,7 +3405,7 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
                         response_generate_openai.end();
                     });
                 } else {
-                    let json = await fetchResponse.json()
+                    let json = await fetchResponse.json();
                     response_generate_openai.send(json);
                     console.log(json);
                     console.log(json?.choices[0]?.message);
@@ -3380,7 +3461,7 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
 async function sendAI21Request(request, response) {
     if (!request.body) return response.sendStatus(400);
     const controller = new AbortController();
-    console.log(request.body.messages)
+    console.log(request.body.messages);
     request.socket.removeAllListeners('close');
     request.socket.on('close', function () {
         controller.abort();
@@ -3390,7 +3471,7 @@ async function sendAI21Request(request, response) {
         headers: {
             accept: 'application/json',
             'content-type': 'application/json',
-            Authorization: `Bearer ${readSecret(SECRET_KEYS.AI21)}`
+            Authorization: `Bearer ${readSecret(SECRET_KEYS.AI21)}`,
         },
         body: JSON.stringify({
             numResults: 1,
@@ -3406,7 +3487,7 @@ async function sendAI21Request(request, response) {
                 applyToPunctuations: false,
                 applyToNumbers: false,
                 applyToStopwords: false,
-                applyToEmojis: false
+                applyToEmojis: false,
             },
             presencePenalty: {
                 scale: request.body.presence_penalty,
@@ -3414,7 +3495,7 @@ async function sendAI21Request(request, response) {
                 applyToPunctuations: false,
                 applyToNumbers: false,
                 applyToStopwords: false,
-                applyToEmojis: false
+                applyToEmojis: false,
             },
             countPenalty: {
                 scale: request.body.count_pen,
@@ -3422,9 +3503,9 @@ async function sendAI21Request(request, response) {
                 applyToPunctuations: false,
                 applyToNumbers: false,
                 applyToStopwords: false,
-                applyToEmojis: false
+                applyToEmojis: false,
             },
-            prompt: request.body.messages
+            prompt: request.body.messages,
         }),
         signal: controller.signal,
     };
@@ -3433,21 +3514,21 @@ async function sendAI21Request(request, response) {
         .then(r => r.json())
         .then(r => {
             if (r.completions === undefined) {
-                console.log(r)
+                console.log(r);
             } else {
-                console.log(r.completions[0].data.text)
+                console.log(r.completions[0].data.text);
             }
-            const reply = { choices: [{ "message": { "content": r.completions[0].data.text, } }] };
-            return response.send(reply)
+            const reply = { choices: [{ 'message': { 'content': r.completions[0].data.text } }] };
+            return response.send(reply);
         })
         .catch(err => {
-            console.error(err)
-            return response.send({ error: true })
+            console.error(err);
+            return response.send({ error: true });
         });
 
 }
 
-app.post("/tokenize_via_api", jsonParser, async function (request, response) {
+app.post('/tokenize_via_api', jsonParser, async function (request, response) {
     if (!request.body) {
         return response.sendStatus(400);
     }
@@ -3460,7 +3541,7 @@ app.post("/tokenize_via_api", jsonParser, async function (request, response) {
         if (api == 'textgenerationwebui') {
             const args = {
                 method: 'POST',
-                headers: { "Content-Type": "application/json" },
+                headers: { 'Content-Type': 'application/json' },
             };
 
             setAdditionalHeaders(request, args, null);
@@ -3470,10 +3551,19 @@ app.post("/tokenize_via_api", jsonParser, async function (request, response) {
 
             if (legacyApi) {
                 url += '/v1/token-count';
-                args.body = JSON.stringify({ "prompt": text });
-            } else {
+                args.body = JSON.stringify({ 'prompt': text });
+            }
+            else if (request.body.use_tabby) {
+                url += '/v1/token/encode';
+                args.body = JSON.stringify({ 'text': text });
+            }
+            else if (request.body.use_koboldcpp) {
+                url += '/api/extra/tokencount';
+                args.body = JSON.stringify({ 'prompt': text });
+            }
+            else {
                 url += '/v1/internal/encode';
-                args.body = JSON.stringify({ "text": text });
+                args.body = JSON.stringify({ 'text': text });
             }
 
             const result = await fetch(url, args);
@@ -3484,8 +3574,8 @@ app.post("/tokenize_via_api", jsonParser, async function (request, response) {
             }
 
             const data = await result.json();
-            const count = legacyApi ? data?.results[0]?.tokens : data?.length;
-            const ids = legacyApi ? [] : data?.tokens;
+            const count = legacyApi ? data?.results[0]?.tokens : (data?.length ?? data?.value);
+            const ids = legacyApi ? [] : (data?.tokens ?? []);
 
             return response.send({ count, ids });
         }
@@ -3493,8 +3583,8 @@ app.post("/tokenize_via_api", jsonParser, async function (request, response) {
         else if (api == 'kobold') {
             const args = {
                 method: 'POST',
-                body: JSON.stringify({ "prompt": text }),
-                headers: { "Content-Type": "application/json" }
+                body: JSON.stringify({ 'prompt': text }),
+                headers: { 'Content-Type': 'application/json' },
             };
 
             let url = String(baseUrl).replace(/\/$/, '');
@@ -3544,7 +3634,7 @@ async function fetchJSON(url, args = {}) {
 // ** END **
 
 // OpenAI API
-require('./src/openai').registerEndpoints(app, jsonParser);
+require('./src/openai').registerEndpoints(app, jsonParser, urlencodedParser);
 
 // Tokenizers
 require('./src/tokenizers').registerEndpoints(app, jsonParser);
@@ -3597,13 +3687,13 @@ require('./src/serpapi').registerEndpoints(app, jsonParser);
 const tavernUrl = new URL(
     (cliArguments.ssl ? 'https://' : 'http://') +
     (listen ? '0.0.0.0' : '127.0.0.1') +
-    (':' + server_port)
+    (':' + server_port),
 );
 
 const autorunUrl = new URL(
     (cliArguments.ssl ? 'https://' : 'http://') +
     ('127.0.0.1') +
-    (':' + server_port)
+    (':' + server_port),
 );
 
 const setupTasks = async function () {
@@ -3638,13 +3728,13 @@ const setupTasks = async function () {
     console.log(color.green('SillyTavern is listening on: ' + tavernUrl));
 
     if (listen) {
-        console.log('\n0.0.0.0 means SillyTavern is listening on all network interfaces (Wi-Fi, LAN, localhost). If you want to limit it only to internal localhost (127.0.0.1), change the setting in config.conf to "listen=false". Check "access.log" file in the SillyTavern directory if you want to inspect incoming connections.\n');
+        console.log('\n0.0.0.0 means SillyTavern is listening on all network interfaces (Wi-Fi, LAN, localhost). If you want to limit it only to internal localhost (127.0.0.1), change the setting in config.yaml to "listen: false". Check "access.log" file in the SillyTavern directory if you want to inspect incoming connections.\n');
     }
-}
+};
 
-if (listen && !config.whitelistMode && !config.basicAuthMode) {
-    if (config.securityOverride) {
-        console.warn(color.red("Security has been overridden. If it's not a trusted network, change the settings."));
+if (listen && !getConfigValue('whitelistMode', true) && !getConfigValue('basicAuthMode', false)) {
+    if (getConfigValue('securityOverride', false)) {
+        console.warn(color.red('Security has been overridden. If it\'s not a trusted network, change the settings.'));
     }
     else {
         console.error(color.red('Your SillyTavern is currently unsecurely open to the public. Enable whitelisting or basic authentication.'));
@@ -3656,18 +3746,18 @@ if (true === cliArguments.ssl) {
     https.createServer(
         {
             cert: fs.readFileSync(cliArguments.certPath),
-            key: fs.readFileSync(cliArguments.keyPath)
+            key: fs.readFileSync(cliArguments.keyPath),
         }, app)
         .listen(
             Number(tavernUrl.port) || 443,
             tavernUrl.hostname,
-            setupTasks
+            setupTasks,
         );
 } else {
     http.createServer(app).listen(
         Number(tavernUrl.port) || 80,
         tavernUrl.hostname,
-        setupTasks
+        setupTasks,
     );
 }
 
@@ -3690,7 +3780,7 @@ function generateTimestamp() {
  */
 function backupChat(name, chat) {
     try {
-        const isBackupDisabled = config.disableChatBackup;
+        const isBackupDisabled = getConfigValue('disableChatBackup', false);
 
         if (isBackupDisabled) {
             return;

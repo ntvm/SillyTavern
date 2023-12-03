@@ -3,9 +3,10 @@ const fs = require('fs');
 const sanitize = require('sanitize-filename');
 const fetch = require('node-fetch').default;
 const { finished } = require('stream/promises');
+const writeFileSyncAtomic = require('write-file-atomic').sync;
 const { DIRECTORIES, UNSAFE_EXTENSIONS } = require('./constants');
 
-const VALID_CATEGORIES = ["bgm", "ambient", "blip", "live2d"];
+const VALID_CATEGORIES = ['bgm', 'ambient', 'blip', 'live2d'];
 
 /**
  * Sanitizes the input filename for theasset.
@@ -15,26 +16,26 @@ const VALID_CATEGORIES = ["bgm", "ambient", "blip", "live2d"];
 function checkAssetFileName(inputFilename) {
     // Sanitize filename
     if (inputFilename.indexOf('\0') !== -1) {
-        console.debug("Bad request: poisong null bytes in filename.");
+        console.debug('Bad request: poisong null bytes in filename.');
         return '';
     }
 
-    if (!/^[a-zA-Z0-9_\-\.]+$/.test(inputFilename)) {
-        console.debug("Bad request: illegal character in filename, only alphanumeric, '_', '-' are accepted.");
+    if (!/^[a-zA-Z0-9_\-.]+$/.test(inputFilename)) {
+        console.debug('Bad request: illegal character in filename, only alphanumeric, \'_\', \'-\' are accepted.');
         return '';
     }
 
     if (UNSAFE_EXTENSIONS.some(ext => inputFilename.toLowerCase().endsWith(ext))) {
-        console.debug("Bad request: forbidden file extension.");
+        console.debug('Bad request: forbidden file extension.');
         return '';
     }
 
     if (inputFilename.startsWith('.')) {
-        console.debug("Bad request: filename cannot start with '.'");
+        console.debug('Bad request: filename cannot start with \'.\'');
         return '';
     }
 
-    return path.normalize(inputFilename).replace(/^(\.\.(\/|\\|$))+/, '');;
+    return path.normalize(inputFilename).replace(/^(\.\.(\/|\\|$))+/, '');
 }
 
 // Recursive function to get files
@@ -72,7 +73,7 @@ function registerEndpoints(app, jsonParser) {
      */
     app.post('/api/assets/get', jsonParser, async (_, response) => {
         const folderPath = path.join(DIRECTORIES.assets);
-        let output = {}
+        let output = {};
         //console.info("Checking files into",folderPath);
 
         try {
@@ -83,18 +84,18 @@ function registerEndpoints(app, jsonParser) {
                     });
 
                 for (const folder of folders) {
-                    if (folder == "temp")
+                    if (folder == 'temp')
                         continue;
 
                     // Live2d assets
-                    if (folder == "live2d") {
+                    if (folder == 'live2d') {
                         output[folder] = [];
                         const live2d_folder = path.normalize(path.join(folderPath, folder));
                         const files = getFiles(live2d_folder);
                         //console.debug("FILE FOUND:",files)
                         for (let file of files) {
                             file = path.normalize(file.replace('public' + path.sep, ''));
-                            if (file.includes("model") && file.endsWith(".json")) {
+                            if (file.includes('model') && file.endsWith('.json')) {
                                 //console.debug("Asset live2d model found:",file)
                                 output[folder].push(path.normalize(path.join(file)));
                             }
@@ -105,11 +106,11 @@ function registerEndpoints(app, jsonParser) {
                     // Other assets (bgm/ambient/blip)
                     const files = fs.readdirSync(path.join(folderPath, folder))
                         .filter(filename => {
-                            return filename != ".placeholder";
+                            return filename != '.placeholder';
                         });
                     output[folder] = [];
                     for (const file of files) {
-                        output[folder].push(path.join("assets", folder, file));
+                        output[folder].push(path.join('assets', folder, file));
                     }
                 }
             }
@@ -117,9 +118,7 @@ function registerEndpoints(app, jsonParser) {
         catch (err) {
             console.log(err);
         }
-        finally {
-            return response.send(output);
-        }
+        return response.send(output);
     });
 
     /**
@@ -142,7 +141,7 @@ function registerEndpoints(app, jsonParser) {
                 category = i;
 
         if (category === null) {
-            console.debug("Bad request: unsuported asset category.");
+            console.debug('Bad request: unsuported asset category.');
             return response.sendStatus(400);
         }
 
@@ -151,9 +150,9 @@ function registerEndpoints(app, jsonParser) {
         if (safe_input == '')
             return response.sendStatus(400);
 
-        const temp_path = path.join(DIRECTORIES.assets, "temp", safe_input)
-        const file_path = path.join(DIRECTORIES.assets, category, safe_input)
-        console.debug("Request received to download", url, "to", file_path);
+        const temp_path = path.join(DIRECTORIES.assets, 'temp', safe_input);
+        const file_path = path.join(DIRECTORIES.assets, category, safe_input);
+        console.debug('Request received to download', url, 'to', file_path);
 
         try {
             // Download to temp
@@ -172,7 +171,7 @@ function registerEndpoints(app, jsonParser) {
             await finished(res.body.pipe(fileStream));
 
             // Move into asset place
-            console.debug("Download finished, moving file from", temp_path, "to", file_path);
+            console.debug('Download finished, moving file from', temp_path, 'to', file_path);
             fs.renameSync(temp_path, file_path);
             response.sendStatus(200);
         }
@@ -201,7 +200,7 @@ function registerEndpoints(app, jsonParser) {
                 category = i;
 
         if (category === null) {
-            console.debug("Bad request: unsuported asset category.");
+            console.debug('Bad request: unsuported asset category.');
             return response.sendStatus(400);
         }
 
@@ -210,8 +209,8 @@ function registerEndpoints(app, jsonParser) {
         if (safe_input == '')
             return response.sendStatus(400);
 
-        const file_path = path.join(DIRECTORIES.assets, category, safe_input)
-        console.debug("Request received to delete", category, file_path);
+        const file_path = path.join(DIRECTORIES.assets, category, safe_input);
+        console.debug('Request received to delete', category, file_path);
 
         try {
             // Delete if previous download failed
@@ -219,10 +218,10 @@ function registerEndpoints(app, jsonParser) {
                 fs.unlink(file_path, (err) => {
                     if (err) throw err;
                 });
-                console.debug("Asset deleted.");
+                console.debug('Asset deleted.');
             }
             else {
-                console.debug("Asset not found.");
+                console.debug('Asset not found.');
                 response.sendStatus(400);
             }
             // Move into asset place
@@ -249,13 +248,13 @@ function registerEndpoints(app, jsonParser) {
         const inputCategory = request.query.category;
 
         // Check category
-        let category = null
+        let category = null;
         for (let i of VALID_CATEGORIES)
             if (i == inputCategory)
-                category = i
+                category = i;
 
         if (category === null) {
-            console.debug("Bad request: unsuported asset category.");
+            console.debug('Bad request: unsuported asset category.');
             return response.sendStatus(400);
         }
 
@@ -266,15 +265,15 @@ function registerEndpoints(app, jsonParser) {
             if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
 
                 // Live2d assets
-                if (category == "live2d") {
-                    const folders = fs.readdirSync(folderPath)
+                if (category == 'live2d') {
+                    const folders = fs.readdirSync(folderPath);
                     for (let modelFolder of folders) {
                         const live2dModelPath = path.join(folderPath, modelFolder);
                         if (fs.statSync(live2dModelPath).isDirectory()) {
                             for (let file of fs.readdirSync(live2dModelPath)) {
                                 //console.debug("Character live2d model found:", file)
-                                if (file.includes("model") && file.endsWith(".json"))
-                                    output.push(path.join("characters", name, category, modelFolder, file));
+                                if (file.includes('model') && file.endsWith('.json'))
+                                    output.push(path.join('characters', name, category, modelFolder, file));
                             }
                         }
                     }
@@ -284,7 +283,7 @@ function registerEndpoints(app, jsonParser) {
                 // Other assets
                 const files = fs.readdirSync(folderPath)
                     .filter(filename => {
-                        return filename != ".placeholder";
+                        return filename != '.placeholder';
                     });
 
                 for (let i of files)
@@ -297,8 +296,34 @@ function registerEndpoints(app, jsonParser) {
             return response.sendStatus(500);
         }
     });
+
+    app.post('/api/file/upload', jsonParser, async (request, response) => {
+        try {
+            if (!request.body.name) {
+                return response.status(400).send('No upload name specified');
+            }
+
+            if (!request.body.data) {
+                return response.status(400).send('No upload data specified');
+            }
+
+            const safeInput = checkAssetFileName(request.body.name);
+
+            if (!safeInput) {
+                return response.status(400).send('Invalid upload name');
+            }
+
+            const pathToUpload = path.join(DIRECTORIES.files, safeInput);
+            writeFileSyncAtomic(pathToUpload, request.body.data, 'base64');
+            const url = path.normalize(pathToUpload.replace('public' + path.sep, ''));
+            return response.send({ path: url });
+        } catch (error) {
+            console.log(error);
+            return response.sendStatus(500);
+        }
+    });
 }
 
 module.exports = {
     registerEndpoints,
-}
+};

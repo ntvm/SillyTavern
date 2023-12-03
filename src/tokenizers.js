@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { SentencePieceProcessor } = require("@agnai/sentencepiece-js");
+const { SentencePieceProcessor } = require('@agnai/sentencepiece-js');
 const tiktoken = require('@dqbd/tiktoken');
 const { Tokenizer } = require('@agnai/web-tokenizers');
 const { convertClaudePrompt } = require('./chat-completion');
@@ -15,31 +15,31 @@ const tokenizersCache = {};
  * @type {string[]}
  */
 const TEXT_COMPLETION_MODELS = [
-    "gpt-3.5-turbo-instruct",
-    "gpt-3.5-turbo-instruct-0914",
-    "text-davinci-003",
-    "text-davinci-002",
-    "text-davinci-001",
-    "text-curie-001",
-    "text-babbage-001",
-    "text-ada-001",
-    "code-davinci-002",
-    "code-davinci-001",
-    "code-cushman-002",
-    "code-cushman-001",
-    "text-davinci-edit-001",
-    "code-davinci-edit-001",
-    "text-embedding-ada-002",
-    "text-similarity-davinci-001",
-    "text-similarity-curie-001",
-    "text-similarity-babbage-001",
-    "text-similarity-ada-001",
-    "text-search-davinci-doc-001",
-    "text-search-curie-doc-001",
-    "text-search-babbage-doc-001",
-    "text-search-ada-doc-001",
-    "code-search-babbage-code-001",
-    "code-search-ada-code-001",
+    'gpt-3.5-turbo-instruct',
+    'gpt-3.5-turbo-instruct-0914',
+    'text-davinci-003',
+    'text-davinci-002',
+    'text-davinci-001',
+    'text-curie-001',
+    'text-babbage-001',
+    'text-ada-001',
+    'code-davinci-002',
+    'code-davinci-001',
+    'code-cushman-002',
+    'code-cushman-001',
+    'text-davinci-edit-001',
+    'code-davinci-edit-001',
+    'text-embedding-ada-002',
+    'text-similarity-davinci-001',
+    'text-similarity-curie-001',
+    'text-similarity-babbage-001',
+    'text-similarity-ada-001',
+    'text-search-davinci-doc-001',
+    'text-search-curie-doc-001',
+    'text-search-babbage-doc-001',
+    'text-search-ada-doc-001',
+    'code-search-babbage-code-001',
+    'code-search-ada-code-001',
 ];
 
 const CHARS_PER_TOKEN = 3.35;
@@ -66,7 +66,7 @@ class SentencePieceTokenizer {
             console.log('Instantiated the tokenizer for', path.parse(this.#model).name);
             return this.#instance;
         } catch (error) {
-            console.error("Sentencepiece tokenizer failed to load: " + this.#model, error);
+            console.error('Sentencepiece tokenizer failed to load: ' + this.#model, error);
             return null;
         }
     }
@@ -76,6 +76,7 @@ const spp_llama = new SentencePieceTokenizer('src/sentencepiece/llama.model');
 const spp_nerd = new SentencePieceTokenizer('src/sentencepiece/nerdstash.model');
 const spp_nerd_v2 = new SentencePieceTokenizer('src/sentencepiece/nerdstash_v2.model');
 const spp_mistral = new SentencePieceTokenizer('src/sentencepiece/mistral.model');
+const spp_yi = new SentencePieceTokenizer('src/sentencepiece/yi.model');
 let claude_tokenizer;
 
 const sentencepieceTokenizers = [
@@ -123,7 +124,7 @@ async function countSentencepieceTokens(tokenizer, text) {
     if (!instance) {
         return {
             ids: [],
-            count: Math.ceil(text.length / CHARS_PER_TOKEN)
+            count: Math.ceil(text.length / CHARS_PER_TOKEN),
         };
     }
 
@@ -132,7 +133,7 @@ async function countSentencepieceTokens(tokenizer, text) {
     let ids = instance.encodeIds(cleaned);
     return {
         ids,
-        count: ids.length
+        count: ids.length,
     };
 }
 
@@ -181,18 +182,6 @@ async function getWebTokenizersChunks(tokenizer, ids) {
  * @returns {string} Tokenizer model to use
  */
 function getTokenizerModel(requestModel) {
-    if (requestModel.includes('claude')) {
-        return 'claude';
-    }
-
-    if (requestModel.includes('llama')) {
-        return 'llama';
-    }
-
-    if (requestModel.includes('mistral')) {
-        return 'mistral';
-    }
-
     if (requestModel.includes('gpt-4-32k')) {
         return 'gpt-4-32k';
     }
@@ -211,6 +200,22 @@ function getTokenizerModel(requestModel) {
 
     if (TEXT_COMPLETION_MODELS.includes(requestModel)) {
         return requestModel;
+    }
+
+    if (requestModel.includes('claude')) {
+        return 'claude';
+    }
+
+    if (requestModel.includes('llama')) {
+        return 'llama';
+    }
+
+    if (requestModel.includes('mistral')) {
+        return 'mistral';
+    }
+
+    if (requestModel.includes('yi')) {
+        return 'yi';
     }
 
     // default
@@ -234,13 +239,13 @@ async function loadClaudeTokenizer(modelPath) {
         const instance = await Tokenizer.fromJSON(arrayBuffer);
         return instance;
     } catch (error) {
-        console.error("Claude tokenizer failed to load: " + modelPath, error);
+        console.error('Claude tokenizer failed to load: ' + modelPath, error);
         return null;
     }
 }
 
 function countClaudeTokens(tokenizer, messages) {
-    const convertedPrompt = convertClaudePrompt(messages, false, false);
+    const convertedPrompt = convertClaudePrompt(messages, false, false, false);
 
     // Fallback to strlen estimation
     if (!tokenizer) {
@@ -319,7 +324,7 @@ function createTiktokenEncodingHandler(modelId) {
             console.log(error);
             return response.send({ ids: [], count: 0, chunks: [] });
         }
-    }
+    };
 }
 
 /**
@@ -343,7 +348,7 @@ function createTiktokenDecodingHandler(modelId) {
             console.log(error);
             return response.send({ text: '' });
         }
-    }
+    };
 }
 
 /**
@@ -360,40 +365,42 @@ async function loadTokenizers() {
  * @param {any} jsonParser JSON parser middleware
  */
 function registerEndpoints(app, jsonParser) {
-    app.post("/api/tokenize/ai21", jsonParser, async function (req, res) {
+    app.post('/api/tokenize/ai21', jsonParser, async function (req, res) {
         if (!req.body) return res.sendStatus(400);
         const options = {
             method: 'POST',
             headers: {
                 accept: 'application/json',
                 'content-type': 'application/json',
-                Authorization: `Bearer ${readSecret(SECRET_KEYS.AI21)}`
+                Authorization: `Bearer ${readSecret(SECRET_KEYS.AI21)}`,
             },
-            body: JSON.stringify({ text: req.body[0].content })
+            body: JSON.stringify({ text: req.body[0].content }),
         };
 
         try {
             const response = await fetch('https://api.ai21.com/studio/v1/tokenize', options);
             const data = await response.json();
-            return res.send({ "token_count": data?.tokens?.length || 0 });
+            return res.send({ 'token_count': data?.tokens?.length || 0 });
         } catch (err) {
             console.error(err);
-            return res.send({ "token_count": 0 });
+            return res.send({ 'token_count': 0 });
         }
     });
 
-    app.post("/api/tokenize/llama", jsonParser, createSentencepieceEncodingHandler(spp_llama));
-    app.post("/api/tokenize/nerdstash", jsonParser, createSentencepieceEncodingHandler(spp_nerd));
-    app.post("/api/tokenize/nerdstash_v2", jsonParser, createSentencepieceEncodingHandler(spp_nerd_v2));
-    app.post("/api/tokenize/mistral", jsonParser, createSentencepieceEncodingHandler(spp_mistral));
-    app.post("/api/tokenize/gpt2", jsonParser, createTiktokenEncodingHandler('gpt2'));
-    app.post("/api/decode/llama", jsonParser, createSentencepieceDecodingHandler(spp_llama));
-    app.post("/api/decode/nerdstash", jsonParser, createSentencepieceDecodingHandler(spp_nerd));
-    app.post("/api/decode/nerdstash_v2", jsonParser, createSentencepieceDecodingHandler(spp_nerd_v2));
-    app.post("/api/decode/mistral", jsonParser, createSentencepieceDecodingHandler(spp_mistral));
-    app.post("/api/decode/gpt2", jsonParser, createTiktokenDecodingHandler('gpt2'));
+    app.post('/api/tokenize/llama', jsonParser, createSentencepieceEncodingHandler(spp_llama));
+    app.post('/api/tokenize/nerdstash', jsonParser, createSentencepieceEncodingHandler(spp_nerd));
+    app.post('/api/tokenize/nerdstash_v2', jsonParser, createSentencepieceEncodingHandler(spp_nerd_v2));
+    app.post('/api/tokenize/mistral', jsonParser, createSentencepieceEncodingHandler(spp_mistral));
+    app.post('/api/tokenize/yi', jsonParser, createSentencepieceEncodingHandler(spp_yi));
+    app.post('/api/tokenize/gpt2', jsonParser, createTiktokenEncodingHandler('gpt2'));
+    app.post('/api/decode/llama', jsonParser, createSentencepieceDecodingHandler(spp_llama));
+    app.post('/api/decode/nerdstash', jsonParser, createSentencepieceDecodingHandler(spp_nerd));
+    app.post('/api/decode/nerdstash_v2', jsonParser, createSentencepieceDecodingHandler(spp_nerd_v2));
+    app.post('/api/decode/mistral', jsonParser, createSentencepieceDecodingHandler(spp_mistral));
+    app.post('/api/decode/yi', jsonParser, createSentencepieceDecodingHandler(spp_yi));
+    app.post('/api/decode/gpt2', jsonParser, createTiktokenDecodingHandler('gpt2'));
 
-    app.post("/api/tokenize/openai-encode", jsonParser, async function (req, res) {
+    app.post('/api/tokenize/openai-encode', jsonParser, async function (req, res) {
         try {
             const queryModel = String(req.query.model || '');
 
@@ -404,6 +411,11 @@ function registerEndpoints(app, jsonParser) {
 
             if (queryModel.includes('mistral')) {
                 const handler = createSentencepieceEncodingHandler(spp_mistral);
+                return handler(req, res);
+            }
+
+            if (queryModel.includes('yi')) {
+                const handler = createSentencepieceEncodingHandler(spp_yi);
                 return handler(req, res);
             }
 
@@ -423,7 +435,41 @@ function registerEndpoints(app, jsonParser) {
         }
     });
 
-    app.post("/api/tokenize/openai", jsonParser, async function (req, res) {
+    app.post('/api/decode/openai', jsonParser, async function (req, res) {
+        try {
+            const queryModel = String(req.query.model || '');
+
+            if (queryModel.includes('llama')) {
+                const handler = createSentencepieceDecodingHandler(spp_llama);
+                return handler(req, res);
+            }
+
+            if (queryModel.includes('mistral')) {
+                const handler = createSentencepieceDecodingHandler(spp_mistral);
+                return handler(req, res);
+            }
+
+            if (queryModel.includes('yi')) {
+                const handler = createSentencepieceDecodingHandler(spp_yi);
+                return handler(req, res);
+            }
+
+            if (queryModel.includes('claude')) {
+                const ids = req.body.ids || [];
+                const chunkText = await claude_tokenizer.decode(new Uint32Array(ids));
+                return res.send({ text: chunkText });
+            }
+
+            const model = getTokenizerModel(queryModel);
+            const handler = createTiktokenDecodingHandler(model);
+            return handler(req, res);
+        } catch (error) {
+            console.log(error);
+            return res.send({ text: '' });
+        }
+    });
+
+    app.post('/api/tokenize/openai', jsonParser, async function (req, res) {
         try {
             if (!req.body) return res.sendStatus(400);
 
@@ -431,19 +477,24 @@ function registerEndpoints(app, jsonParser) {
             const queryModel = String(req.query.model || '');
             const model = getTokenizerModel(queryModel);
 
-            if (model == 'claude') {
+            if (model === 'claude') {
                 num_tokens = countClaudeTokens(claude_tokenizer, req.body);
-                return res.send({ "token_count": num_tokens });
+                return res.send({ 'token_count': num_tokens });
             }
 
-            if (model == 'llama') {
+            if (model === 'llama') {
                 num_tokens = await countSentencepieceArrayTokens(spp_llama, req.body);
-                return res.send({ "token_count": num_tokens });
+                return res.send({ 'token_count': num_tokens });
             }
 
-            if (model == 'mistral') {
+            if (model === 'mistral') {
                 num_tokens = await countSentencepieceArrayTokens(spp_mistral, req.body);
-                return res.send({ "token_count": num_tokens });
+                return res.send({ 'token_count': num_tokens });
+            }
+
+            if (model === 'yi') {
+                num_tokens = await countSentencepieceArrayTokens(spp_yi, req.body);
+                return res.send({ 'token_count': num_tokens });
             }
 
             const tokensPerName = queryModel.includes('gpt-3.5-turbo-0301') ? -1 : 1;
@@ -457,12 +508,12 @@ function registerEndpoints(app, jsonParser) {
                     num_tokens += tokensPerMessage;
                     for (const [key, value] of Object.entries(msg)) {
                         num_tokens += tokenizer.encode(value).length;
-                        if (key == "name") {
+                        if (key == 'name') {
                             num_tokens += tokensPerName;
                         }
                     }
                 } catch {
-                    console.warn("Error tokenizing message:", msg);
+                    console.warn('Error tokenizing message:', msg);
                 }
             }
             num_tokens += tokensPadding;
@@ -476,12 +527,12 @@ function registerEndpoints(app, jsonParser) {
             // not needed for cached tokenizers
             //tokenizer.free();
 
-            res.send({ "token_count": num_tokens });
+            res.send({ 'token_count': num_tokens });
         } catch (error) {
             console.error('An error counting tokens, using fallback estimation method', error);
             const jsonBody = JSON.stringify(req.body);
             const num_tokens = Math.ceil(jsonBody.length / CHARS_PER_TOKEN);
-            res.send({ "token_count": num_tokens });
+            res.send({ 'token_count': num_tokens });
         }
     });
 }
@@ -495,5 +546,5 @@ module.exports = {
     registerEndpoints,
     getSentencepiceTokenizer,
     sentencepieceTokenizers,
-}
+};
 
