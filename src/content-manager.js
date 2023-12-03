@@ -2,14 +2,88 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch').default;
 const sanitize = require('sanitize-filename');
-const config = require(path.join(process.cwd(), './config.conf'));
+const { getConfigValue } = require('./util');
 const contentDirectory = path.join(process.cwd(), 'default/content');
 const contentLogPath = path.join(contentDirectory, 'content.log');
 const contentIndexPath = path.join(contentDirectory, 'index.json');
+const { DIRECTORIES } = require('./constants');
+const presetFolders = [DIRECTORIES.koboldAI_Settings, DIRECTORIES.openAI_Settings, DIRECTORIES.novelAI_Settings, DIRECTORIES.textGen_Settings];
+
+/**
+ * Gets the default presets from the content directory.
+ * @returns {object[]} Array of default presets
+ */
+function getDefaultPresets() {
+    try {
+        const contentIndexText = fs.readFileSync(contentIndexPath, 'utf8');
+        const contentIndex = JSON.parse(contentIndexText);
+
+        const presets = [];
+
+        for (const contentItem of contentIndex) {
+            if (contentItem.type.endsWith('_preset')) {
+                contentItem.name = path.parse(contentItem.filename).name;
+                contentItem.folder = getTargetByType(contentItem.type);
+                presets.push(contentItem);
+            }
+        }
+
+        return presets;
+    } catch (err) {
+        console.log('Failed to get default presets', err);
+        return [];
+    }
+}
+
+/**
+ * Gets a default JSON file from the content directory.
+ * @param {string} filename Name of the file to get
+ * @returns {object | null} JSON object or null if the file doesn't exist
+ */
+function getDefaultPresetFile(filename) {
+    try {
+        const contentPath = path.join(contentDirectory, filename);
+
+        if (!fs.existsSync(contentPath)) {
+            return null;
+        }
+
+        const fileContent = fs.readFileSync(contentPath, 'utf8');
+        return JSON.parse(fileContent);
+    } catch (err) {
+        console.log(`Failed to get default file ${filename}`, err);
+        return null;
+    }
+}
+
+function migratePresets() {
+    for (const presetFolder of presetFolders) {
+        const presetPath = path.join(process.cwd(), presetFolder);
+        const presetFiles = fs.readdirSync(presetPath);
+
+        for (const presetFile of presetFiles) {
+            const presetFilePath = path.join(presetPath, presetFile);
+            const newFileName = presetFile.replace('.settings', '.json');
+            const newFilePath = path.join(presetPath, newFileName);
+            const backupFileName = presetFolder.replace('/', '_') + '_' + presetFile;
+            const backupFilePath = path.join(DIRECTORIES.backups, backupFileName);
+
+            if (presetFilePath.endsWith('.settings')) {
+                if (!fs.existsSync(newFilePath)) {
+                    fs.cpSync(presetFilePath, backupFilePath);
+                    fs.cpSync(presetFilePath, newFilePath);
+                    console.log(`Migrated ${presetFilePath} to ${newFilePath}`);
+                }
+            }
+        }
+    }
+}
 
 function checkForNewContent() {
     try {
-        if (config.skipContentCheck) {
+        migratePresets();
+
+        if (getConfigValue('skipContentCheck', false)) {
             return;
         }
 
@@ -38,7 +112,8 @@ function checkForNewContent() {
                 continue;
             }
 
-            const targetPath = path.join(process.cwd(), contentTarget, contentItem.filename);
+            const basePath = path.parse(contentItem.filename).base;
+            const targetPath = path.join(process.cwd(), contentTarget, basePath);
 
             if (fs.existsSync(targetPath)) {
                 console.log(`Content file ${contentItem.filename} already exists in ${contentTarget}`);
@@ -58,19 +133,29 @@ function checkForNewContent() {
 function getTargetByType(type) {
     switch (type) {
         case 'character':
-            return 'public/characters';
+            return DIRECTORIES.characters;
         case 'sprites':
-            return 'public/characters';
+            return DIRECTORIES.characters;
         case 'background':
-            return 'public/backgrounds';
+            return DIRECTORIES.backgrounds;
         case 'world':
-            return 'public/worlds';
+            return DIRECTORIES.worlds;
         case 'sound':
-            return 'public/sounds';
+            return DIRECTORIES.sounds;
         case 'avatar':
-            return 'public/User Avatars';
+            return DIRECTORIES.avatars;
         case 'theme':
-            return 'public/themes';
+            return DIRECTORIES.themes;
+        case 'workflow':
+            return DIRECTORIES.comfyWorkflows;
+        case 'kobold_preset':
+            return DIRECTORIES.koboldAI_Settings;
+        case 'openai_preset':
+            return DIRECTORIES.openAI_Settings;
+        case 'novel_preset':
+            return DIRECTORIES.novelAI_Settings;
+        case 'textgen_preset':
+            return DIRECTORIES.textGen_Settings;
         default:
             return null;
     }
@@ -90,8 +175,8 @@ async function downloadChubLorebook(id) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            "fullPath": id,
-            "format": "SILLYTAVERN",
+            'fullPath': id,
+            'format': 'SILLYTAVERN',
         }),
     });
 
@@ -114,9 +199,9 @@ async function downloadChubCharacter(id) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            "format": "tavern",
-            "fullPath": id,
-        })
+            'format': 'tavern',
+            'fullPath': id,
+        }),
     });
 
     if (!result.ok) {
@@ -151,7 +236,7 @@ function parseChubUrl(str) {
         if (part === 'www.chub.ai' || part === 'chub.ai') {
             domainIndex = index;
         }
-    })
+    });
 
     const lastTwo = domainIndex !== -1 ? splitStr.slice(domainIndex + 1) : splitStr;
 
@@ -162,16 +247,59 @@ function parseChubUrl(str) {
         const id = type === 'character' ? lastTwo.slice(1).join('/') : lastTwo.join('/');
         return {
             id: id,
-            type: type
+            type: type,
         };
     } else if (length === 2) {
         return {
             id: lastTwo.join('/'),
-            type: 'character'
+            type: 'character',
         };
     }
 
     return null;
+}
+
+// Warning: Some characters might not exist in JannyAI.me
+async function downloadJannyCharacter(uuid) {
+    // This endpoint is being guarded behind Bot Fight Mode of Cloudflare
+    // So hosted ST on Azure/AWS/GCP/Collab might get blocked by IP
+    // Should work normally on self-host PC/Android
+    const result = await fetch('https://api.janitorai.me/api/v1/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            'characterId': uuid,
+        }),
+    });
+
+    if (result.ok) {
+        const downloadResult = await result.json();
+        if (downloadResult.status === 'ok') {
+            const imageResult = await fetch(downloadResult.downloadUrl);
+            const buffer = await imageResult.buffer();
+            const fileName = `${sanitize(uuid)}.png`;
+            const fileType = result.headers.get('content-type');
+
+            return { buffer, fileName, fileType };
+        }
+    }
+
+    console.log('Janny returned error', result.statusText, await result.text());
+    throw new Error('Failed to download character');
+}
+
+/**
+* @param {String} url
+* @returns {String | null } UUID of the character
+*/
+function parseJannyUrl(url) {
+    // Extract UUID from URL
+    const uuidRegex = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/;
+    const matches = url.match(uuidRegex);
+
+    // Check if UUID is found
+    const uuid = matches ? matches[0] : null;
+    return uuid;
 }
 
 /**
@@ -188,24 +316,37 @@ function registerEndpoints(app, jsonParser) {
         try {
             const url = request.body.url;
             let result;
+            let type;
 
-            const chubParsed = parseChubUrl(url);
+            const isJannnyContent = url.includes('janitorai');
+            if (isJannnyContent) {
+                const uuid = parseJannyUrl(url);
+                if (!uuid) {
+                    return response.sendStatus(404);
+                }
 
-            if (chubParsed?.type === 'character') {
-                console.log('Downloading chub character:', chubParsed.id);
-                result = await downloadChubCharacter(chubParsed.id);
-            }
-            else if (chubParsed?.type === 'lorebook') {
-                console.log('Downloading chub lorebook:', chubParsed.id);
-                result = await downloadChubLorebook(chubParsed.id);
-            }
-            else {
-                return response.sendStatus(404);
+                type = 'character';
+                result = await downloadJannyCharacter(uuid);
+            } else {
+                const chubParsed = parseChubUrl(url);
+                type = chubParsed?.type;
+
+                if (chubParsed?.type === 'character') {
+                    console.log('Downloading chub character:', chubParsed.id);
+                    result = await downloadChubCharacter(chubParsed.id);
+                }
+                else if (chubParsed?.type === 'lorebook') {
+                    console.log('Downloading chub lorebook:', chubParsed.id);
+                    result = await downloadChubLorebook(chubParsed.id);
+                }
+                else {
+                    return response.sendStatus(404);
+                }
             }
 
-            if (result.fileType) response.set('Content-Type', result.fileType)
+            if (result.fileType) response.set('Content-Type', result.fileType);
             response.set('Content-Disposition', `attachment; filename="${result.fileName}"`);
-            response.set('X-Custom-Content-Type', chubParsed?.type);
+            response.set('X-Custom-Content-Type', type);
             return response.send(result.buffer);
         } catch (error) {
             console.log('Importing custom content failed', error);
@@ -217,4 +358,6 @@ function registerEndpoints(app, jsonParser) {
 module.exports = {
     checkForNewContent,
     registerEndpoints,
-}
+    getDefaultPresets,
+    getDefaultPresetFile,
+};

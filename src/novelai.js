@@ -4,13 +4,13 @@ const { Readable } = require('stream');
 const { readSecret, SECRET_KEYS } = require('./secrets');
 const { readAllChunks, extractFileFromZipBuffer } = require('./util');
 
-const API_NOVELAI = "https://api.novelai.net";
+const API_NOVELAI = 'https://api.novelai.net';
 
 // Ban bracket generation, plus defaults
 const badWordsList = [
     [3], [49356], [1431], [31715], [34387], [20765], [30702], [10691], [49333], [1266],
-    [19438], [43145], [26523], [41471], [2936], [85, 85], [49332], [7286], [1115]
-]
+    [19438], [43145], [26523], [41471], [2936], [85, 85], [49332], [7286], [1115],
+];
 
 const hypeBotBadWordsList = [
     [58], [60], [90], [92], [685], [1391], [1782], [2361], [3693], [4083], [4357], [4895],
@@ -28,7 +28,7 @@ const hypeBotBadWordsList = [
     [41832], [41888], [42535], [42669], [42785], [42924], [43839], [44438], [44587],
     [44926], [45144], [45297], [46110], [46570], [46581], [46956], [47175], [47182],
     [47527], [47715], [48600], [48683], [48688], [48874], [48999], [49074], [49082],
-    [49146], [49946], [10221], [4841], [1427], [2602, 834], [29343], [37405], [35780], [2602], [50256]
+    [49146], [49946], [10221], [4841], [1427], [2602, 834], [29343], [37405], [35780], [2602], [50256],
 ];
 
 // Used for phrase repetition penalty
@@ -36,22 +36,17 @@ const repPenaltyAllowList = [
     [49256, 49264, 49231, 49230, 49287, 85, 49255, 49399, 49262, 336, 333, 432, 363, 468, 492, 745, 401, 426, 623, 794,
         1096, 2919, 2072, 7379, 1259, 2110, 620, 526, 487, 16562, 603, 805, 761, 2681, 942, 8917, 653, 3513, 506, 5301,
         562, 5010, 614, 10942, 539, 2976, 462, 5189, 567, 2032, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 588,
-        803, 1040, 49209, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-]
+        803, 1040, 49209, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+];
 
 // Ban the dinkus and asterism
 const logitBiasExp = [
-    { "sequence": [23], "bias": -0.08, "ensure_sequence_finish": false, "generate_once": false },
-    { "sequence": [21], "bias": -0.08, "ensure_sequence_finish": false, "generate_once": false }
-]
-
-const hypeBotLogitBiasExp = [
-    { "sequence": [8162], "bias": -0.12, "ensure_sequence_finish": false, "generate_once": false },
-    { "sequence": [46256, 224], "bias": -0.12, "ensure_sequence_finish": false, "generate_once": false }
+    { 'sequence': [23], 'bias': -0.08, 'ensure_sequence_finish': false, 'generate_once': false },
+    { 'sequence': [21], 'bias': -0.08, 'ensure_sequence_finish': false, 'generate_once': false },
 ];
 
 function getBadWordsList(model) {
-    let list = []
+    let list = [];
 
     if (model.includes('hypebot')) {
         list = hypeBotBadWordsList;
@@ -71,7 +66,7 @@ function getBadWordsList(model) {
  * @param {any} jsonParser - JSON parser middleware
  */
 function registerEndpoints(app, jsonParser) {
-    app.post("/api/novelai/status", jsonParser, async function (req, res) {
+    app.post('/api/novelai/status', jsonParser, async function (req, res) {
         if (!req.body) return res.sendStatus(400);
         const api_key_novel = readSecret(SECRET_KEYS.NOVEL);
 
@@ -80,11 +75,11 @@ function registerEndpoints(app, jsonParser) {
         }
 
         try {
-            const response = await fetch(API_NOVELAI + "/user/subscription", {
+            const response = await fetch(API_NOVELAI + '/user/subscription', {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': "Bearer " + api_key_novel,
+                    'Authorization': 'Bearer ' + api_key_novel,
                 },
             });
 
@@ -105,7 +100,7 @@ function registerEndpoints(app, jsonParser) {
         }
     });
 
-    app.post("/api/novelai/generate", jsonParser, async function (req, res) {
+    app.post('/api/novelai/generate', jsonParser, async function (req, res) {
         if (!req.body) return res.sendStatus(400);
 
         const api_key_novel = readSecret(SECRET_KEYS.NOVEL);
@@ -147,45 +142,45 @@ function registerEndpoints(app, jsonParser) {
         }
 
         const data = {
-            "input": req.body.input,
-            "model": req.body.model,
-            "parameters": {
-                "use_string": req.body.use_string ?? true,
-                "temperature": req.body.temperature,
-                "max_length": req.body.max_length,
-                "min_length": req.body.min_length,
-                "tail_free_sampling": req.body.tail_free_sampling,
-                "repetition_penalty": req.body.repetition_penalty,
-                "repetition_penalty_range": req.body.repetition_penalty_range,
-                "repetition_penalty_slope": req.body.repetition_penalty_slope,
-                "repetition_penalty_frequency": req.body.repetition_penalty_frequency,
-                "repetition_penalty_presence": req.body.repetition_penalty_presence,
-                "repetition_penalty_whitelist": isNewModel ? repPenaltyAllowList : null,
-                "top_a": req.body.top_a,
-                "top_p": req.body.top_p,
-                "top_k": req.body.top_k,
-                "typical_p": req.body.typical_p,
-                "mirostat_lr": req.body.mirostat_lr,
-                "mirostat_tau": req.body.mirostat_tau,
-                "cfg_scale": req.body.cfg_scale,
-                "cfg_uc": req.body.cfg_uc,
-                "phrase_rep_pen": req.body.phrase_rep_pen,
-                "stop_sequences": req.body.stop_sequences,
-                "bad_words_ids": badWordsList.length ? badWordsList : null,
-                "logit_bias_exp": logit_bias_exp,
-                "generate_until_sentence": req.body.generate_until_sentence,
-                "use_cache": req.body.use_cache,
-                "return_full_text": req.body.return_full_text,
-                "prefix": req.body.prefix,
-                "order": req.body.order
-            }
+            'input': req.body.input,
+            'model': req.body.model,
+            'parameters': {
+                'use_string': req.body.use_string ?? true,
+                'temperature': req.body.temperature,
+                'max_length': req.body.max_length,
+                'min_length': req.body.min_length,
+                'tail_free_sampling': req.body.tail_free_sampling,
+                'repetition_penalty': req.body.repetition_penalty,
+                'repetition_penalty_range': req.body.repetition_penalty_range,
+                'repetition_penalty_slope': req.body.repetition_penalty_slope,
+                'repetition_penalty_frequency': req.body.repetition_penalty_frequency,
+                'repetition_penalty_presence': req.body.repetition_penalty_presence,
+                'repetition_penalty_whitelist': isNewModel ? repPenaltyAllowList : null,
+                'top_a': req.body.top_a,
+                'top_p': req.body.top_p,
+                'top_k': req.body.top_k,
+                'typical_p': req.body.typical_p,
+                'mirostat_lr': req.body.mirostat_lr,
+                'mirostat_tau': req.body.mirostat_tau,
+                'cfg_scale': req.body.cfg_scale,
+                'cfg_uc': req.body.cfg_uc,
+                'phrase_rep_pen': req.body.phrase_rep_pen,
+                'stop_sequences': req.body.stop_sequences,
+                'bad_words_ids': badWordsList.length ? badWordsList : null,
+                'logit_bias_exp': logit_bias_exp,
+                'generate_until_sentence': req.body.generate_until_sentence,
+                'use_cache': req.body.use_cache,
+                'return_full_text': req.body.return_full_text,
+                'prefix': req.body.prefix,
+                'order': req.body.order,
+            },
         };
 
-        console.log(util.inspect(data, { depth: 4 }))
+        console.log(util.inspect(data, { depth: 4 }));
 
         const args = {
             body: JSON.stringify(data),
-            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + api_key_novel },
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + api_key_novel },
             signal: controller.signal,
         };
 
@@ -203,7 +198,7 @@ function registerEndpoints(app, jsonParser) {
                 });
 
                 response.body.on('end', function () {
-                    console.log("Streaming request finished");
+                    console.log('Streaming request finished');
                     res.end();
                 });
             } else {
@@ -322,7 +317,7 @@ function registerEndpoints(app, jsonParser) {
                 return response.send(upscaledBase64);
             } catch (error) {
                 console.warn('NovelAI generated an image, but upscaling failed. Returning original image.');
-                return response.send(originalBase64)
+                return response.send(originalBase64);
             }
         } catch (error) {
             console.log(error);
