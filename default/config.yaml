@@ -42,6 +42,8 @@ requestOverrides: []
 # Enable UI extensions
 enableExtensions: true
 # Extension settings
+HumAssistOff: false
+SystemFul: true
 extras:
   # Disables automatic model download from HuggingFace
   disableAutoDownload: false

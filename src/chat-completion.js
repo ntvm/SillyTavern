@@ -7,9 +7,9 @@
  * @returns {string} Prompt for Claude
  * @copyright Prompt Conversion script taken from RisuAI by kwaroran (GPLv3).
  */
-function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix, withSystemPrompt HumAssistOff, SystemFul) {
+function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix, withSystemPrompt, HumAssistOff, SystemFul) {
     // Claude doesn't support message names, so we'll just add them to the message content.
-    let requestPrompt;
+    var requestPrompt;
 
 
     let systemPrompt = '';
@@ -34,7 +34,7 @@ function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix, with
     switch (HumAssistOff) {
         // If it is true, Now you won't had H and A
         case true:
-            var requestPrompt = ''
+            requestPrompt = ''
 
             if (withSystemPrompt) {
                 requestPrompt = systemPrompt + requestPrompt;
