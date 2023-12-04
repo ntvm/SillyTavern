@@ -175,21 +175,20 @@
                             <div id="openai_api-presets">
                                 <div>
                                     <h4 class="margin0"><span data-i18n="openaipresets">Chat Completion Presets</span></h4>
-                                    <div class="flex-container flexNoGap">
+                                    <div class="flex-container flexGap5">
                                         <select id="settings_preset_openai" class="flex1 text_pole">
                                             <option value="gui" data-i18n="default">Default</option>
                                         </select>
-                                        <div class="flex-container flexBasis100p justifyCenter">
-                                            <input id="openai_preset_import_file" type="file" accept=".json,.settings" hidden />
-                                            <i id="update_oai_preset" class="menu_button fa-solid fa-save" title="Update current preset" data-i18n="[title]Update current preset"></i>
-                                            <i id="new_oai_preset" class="menu_button fa-solid fa-paste" title="Save preset as" data-i18n="[title]Save preset as"></i>
-                                            <i data-newbie-hidden title="Import preset" id="import_oai_preset" class="menu_button fa-solid fa-file-import" data-i18n="[title]Import preset"></i>
-                                            <i data-newbie-hidden title="Export preset" id="export_oai_preset" class="menu_button fa-solid fa-file-export" data-i18n="[title]Export preset"></i>
-                                            <i data-newbie-hidden id="delete_oai_preset" class="menu_button fa-solid fa-trash-can" title="Delete the preset" data-i18n="[title]Delete the preset"></i>
-                                        </div>
+                                        <i id="update_oai_preset" class="menu_button fa-solid fa-save" title="Update current preset" data-i18n="[title]Update current preset"></i>
+                                        <i id="new_oai_preset" class="menu_button fa-solid fa-plus" title="Create new preset" data-i18n="[title]Create new preset"></i>
+                                        <i data-newbie-hidden title="Import preset" id="import_oai_preset" class="menu_button fa-solid fa-file-import" data-i18n="[title]Import preset"></i>
+                                        <i data-newbie-hidden title="Export preset" id="export_oai_preset" class="menu_button fa-solid fa-file-export" data-i18n="[title]Export preset"></i>
+                                        <i data-newbie-hidden id="delete_oai_preset" class="menu_button fa-solid fa-trash-can" title="Delete the preset" data-i18n="[title]Delete the preset"></i>
+                                        <input id="openai_preset_import_file" type="file" accept=".json,.settings" hidden />
                                     </div>
                                 </div>
                             </div>
+
                             <div id="textgenerationwebui_api-presets">
                                 <h4 class="margin0"><span data-i18n="Text Completion presets">Text Completion presets</span></h4>
                                 <div class="flex-container flexNoGap">
