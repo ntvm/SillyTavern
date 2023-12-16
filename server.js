@@ -83,6 +83,14 @@ const cliArguments = yargs(hideBin(process.argv))
         type: 'boolean',
         default: false,
         describe: 'Disables CSRF protection',
+    }).option('HumAssistOff', {
+        type: 'boolean',
+        default: false,
+        describe: 'Enables CORS proxy',
+    }).option('SystemFul', {
+        type: 'boolean',
+        default: true,
+        describe: 'Disables CSRF protection',
     }).option('ssl', {
         type: 'boolean',
         default: false,
@@ -126,6 +134,9 @@ const whitelistMode = getConfigValue('whitelistMode', true);
 const autorun = getConfigValue('autorun', false) && cliArguments.autorun !== false && !cliArguments.ssl;
 const enableExtensions = getConfigValue('enableExtensions', true);
 const listen = getConfigValue('listen', false);
+const HumAssistOff = getConfigValue('HumAssistOff', false);
+const SystemFul = getConfigValue('SystemFul', true);
+
 
 const API_OPENAI = 'https://api.openai.com/v1';
 const API_CLAUDE = 'https://api.anthropic.com/v1';
@@ -3139,8 +3150,6 @@ async function sendClaudeRequest(request, response) {
         request.socket.on('close', function () {
             controller.abort();
         });
-        const { HumAssistOff } = require('./config.yaml');
-        const { SystemFul  } = require('./config.yaml');
         let doSystemPrompt = request.body.model === 'claude-2' || request.body.model === 'claude-2.1';
         let requestPrompt = convertClaudePrompt(request.body.messages, true, !request.body.exclude_assistant, doSystemPrompt, HumAssistOff, SystemFul);
 
