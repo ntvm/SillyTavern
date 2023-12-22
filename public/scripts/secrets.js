@@ -1,9 +1,10 @@
-import { callPopup, getRequestHeaders } from "../script.js";
+import { callPopup, getRequestHeaders } from '../script.js';
 
 export const SECRET_KEYS = {
     HORDE: 'api_key_horde',
     MANCER: 'api_key_mancer',
     APHRODITE: 'api_key_aphrodite',
+    TABBY: 'api_key_tabby',
     OPENAI: 'api_key_openai',
     NOVEL: 'api_key_novel',
     CLAUDE: 'api_key_claude',
@@ -12,7 +13,9 @@ export const SECRET_KEYS = {
     AI21: 'api_key_ai21',
     SCALE_COOKIE: 'scale_cookie',
     PALM: 'api_key_palm',
-}
+    SERPAPI: 'api_key_serpapi',
+    OAIPROXY: 'api_oai_proxy',
+};
 
 const INPUT_MAP = {
     [SECRET_KEYS.HORDE]: '#horde_api_key',
@@ -26,7 +29,9 @@ const INPUT_MAP = {
     [SECRET_KEYS.SCALE_COOKIE]: '#scale_cookie',
     [SECRET_KEYS.PALM]: '#api_key_palm',
     [SECRET_KEYS.APHRODITE]: '#api_key_aphrodite',
-}
+    [SECRET_KEYS.TABBY]: '#api_key_tabby',
+    [SECRET_KEYS.OAIPROXY]: 'api_oai_proxy',
+};
 
 async function clearSecret() {
     const key = $(this).data('key');
@@ -52,7 +57,7 @@ async function viewSecrets() {
     });
 
     if (response.status == 403) {
-        callPopup('<h3>Forbidden</h3><p>To view your API keys here, set the value of allowKeysExposure to true in config.conf file and restart the SillyTavern server.</p>', 'text');
+        callPopup('<h3>Forbidden</h3><p>To view your API keys here, set the value of allowKeysExposure to true in config.yaml file and restart the SillyTavern server.</p>', 'text');
         return;
     }
 
@@ -113,6 +118,23 @@ export async function readSecretState() {
     }
 }
 
+export async function findSecret(key) {
+    try {
+        const response = await fetch('/api/secrets/find', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ key }),
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            return data.value;
+        }
+    } catch {
+        console.error('Could not find secret value: ', key);
+    }
+}
+
 function authorizeOpenRouter() {
     const openRouterUrl = `https://openrouter.ai/auth?callback_url=${encodeURIComponent(location.origin)}`;
     location.href = openRouterUrl;
@@ -123,7 +145,7 @@ async function checkOpenRouterAuth() {
     if (params.has('code')) {
         const code = params.get('code');
         try {
-            const response = await fetch("https://openrouter.ai/api/v1/auth/keys", {
+            const response = await fetch('https://openrouter.ai/api/v1/auth/keys', {
                 method: 'POST',
                 body: JSON.stringify({ code }),
             });
@@ -143,8 +165,8 @@ async function checkOpenRouterAuth() {
                 toastr.success('OpenRouter token saved');
                 // Remove the code from the URL
                 const currentUrl = window.location.href;
-                const urlWithoutSearchParams = currentUrl.split("?")[0];
-                window.history.pushState({}, "", urlWithoutSearchParams);
+                const urlWithoutSearchParams = currentUrl.split('?')[0];
+                window.history.pushState({}, '', urlWithoutSearchParams);
             } else {
                 throw new Error('OpenRouter token not saved');
             }

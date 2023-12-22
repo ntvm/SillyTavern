@@ -3,6 +3,7 @@ const path = require('path');
 const sanitize = require('sanitize-filename');
 const writeFileAtomicSync = require('write-file-atomic').sync;
 const { DIRECTORIES } = require('./constants');
+const { getDefaultPresetFile, getDefaultPresets } = require('./content-manager');
 
 /**
  * Gets the folder and extension for the preset settings based on the API source ID.
@@ -13,13 +14,13 @@ function getPresetSettingsByAPI(apiId) {
     switch (apiId) {
         case 'kobold':
         case 'koboldhorde':
-            return { folder: DIRECTORIES.koboldAI_Settings, extension: '.settings' };
+            return { folder: DIRECTORIES.koboldAI_Settings, extension: '.json' };
         case 'novel':
-            return { folder: DIRECTORIES.novelAI_Settings, extension: '.settings' };
+            return { folder: DIRECTORIES.novelAI_Settings, extension: '.json' };
         case 'textgenerationwebui':
-            return { folder: DIRECTORIES.textGen_Settings, extension: '.settings' };
+            return { folder: DIRECTORIES.textGen_Settings, extension: '.json' };
         case 'openai':
-            return { folder: DIRECTORIES.openAI_Settings, extension: '.settings' };
+            return { folder: DIRECTORIES.openAI_Settings, extension: '.json' };
         case 'instruct':
             return { folder: DIRECTORIES.instruct, extension: '.json' };
         case 'context':
@@ -35,7 +36,7 @@ function getPresetSettingsByAPI(apiId) {
  * @param {any} jsonParser JSON parser middleware
  */
 function registerEndpoints(app, jsonParser) {
-    app.post("/api/presets/save", jsonParser, function (request, response) {
+    app.post('/api/presets/save', jsonParser, function (request, response) {
         const name = sanitize(request.body.name);
         if (!request.body.preset || !name) {
             return response.sendStatus(400);
@@ -53,7 +54,7 @@ function registerEndpoints(app, jsonParser) {
         return response.send({ name });
     });
 
-    app.post("/api/presets/delete", jsonParser, function (request, response) {
+    app.post('/api/presets/delete', jsonParser, function (request, response) {
         const name = sanitize(request.body.name);
         if (!name) {
             return response.sendStatus(400);
@@ -76,8 +77,30 @@ function registerEndpoints(app, jsonParser) {
         }
     });
 
+    app.post('/api/presets/restore', jsonParser, function (request, response) {
+        try {
+            const settings = getPresetSettingsByAPI(request.body.apiId);
+            const name = sanitize(request.body.name);
+            const defaultPresets = getDefaultPresets();
+
+            const defaultPreset = defaultPresets.find(p => p.name === name && p.folder === settings.folder);
+
+            const result = { isDefault: false, preset: {} };
+
+            if (defaultPreset) {
+                result.isDefault = true;
+                result.preset = getDefaultPresetFile(defaultPreset.filename) || {};
+            }
+
+            return response.send(result);
+        } catch (error) {
+            console.log(error);
+            return response.sendStatus(500);
+        }
+    });
+
     // TODO: Merge with /api/presets/save
-    app.post("/api/presets/save-openai", jsonParser, function (request, response) {
+    app.post('/api/presets/save-openai', jsonParser, function (request, response) {
         if (!request.body || typeof request.query.name !== 'string') return response.sendStatus(400);
         const name = sanitize(request.query.name);
         if (!name) return response.sendStatus(400);
@@ -89,7 +112,7 @@ function registerEndpoints(app, jsonParser) {
     });
 
     // TODO: Merge with /api/presets/delete
-    app.post("/api/presets/delete-openai", jsonParser, function (request, response) {
+    app.post('/api/presets/delete-openai', jsonParser, function (request, response) {
         if (!request.body || !request.body.name) {
             return response.sendStatus(400);
         }
@@ -108,4 +131,4 @@ function registerEndpoints(app, jsonParser) {
 
 module.exports = {
     registerEndpoints,
-}
+};

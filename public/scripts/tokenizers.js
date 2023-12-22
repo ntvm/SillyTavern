@@ -1,9 +1,10 @@
-import { characters, main_api, nai_settings, online_status, this_chid } from "../script.js";
-import { power_user, registerDebugFunction } from "./power-user.js";
-import { chat_completion_sources, oai_settings } from "./openai.js";
-import { groups, selected_group } from "./group-chats.js";
-import { getStringHash } from "./utils.js";
-import { kai_flags } from "./kai-settings.js";
+import { characters, getAPIServerUrl, main_api, nai_settings, online_status, this_chid } from '../script.js';
+import { power_user, registerDebugFunction } from './power-user.js';
+import { chat_completion_sources, model_list, oai_settings } from './openai.js';
+import { groups, selected_group } from './group-chats.js';
+import { getStringHash } from './utils.js';
+import { kai_flags } from './kai-settings.js';
+import { isKoboldCpp, isMancer, isOoba, isTabby, textgenerationwebui_settings } from './textgen-settings.js';
 
 export const CHARACTERS_PER_TOKEN_RATIO = 3.35;
 const TOKENIZER_WARNING_KEY = 'tokenizationWarningShown';
@@ -11,18 +12,26 @@ const TOKENIZER_WARNING_KEY = 'tokenizationWarningShown';
 export const tokenizers = {
     NONE: 0,
     GPT2: 1,
-    /**
-     * @deprecated Use GPT2 instead.
-     */
-    LEGACY: 2,
+    OPENAI: 2,
     LLAMA: 3,
     NERD: 4,
     NERD2: 5,
     API: 6,
+    MISTRAL: 7,
+    YI: 8,
     BEST_MATCH: 99,
 };
 
-const objectStore = new localforage.createInstance({ name: "SillyTavern_ChatCompletions" });
+export const SENTENCEPIECE_TOKENIZERS = [
+    tokenizers.LLAMA,
+    tokenizers.MISTRAL,
+    tokenizers.YI,
+    // uncomment when NovelAI releases Kayra and Clio weights, lol
+    //tokenizers.NERD,
+    //tokenizers.NERD2,
+];
+
+const objectStore = new localforage.createInstance({ name: 'SillyTavern_ChatCompletions' });
 
 let tokenCache = {};
 
@@ -37,7 +46,7 @@ export function guesstimate(str) {
 
 async function loadTokenCache() {
     try {
-        console.debug('Chat Completions: loading token cache')
+        console.debug('Chat Completions: loading token cache');
         tokenCache = await objectStore.getItem('tokenCache') || {};
     } catch (e) {
         console.log('Chat Completions: unable to load token cache, using default value', e);
@@ -47,7 +56,7 @@ async function loadTokenCache() {
 
 export async function saveTokenCache() {
     try {
-        console.debug('Chat Completions: saving token cache')
+        console.debug('Chat Completions: saving token cache');
         await objectStore.setItem('tokenCache', tokenCache);
     } catch (e) {
         console.log('Chat Completions: unable to save token cache', e);
@@ -65,8 +74,47 @@ async function resetTokenCache() {
     }
 }
 
-function getTokenizerBestMatch() {
-    if (main_api === 'novel') {
+/**
+ * Gets the friendly name of the current tokenizer.
+ * @param {string} forApi API to get the tokenizer for. Defaults to the main API.
+ * @returns { { tokenizerName: string, tokenizerId: number } } Tokenizer info
+ */
+export function getFriendlyTokenizerName(forApi) {
+    if (!forApi) {
+        forApi = main_api;
+    }
+
+    const tokenizerOption = $('#tokenizer').find(':selected');
+    let tokenizerId = Number(tokenizerOption.val());
+    let tokenizerName = tokenizerOption.text();
+
+    if (forApi !== 'openai' && tokenizerId === tokenizers.BEST_MATCH) {
+        tokenizerId = getTokenizerBestMatch(forApi);
+        tokenizerName = $(`#tokenizer option[value="${tokenizerId}"]`).text();
+    }
+
+    tokenizerName = forApi == 'openai'
+        ? getTokenizerModel()
+        : tokenizerName;
+
+    tokenizerId = forApi == 'openai'
+        ? tokenizers.OPENAI
+        : tokenizerId;
+
+    return { tokenizerName, tokenizerId };
+}
+
+/**
+ * Gets the best tokenizer for the current API.
+ * @param {string} forApi API to get the tokenizer for. Defaults to the main API.
+ * @returns {number} Tokenizer type.
+ */
+export function getTokenizerBestMatch(forApi) {
+    if (!forApi) {
+        forApi = main_api;
+    }
+
+    if (forApi === 'novel') {
         if (nai_settings.model_novel.includes('clio')) {
             return tokenizers.NERD;
         }
@@ -74,13 +122,23 @@ function getTokenizerBestMatch() {
             return tokenizers.NERD2;
         }
     }
-    if (main_api === 'kobold' || main_api === 'textgenerationwebui' || main_api === 'koboldhorde') {
+    if (forApi === 'kobold' || forApi === 'textgenerationwebui' || forApi === 'koboldhorde') {
         // Try to use the API tokenizer if possible:
         // - API must be connected
         // - Kobold must pass a version check
         // - Tokenizer haven't reported an error previously
-        if (kai_flags.can_use_tokenization && !sessionStorage.getItem(TOKENIZER_WARNING_KEY) && online_status !== 'no_connection') {
-            return tokenizers.API;
+        const hasTokenizerError = sessionStorage.getItem(TOKENIZER_WARNING_KEY);
+        const isConnected = online_status !== 'no_connection';
+        const isTokenizerSupported = isOoba() || isTabby() || isKoboldCpp();
+
+        if (!hasTokenizerError && isConnected) {
+            if (forApi === 'kobold' && kai_flags.can_use_tokenization) {
+                return tokenizers.API;
+            }
+
+            if (forApi === 'textgenerationwebui' && isTokenizerSupported) {
+                return tokenizers.API;
+            }
         }
 
         return tokenizers.LLAMA;
@@ -108,10 +166,14 @@ function callTokenizer(type, str, padding) {
             return countTokensRemote('/api/tokenize/nerdstash', str, padding);
         case tokenizers.NERD2:
             return countTokensRemote('/api/tokenize/nerdstash_v2', str, padding);
+        case tokenizers.MISTRAL:
+            return countTokensRemote('/api/tokenize/mistral', str, padding);
+        case tokenizers.YI:
+            return countTokensRemote('/api/tokenize/yi', str, padding);
         case tokenizers.API:
             return countTokensRemote('/tokenize_via_api', str, padding);
         default:
-            console.warn("Unknown tokenizer type", type);
+            console.warn('Unknown tokenizer type', type);
             return callTokenizer(tokenizers.NONE, str, padding);
     }
 }
@@ -140,7 +202,7 @@ export function getTokenCount(str, padding = undefined) {
     }
 
     if (tokenizerType === tokenizers.BEST_MATCH) {
-        tokenizerType = getTokenizerBestMatch();
+        tokenizerType = getTokenizerBestMatch(main_api);
     }
 
     if (padding === undefined) {
@@ -158,7 +220,7 @@ export function getTokenCount(str, padding = undefined) {
     const result = callTokenizer(tokenizerType, str, padding);
 
     if (isNaN(result)) {
-        console.warn("Token count calculation returned NaN");
+        console.warn('Token count calculation returned NaN');
         return 0;
     }
 
@@ -187,6 +249,9 @@ export function getTokenizerModel() {
     const gpt4Tokenizer = 'gpt-4';
     const gpt2Tokenizer = 'gpt2';
     const claudeTokenizer = 'claude';
+    const llamaTokenizer = 'llama';
+    const mistralTokenizer = 'mistral';
+    const yiTokenizer = 'yi';
 
     // Assuming no one would use it for different models.. right?
     if (oai_settings.chat_completion_source == chat_completion_sources.SCALE) {
@@ -214,7 +279,18 @@ export function getTokenizerModel() {
 
     // And for OpenRouter (if not a site model, then it's impossible to determine the tokenizer)
     if (oai_settings.chat_completion_source == chat_completion_sources.OPENROUTER && oai_settings.openrouter_model) {
-        if (oai_settings.openrouter_model.includes('gpt-4')) {
+        const model = model_list.find(x => x.id === oai_settings.openrouter_model);
+
+        if (model?.architecture?.tokenizer === 'Llama2') {
+            return llamaTokenizer;
+        }
+        else if (model?.architecture?.tokenizer === 'Mistral') {
+            return mistralTokenizer;
+        }
+        else if (model?.architecture?.tokenizer === 'Yi') {
+            return yiTokenizer;
+        }
+        else if (oai_settings.openrouter_model.includes('gpt-4')) {
             return gpt4Tokenizer;
         }
         else if (oai_settings.openrouter_model.includes('gpt-3.5-turbo-0301')) {
@@ -273,12 +349,12 @@ export function countTokensOpenAI(messages, full = false) {
                 type: 'POST', //
                 url: shouldTokenizeAI21 ? '/api/tokenize/ai21' : `/api/tokenize/openai?model=${model}`,
                 data: JSON.stringify([message]),
-                dataType: "json",
-                contentType: "application/json",
+                dataType: 'json',
+                contentType: 'application/json',
                 success: function (data) {
                     token_count += Number(data.token_count);
                     cacheObject[cacheKey] = Number(data.token_count);
-                }
+                },
             });
         }
     }
@@ -313,6 +389,17 @@ function getTokenCacheObject() {
     return tokenCache[String(chatId)];
 }
 
+function getRemoteTokenizationParams(str) {
+    return {
+        text: str,
+        api: main_api,
+        url: getAPIServerUrl(),
+        legacy_api: main_api === 'textgenerationwebui' && textgenerationwebui_settings.legacy_api && !isMancer(),
+        use_tabby: main_api === 'textgenerationwebui' && isTabby(),
+        use_koboldcpp: main_api === 'textgenerationwebui' && isKoboldCpp(),
+    };
+}
+
 /**
  * Counts token using the remote server API.
  * @param {string} endpoint API endpoint.
@@ -327,27 +414,27 @@ function countTokensRemote(endpoint, str, padding) {
         async: false,
         type: 'POST',
         url: endpoint,
-        data: JSON.stringify({ text: str }),
-        dataType: "json",
-        contentType: "application/json",
+        data: JSON.stringify(getRemoteTokenizationParams(str)),
+        dataType: 'json',
+        contentType: 'application/json',
         success: function (data) {
             if (typeof data.count === 'number') {
                 tokenCount = data.count;
             } else {
                 tokenCount = guesstimate(str);
-                console.error("Error counting tokens");
+                console.error('Error counting tokens');
 
                 if (!sessionStorage.getItem(TOKENIZER_WARNING_KEY)) {
                     toastr.warning(
-                        "Your selected API doesn't support the tokenization endpoint. Using estimated counts.",
-                        "Error counting tokens",
+                        'Your selected API doesn\'t support the tokenization endpoint. Using estimated counts.',
+                        'Error counting tokens',
                         { timeOut: 10000, preventDuplicates: true },
                     );
 
                     sessionStorage.setItem(TOKENIZER_WARNING_KEY, String(true));
                 }
             }
-        }
+        },
     });
 
     return tokenCount + padding;
@@ -357,20 +444,30 @@ function countTokensRemote(endpoint, str, padding) {
  * Calls the underlying tokenizer model to encode a string to tokens.
  * @param {string} endpoint API endpoint.
  * @param {string} str String to tokenize.
+ * @param {string} model Tokenizer model.
  * @returns {number[]} Array of token ids.
  */
-function getTextTokensRemote(endpoint, str) {
+function getTextTokensRemote(endpoint, str, model = '') {
+    if (model) {
+        endpoint += `?model=${model}`;
+    }
+
     let ids = [];
     jQuery.ajax({
         async: false,
         type: 'POST',
         url: endpoint,
-        data: JSON.stringify({ text: str }),
-        dataType: "json",
-        contentType: "application/json",
+        data: JSON.stringify(getRemoteTokenizationParams(str)),
+        dataType: 'json',
+        contentType: 'application/json',
         success: function (data) {
             ids = data.ids;
-        }
+
+            // Don't want to break reverse compatibility, so sprinkle in some of the JS magic
+            if (Array.isArray(data.chunks)) {
+                Object.defineProperty(ids, 'chunks', { value: data.chunks });
+            }
+        },
     });
     return ids;
 }
@@ -380,18 +477,22 @@ function getTextTokensRemote(endpoint, str) {
  * @param {string} endpoint API endpoint.
  * @param {number[]} ids Array of token ids
  */
-function decodeTextTokensRemote(endpoint, ids) {
+function decodeTextTokensRemote(endpoint, ids, model = '') {
+    if (model) {
+        endpoint += `?model=${model}`;
+    }
+
     let text = '';
     jQuery.ajax({
         async: false,
         type: 'POST',
         url: endpoint,
         data: JSON.stringify({ ids: ids }),
-        dataType: "json",
-        contentType: "application/json",
+        dataType: 'json',
+        contentType: 'application/json',
         success: function (data) {
             text = data.text;
-        }
+        },
     });
     return text;
 }
@@ -412,8 +513,18 @@ export function getTextTokens(tokenizerType, str) {
             return getTextTokensRemote('/api/tokenize/nerdstash', str);
         case tokenizers.NERD2:
             return getTextTokensRemote('/api/tokenize/nerdstash_v2', str);
+        case tokenizers.MISTRAL:
+            return getTextTokensRemote('/api/tokenize/mistral', str);
+        case tokenizers.YI:
+            return getTextTokensRemote('/api/tokenize/yi', str);
+        case tokenizers.OPENAI: {
+            const model = getTokenizerModel();
+            return getTextTokensRemote('/api/tokenize/openai-encode', str, model);
+        }
+        case tokenizers.API:
+            return getTextTokensRemote('/tokenize_via_api', str);
         default:
-            console.warn("Calling getTextTokens with unsupported tokenizer type", tokenizerType);
+            console.warn('Calling getTextTokens with unsupported tokenizer type', tokenizerType);
             return [];
     }
 }
@@ -433,8 +544,16 @@ export function decodeTextTokens(tokenizerType, ids) {
             return decodeTextTokensRemote('/api/decode/nerdstash', ids);
         case tokenizers.NERD2:
             return decodeTextTokensRemote('/api/decode/nerdstash_v2', ids);
+        case tokenizers.MISTRAL:
+            return decodeTextTokensRemote('/api/decode/mistral', ids);
+        case tokenizers.YI:
+            return decodeTextTokensRemote('/api/decode/yi', ids);
+        case tokenizers.OPENAI: {
+            const model = getTokenizerModel();
+            return decodeTextTokensRemote('/api/decode/openai', ids, model);
+        }
         default:
-            console.warn("Calling decodeTextTokens with unsupported tokenizer type", tokenizerType);
+            console.warn('Calling decodeTextTokens with unsupported tokenizer type', tokenizerType);
             return '';
     }
 }

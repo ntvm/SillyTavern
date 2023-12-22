@@ -1,5 +1,6 @@
 import { debounce } from "../../utils.js";
 import { extension_settings, modules } from "../../extensions.js";
+import { writeSecret } from "../../secrets.js";
 import { eventSource, event_types, callPopup, getRequestHeaders, saveSettingsDebounced, saveSettings, substituteParams  } from "../../../script.js";
 import { oai_settings } from "../../openai.js";
 
@@ -21,6 +22,7 @@ const defaultSettings = {
     ProxyURL: '',
     ProxyPassword: '',
     ProxyPrior: false,
+    Useinsteadkey: false,
 };
 
 
@@ -40,6 +42,7 @@ function loadSettings() {
     $('#ProxyURL').val(extension_settings.ProxyManager.ProxyURL).trigger('input');
     $('#ProxyPassword').val(extension_settings.ProxyManager.ProxyPassword).trigger('input');
     $('#ProxyPrior').prop('checked', extension_settings.ProxyManager.ProxyPrior).trigger('input');
+    $('#Useinsteadkey').prop('checked', extension_settings.ProxyManager.Useinsteadkey).trigger('input');
 
 }
 
@@ -62,9 +65,20 @@ function onProxyPrior() {
     extension_settings.ProxyManager.ProxyPrior = value;
     saveSettingsDebounced();
 }
+	
+function onUseinsteadkey() {
+    const value = Boolean($(this).prop('checked'));
+    extension_settings.ProxyManager.Useinsteadkey = value;
+    saveSettingsDebounced();
+}
 
 
 
+function onSecretWrite(){
+    var array = proxy_info();
+    var stype = "api_oai_proxy";
+    writeSecret(stype, array);
+}
 
 //Savesets	
 
@@ -208,11 +222,16 @@ jQuery(function () {
                     <label for="ProxyPassword">Current proxy password: </label>
                     <textarea id="ProxyPassword" class="text_pole textarea_compact" rows="2" placeholder="Put proxy password here..."></textarea>
                     <div>
-                        <label for="ProxyPrior"><input id="ProxyPrior" type="checkbox" />Activate proxy manager</label>
+                        <label class="checkbox_label for="ProxyPrior"><input id="ProxyPrior" type="checkbox" />Activate proxy manager</label>
                     </div>
                     <div>
-                        <i id="ProxySaveButton" class="fa-solid fa-save"></i>
+                        <label class="checkbox_label for="Useinsteadkey"><input id="Useinsteadkey" type="checkbox" />Use instead OAI key</label>
+                    </div>
+                    <br>
+                    <div>
+                        <i id="ProxySaveButton" class="fa-solid fa-save" style="margin-left: 5px;"></i>
                         <i id="ProxyDeleteButton" class="fa-solid fa-trash" style="float: right;"></i>
+                        <i id="SaveInSecretButton" class="fa-solid fa-cog" title="Save in secrets" style="margin-left: 1px; span="Save in secrets"></i>
                     </div>
                 </div>
             </div>
@@ -221,6 +240,8 @@ jQuery(function () {
         $('#extensions_settings2').append(settingsHtml);
         $("#ProxySaveButton").on('click', saveProxy);
         $('#ProxyPrior').on('input', onProxyPrior);
+        $('#SaveInSecretButton').on('click', onSecretWrite);
+        $('#Useinsteadkey').on('input', onUseinsteadkey);
         $('#ProxyURL').on('input', onProxyURLInput);
         $('#ProxyPassword').on('input', onProxyPasswordInput);
         $("#ProxyDeleteButton").on('click', deleteProxyPreset);

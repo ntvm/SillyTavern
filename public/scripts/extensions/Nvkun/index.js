@@ -298,16 +298,16 @@ jQuery(function () {
                     <div class="Inputer_contents_controls">
                     </div>
                     <div>
-                        <label for="exclude_Prefill"><input id="exclude_Prefill" type="checkbox" />Disable Claude prefill</label>
+                        <label class="checkbox_label for="exclude_Prefill"><input id="exclude_Prefill" type="checkbox" />Disable Claude prefill</label>
                     </div>
                     <div>
-                        <label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />Activate AfterScenario prompt</label>
+                        <label class="checkbox_label for="Inputer_frozen"><input id="Inputer_frozen" type="checkbox" />Activate AfterScenario prompt</label>
                     </div>
                     <div>
-                         <label for="RegexLogging"><input id="Regex_Logging" type="checkbox" />Activate Regex logging</label>
+                         <label class="checkbox_label for="RegexLogging"><input id="Regex_Logging" type="checkbox" />Activate Regex logging</label>
                     </div>
                     <div>
-                         <label for="ExamplesExclude"><input id="ExamplesExclude" type="checkbox" />Exclude examples from group conjoined mode</label>
+                         <label class="checkbox_label for="ExamplesExclude"><input id="ExamplesExclude" type="checkbox" />Exclude examples from group conjoined mode</label>
                     </div>
                     <div>
                         <select id="NvPresets" name="preset">
