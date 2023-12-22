@@ -23,7 +23,7 @@ import { stringFormat, initScrollHeight, resetScrollHeight, getCharaFilename, sa
 import { getMessageTimeStamp, humanizedDateTime } from '../../RossAscends-mods.js';
 import { SECRET_KEYS, secret_state } from '../../secrets.js';
 import { getNovelUnlimitedImageGeneration, getNovelAnlas, loadNovelSubscriptionData } from '../../nai-settings.js';
-import { getMultimodalCaption, proxy_info } from '../shared.js';
+import { getMultimodalCaption } from '../shared.js';
 export { MODULE_NAME };
 
 // Wraps a string into monospace font-face span
