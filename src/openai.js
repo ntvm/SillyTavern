@@ -19,7 +19,7 @@ function Proxystuff(Uscase){
 
     switch (Uscase){
         case "useproxy":
-            if (passw == false) {return allowProxy}
+            if (passw == false) { allowProxy = false; return allowProxy}
             return allowProxy;
         case "getkey":
             return passw;
@@ -37,9 +37,9 @@ function registerEndpoints(app, jsonParser, urlencodedParser) {
             let key = '';
 
             var rn = "useproxy";
-            var proxy_usage = Proxystuff(rn);
+            var allowProxy = Proxystuff(rn);
 			
-            if (proxy_usage == true) {var proxy = true};
+            if (allowProxy == true) {var proxy = true};
 			
             if (request.body.api === 'openai' && (proxy !== true)) {
                 key = readSecret(SECRET_KEYS.OPENAI);
@@ -217,8 +217,8 @@ function registerEndpoints(app, jsonParser, urlencodedParser) {
             let key = '';
 
             var rn = "useproxy";
-            var proxy_usage = Proxystuff(rn);
-            switch (proxy_usage) {
+            var allowProxy = Proxystuff(rn);
+            switch (allowProxy) {
                 case false:
                     key = readSecret(SECRET_KEYS.OPENAI);
                     break;
@@ -234,7 +234,7 @@ function registerEndpoints(app, jsonParser, urlencodedParser) {
 
             console.log('OpenAI request', request.body);
 
-            switch (proxy_usage) {
+            switch (allowProxy) {
                 case true:
                     rn = "getURL";
                     apiURL = Proxystuff(rn);
