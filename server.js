@@ -86,11 +86,11 @@ const cliArguments = yargs(hideBin(process.argv))
     }).option('HumAssistOff', {
         type: 'boolean',
         default: false,
-        describe: 'Enables CORS proxy',
+        describe: 'Disable human/Assistant mapping',
     }).option('SystemFul', {
         type: 'boolean',
         default: true,
-        describe: 'Disables CSRF protection',
+        describe: 'Return system role in chat.',
     }).option('ssl', {
         type: 'boolean',
         default: false,

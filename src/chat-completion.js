@@ -95,7 +95,14 @@ function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix, with
             }).join('');
 
             if (addHumanPrefix) {
-                requestPrompt = "\n\nHuman: " + requestPrompt;
+                switch (SystemFul) {
+                    case true:
+                        requestPrompt = "\n\nHuman: [Assistant must take in mind WHOLE chat context]" + requestPrompt;
+                        break
+                    default:
+                        requestPrompt = "\n\nHuman: " + requestPrompt;
+                        break
+				}
             }
 
             if (addAssistantPostfix) {

@@ -1,25 +1,56 @@
-const { readSecret, SECRET_KEYS } = require('./secrets');
+const { readSecret, SECRET_KEYS, getBaseproxy } = require('./secrets');
 const fetch = require('node-fetch').default;
 const FormData = require('form-data');
 const fs = require('fs');
 
+var Uscase
+var apiURL
 /**
  * Registers the OpenAI endpoints.
  * @param {import("express").Express} app Express app
  * @param {any} jsonParser JSON parser
  * @param {any} urlencodedParser Form data parser
  */
+function Proxystuff(Uscase){
+    var array = readSecret(SECRET_KEYS.OAIPROXY);
+    var passw = array.pop();
+    var url = array.pop();
+    var allowProxy = array.pop();
+
+    switch (Uscase){
+        case "useproxy":
+            return allowProxy;
+        case "getkey":
+            return passw;
+        case "getURL":
+            url = getBaseproxy(url);
+            return url;		
+	}
+
+}
+
+
 function registerEndpoints(app, jsonParser, urlencodedParser) {
     app.post('/api/openai/caption-image', jsonParser, async (request, response) => {
         try {
             let key = '';
 
-            if (request.body.api === 'openai') {
+            var rn = "useproxy";
+            var proxy_usage = Proxystuff(rn);
+			
+            if (proxy_usage == true) {var proxy = true};
+			
+            if (request.body.api === 'openai' && (proxy !== true)) {
                 key = readSecret(SECRET_KEYS.OPENAI);
             }
 
-            if (request.body.api === 'openrouter') {
+            if (request.body.api === 'openrouter' && (proxy !== true)) {
                 key = readSecret(SECRET_KEYS.OPENROUTER);
+            }
+
+            if (proxy = true) {
+                rn = "getkey";
+                key = Proxystuff(rn);
             }
 
             if (!key) {
@@ -46,15 +77,20 @@ function registerEndpoints(app, jsonParser, urlencodedParser) {
             let apiUrl = '';
             let headers = {};
 
-            if (request.body.api === 'openrouter') {
+            if (request.body.api === 'openrouter'&& (proxy !== true)) {
                 apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
                 headers['HTTP-Referer'] = request.headers.referer;
             }
 
-            if (request.body.api === 'openai') {
+            if (request.body.api === 'openai'&& (proxy !== true)) {
                 apiUrl = 'https://api.openai.com/v1/chat/completions';
             }
 
+            if (proxy == true) {
+                rn = "getURL";
+                apiURl = Proxystuff(rn);
+                apiURL = apiURL + '/openai/chat/completions';
+            }
             const result = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
@@ -177,8 +213,19 @@ function registerEndpoints(app, jsonParser, urlencodedParser) {
 
     app.post('/api/openai/generate-image', jsonParser, async (request, response) => {
         try {
-            const key = readSecret(SECRET_KEYS.OPENAI);
+            let key = '';
 
+            var rn = "useproxy";
+            var proxy_usage = Proxystuff(rn);
+            switch (proxy_usage) {
+                case false:
+                    key = readSecret(SECRET_KEYS.OPENAI);
+                    break;
+                case true:
+                    rn = "getkey";
+                    key = Proxystuff(rn);
+                    break
+            }
             if (!key) {
                 console.log('No OpenAI key found');
                 return response.sendStatus(401);
@@ -186,7 +233,17 @@ function registerEndpoints(app, jsonParser, urlencodedParser) {
 
             console.log('OpenAI request', request.body);
 
-            const result = await fetch('https://api.openai.com/v1/images/generations', {
+            switch (proxy_usage) {
+                case true:
+                    rn = "getURL";
+                    apiURL = Proxystuff(rn);
+                    apiURL = apiURL + '/openai-image/images/generations';
+                    break;
+                default:
+                    apiURL = 'https://api.openai.com/v1/images/generations';
+                    break;
+            }
+            const result = await fetch(apiURL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

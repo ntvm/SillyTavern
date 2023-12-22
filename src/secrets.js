@@ -23,6 +23,7 @@ const SECRET_KEYS = {
     DEEPLX_URL: 'deeplx_url',
     PALM: 'api_key_palm',
     SERPAPI: 'api_key_serpapi',
+    OAIPROXY: 'api_oai_proxy',
 };
 
 /**
@@ -216,6 +217,14 @@ function registerEndpoints(app, jsonParser) {
     });
 }
 
+function getBaseproxy(url){
+    var baseproxy = url;
+    baseproxy = baseproxy.split("/");
+    baseproxy.pop();
+	baseproxy = baseproxy.join("/")
+	return baseproxy
+}
+
 module.exports = {
     writeSecret,
     readSecret,
@@ -224,4 +233,5 @@ module.exports = {
     getAllSecrets,
     registerEndpoints,
     SECRET_KEYS,
+    getBaseproxy,
 };
