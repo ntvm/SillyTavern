@@ -221,8 +221,8 @@ function getBaseproxy(url){
     var baseproxy = url;
     baseproxy = baseproxy.split("/");
     baseproxy.pop();
-	baseproxy = baseproxy.join("/")
-	return baseproxy
+    baseproxy = baseproxy.join("/")
+    return baseproxy
 }
 
 module.exports = {
