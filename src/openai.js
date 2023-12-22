@@ -19,6 +19,7 @@ function Proxystuff(Uscase){
 
     switch (Uscase){
         case "useproxy":
+            if (passw == false) {return allowProxy}
             return allowProxy;
         case "getkey":
             return passw;
