@@ -90,7 +90,7 @@ const cliArguments = yargs(hideBin(process.argv))
     }).option('SystemFul', {
         type: 'boolean',
         default: true,
-        describe: 'Return system role in chat.',
+        describe: 'Return system role in Claude chat.',
     }).option('ssl', {
         type: 'boolean',
         default: false,
