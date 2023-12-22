@@ -1,7 +1,6 @@
 import { debounce } from "../../utils.js";
 import { extension_settings, modules } from "../../extensions.js";
 import { writeSecret } from "../../secrets.js";
-import { proxy_info } from "../shared.js";
 import { eventSource, event_types, callPopup, getRequestHeaders, saveSettingsDebounced, saveSettings, substituteParams  } from "../../../script.js";
 import { oai_settings } from "../../openai.js";
 
