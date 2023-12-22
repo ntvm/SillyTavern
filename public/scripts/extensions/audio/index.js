@@ -15,6 +15,7 @@ Ideas:
 import { saveSettingsDebounced, getRequestHeaders } from "../../../../script.js";
 import { getContext, extension_settings, ModuleWorkerWrapper } from "../../../extensions.js";
 import { isDataURL } from "../../../utils.js";
+import { registerSlashCommand } from "../../../slash-commands.js";
 export { MODULE_NAME };
 
 const extensionName = "Extension-Audio";
@@ -323,7 +324,14 @@ async function getAssetsList(type) {
         });
         const assets = result.ok ? (await result.json()) : { type: [] };
         console.debug(DEBUG_PREFIX, "Found assets:", assets);
-        return assets[type];
+
+        const output = assets[type]
+        for(const i in output) {
+            output[i] = output[i].replaceAll("\\","/")
+            console.debug(DEBUG_PREFIX,"DEBUG",output[i])
+        }
+
+        return output;
     }
     catch (err) {
         console.log(err);
@@ -748,13 +756,14 @@ async function updateBGM(isUserInput = false, newChat = false) {
 
             if (isUserInput || extension_settings.audio.bgm_locked) {
                 audio.attr("src", audio_file_path);
+                audio.prop("volume", extension_settings.audio.bgm_volume * 0.01);
                 audio[0].play();
             }
             else {
                 audio.animate({ volume: 0.0 }, fade_time, function () {
                     audio.attr("src", audio_file_path);
                     audio[0].play();
-                    audio.volume = extension_settings.audio.bgm_volume * 0.01;
+                    audio.prop("volume", extension_settings.audio.bgm_volume * 0.01);
                     audio.animate({ volume: extension_settings.audio.bgm_volume * 0.01 }, fade_time);
                 });
             }
@@ -814,7 +823,7 @@ async function updateAmbient(isUserInput = false) {
     audio.animate({ volume: 0.0 }, fade_time, function () {
         audio.attr("src", audio_file_path);
         audio[0].play();
-        audio.volume = extension_settings.audio.ambient_volume * 0.01;
+        audio.prop("volume", extension_settings.audio.ambient_volume * 0.01);
         audio.animate({ volume: extension_settings.audio.ambient_volume * 0.01 }, fade_time);
     });
 }
@@ -914,4 +923,59 @@ jQuery(async () => {
     const wrapper = new ModuleWorkerWrapper(moduleWorker);
     setInterval(wrapper.update.bind(wrapper), UPDATE_INTERVAL);
     moduleWorker();
+    
+    registerSlashCommand('music', setBGMSlashCommand, ["bgm"], '<span class="monospace">(file path)</span> – force change of bgm for given file', true, true);
+    registerSlashCommand('ambient', setAmbientSlashCommand, [], '<span class="monospace">(file path)</span> – force change of ambient audio for given file', true, true);
 });
+
+async function setBGMSlashCommand(_, file) {
+    if (!file) {
+        console.log('No bgm file provided');
+        return;
+    }
+
+    file = file.trim().toLowerCase();
+
+    // Fuzzy search for sprite
+
+    let selectElement = document.querySelectorAll('[id=audio_bgm_select]');
+    let optionValues = [...selectElement[0].options].map(o => o.value);
+    //console.debug(DEBUG_PREFIX,"DEBUG:",optionValues);
+    
+    const fuse = new Fuse(optionValues);
+    const results = fuse.search(file);
+    const fileItem = results[0]?.item;
+
+    if (!fileItem) {
+        console.log('Bgm file path not valid');
+        return;
+    }
+
+    $("#audio_bgm_select").val(fileItem);
+    onBGMSelectChange();
+}
+
+async function setAmbientSlashCommand(_, file) {
+    if (!file) {
+        console.log('No ambient file provided');
+        return;
+    }
+
+    file = file.trim().toLowerCase();
+
+    let selectElement = document.querySelectorAll('[id=audio_ambient_select]');
+    let optionValues = [...selectElement[0].options].map(o => o.value);
+    //console.debug(DEBUG_PREFIX,"DEBUG:",optionValues);
+
+    const fuse = new Fuse(optionValues);
+    const results = fuse.search(file);
+    const fileItem = results[0]?.item;
+
+    if (!fileItem) {
+        console.log('Bgm file path not valid');
+        return;
+    }
+
+    $("#audio_ambient_select").val(fileItem);
+    onAmbientSelectChange();
+}

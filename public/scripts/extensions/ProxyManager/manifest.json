@@ -1,0 +1,9 @@
+{
+    "display_name": "Proxy manager",
+    "loading_order": 8,
+    "requires": [],
+    "js": "index.js",
+    "author": "Nv-Kun",
+    "version": "1.0.0",
+    "homePage": "https://github.com/ntvm/SillyTavern"
+}

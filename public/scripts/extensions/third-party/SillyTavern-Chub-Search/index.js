@@ -58,15 +58,23 @@ async function loadSettings() {
 async function downloadCharacter(input) {
     const url = input.trim();
     console.debug('Custom content import started', url);
-
-    const request = await fetch('/import_custom', {
+    let request = null;
+    // try /api/content/import first and then /import_custom
+    request = await fetch('/api/content/import', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ url }),
     });
+    if (!request.ok) {  
+        request = await fetch('/import_custom', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ url }),
+        });
+    }
 
     if (!request.ok) {
-        toastr.info(request.statusText, 'Custom content import failed');
+        toastr.info("Click to go to the character page", 'Custom content import failed', {onclick: () => window.open(`https://www.chub.ai/characters/${url}`, '_blank') });
         console.error('Custom content import failed', request.status, request.statusText);
         return;
     }
@@ -141,15 +149,17 @@ async function fetchCharactersBySearch({ searchTerm, includeTags, excludeTags, n
 
     // Construct the URL with the search parameters, if any
     // 
-    let url = `${API_ENDPOINT_SEARCH}?${searchTerm}first=${first}&page=${page}&sort=${sort}&asc=${asc}&include_forks=${include_forks}&nsfw=${nsfw}&require_images=${require_images}&require_custom_prompt=${require_custom_prompt}`;
+    let url = `${API_ENDPOINT_SEARCH}?${searchTerm}first=${first}&page=${page}&sort=${sort}&asc=${asc}&venus=true&include_forks=${include_forks}&nsfw=${nsfw}&require_images=${require_images}&require_custom_prompt=${require_custom_prompt}`;
 
     //truncate include and exclude tags to 100 characters
+    includeTags = includeTags.filter(tag => tag.length > 0);
     if (includeTags && includeTags.length > 0) {
         //includeTags = makeTagPermutations(includeTags);
         includeTags = includeTags.join(',').slice(0, 100);
         url += `&tags=${encodeURIComponent(includeTags)}`;
     }
-
+    //remove tags that contain no characters
+    excludeTags = excludeTags.filter(tag => tag.length > 0);
     if (excludeTags && excludeTags.length > 0) {
         //excludeTags = makeTagPermutations(excludeTags);
         excludeTags = excludeTags.join(',').slice(0, 100);
@@ -423,7 +433,14 @@ async function displayCharactersInListViewPopup() {
         const excludeTags = splitAndTrim(document.getElementById('excludeTags').value);
         const nsfw = document.getElementById('nsfwCheckbox').checked;
         const sort = document.getElementById('sortOrder').value;
-        const page = document.getElementById('pageNumber').value;
+        let page = document.getElementById('pageNumber').value;
+
+        // If the page number is not being changed, use page 1
+        if (e.target.id !== 'pageNumber' && e.target.id !== 'pageUpButton' && e.target.id !== 'pageDownButton') {
+            page = 1;
+            // set page box to 1
+            document.getElementById('pageNumber').value = 1;
+        }
 
         executeCharacterSearchDebounced({
             searchTerm,
@@ -491,6 +508,19 @@ async function getCharacter(fullPath) {
         }
     );
 
+    // If the request failed, try a backup endpoint - https://avatars.charhub.io/{fullPath}/avatar.webp
+    if (!response.ok) {
+        console.log(`Request failed for ${fullPath}, trying backup endpoint`);
+        response = await fetch(
+            `https://avatars.charhub.io/avatars/${fullPath}/avatar.webp`,
+            {
+                method: "GET",
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+            }
+        );
+    }
     let data = await response.blob();
     return data;
 }
