@@ -11,6 +11,10 @@ Lookaround работает из коробки.;
 
 Рефакторинг Мультикарточной системы в групповых чатах.;
 
+Прокси менеджер и пресеты.;
+
+Поддержка проксей для OAI Dall-E. (после включения галочки "Use instead key", Нажать шестеренку, это запишит проксю и пароль для использования. После этого можно вернуть свой пресет для текствовых ответов. Для удаления, выключите "Use instead key" и нажмите шестерню.);
+
 AlwaysCharnames (Теперь в отдельном меню расширений)(Включает перманентное имя карточки в промпте); 
 
 Фикс Русского языка;
@@ -18,7 +22,7 @@ AlwaysCharnames (Теперь в отдельном меню расширени�
 Команды внутри чата таверны: /UpdateST - Обновить SillyTavern. /RebootST - Полная перезагрузка процесса таверны; 
 
 В корне Таверны, config.conf: HumAssistOff (Убирает'Human:' и 'Assistant' из таверны) выключен. P.S. Самый изначальный Human и Assistant в последнем сообщении Юзера убрать невозможно, ибо они необходимы для API;  
-Systemful (Возвращает роль System для Claude)(Работает только в режиме с присутствующими Humans и assistants) включено (Как выключить? В config.conf (РЯДОМ С Start.bat) меняешь Systemful = true; на Systemful = false;); 
+Systemful (Возвращает роль System для Claude)(Работает только в режиме с присутствующими Humans и assistants) включено (Как выключить? В config.yaml (РЯДОМ С Start.bat) меняешь Systemful = true; на Systemful = false;); 
 
 В интерфейсе Summarize встроенная возможность переключть оригинальный Summarize и вариант Hints от XML-кунов (После апдейта на базе данного изменения У вас просто есть переключатель, чтобы использовать вариант XML кунов без возни с настройками, однако основной функционал остается.)
 
@@ -32,15 +36,19 @@ Systemful (Возвращает роль System для Claude)(Работает 
 
 English | [中文](readme-zh_cn.md)
 
-![image](https://github.com/SillyTavern/SillyTavern/assets/18619528/8c41a061-7f72-4d2b-9d54-e6d058209e7b)
+![SillyTavern-Banner](https://github.com/SillyTavern/SillyTavern/assets/18619528/c2be4c3f-aada-4f64-87a3-ae35a68b61a4)
 
 Mobile-friendly layout, Multi-API (KoboldAI/CPP, Horde, NovelAI, Ooba, OpenAI, OpenRouter, Claude, Scale), VN-like Waifu Mode, Stable Diffusion, TTS, WorldInfo (lorebooks), customizable UI, auto-translate, and more prompt options than you'd ever want or need + ability to install third-party extensions.
 
-Based on a fork of TavernAI 1.2.8
+Based on a fork of [TavernAI](https://github.com/TavernAI/TavernAI) 1.2.8
+
+## Important news!
+
+1. We have created a [Documentation website](https://docs.sillytavern.app/) to answer most of your questions and help you get started.
+
+2. Missing extensions after the update? Since the 1.10.6 release version, most of the previously built-in extensions have been converted to downloadable add-ons. You can download them via the built-in "Download Extensions and Assets" menu in the extensions panel (stacked blocks icon in the top bar).
 
 ### Brought to you by Cohee, RossAscends, and the SillyTavern community
-
-NOTE: We have created a [Documentation website](https://docs.sillytavern.app/) to answer most of your questions and help you get started.
 
 ### What is SillyTavern or TavernAI?
 
@@ -94,7 +102,7 @@ Get in touch with the developers directly:
 * A heavily modified TavernAI 1.2.8 (more than 50% of code rewritten or optimized)
 * Swipes
 * Group chats: multi-bot rooms for characters to talk to you or each other
-* Chat bookmarks / branching (duplicates the dialogue in its current state)
+* Chat checkpoints / branching
 * Advanced KoboldAI / TextGen generation settings with a lot of community-made presets
 * World Info support: create rich lore or save tokens on your character card
 * [OpenRouter](https://openrouter.ai) connection for various APIs (Claude, GPT-4/3.5 and more)
@@ -201,7 +209,7 @@ By default, they will not be exposed to a frontend after you enter them and relo
 
 In order to enable viewing your keys by clicking a button in the API block:
 
-1. Set the value of `allowKeysExposure` to `true` in `config.conf` file.
+1. Set the value of `allowKeysExposure` to `true` in `config.yaml` file.
 2. Restart the SillyTavern server.
 
 ## Remote connections
@@ -239,7 +247,7 @@ CIDR masks are also accepted (eg. 10.0.0.0/24).
 
 Now devices which have the IP specified in the file will be able to connect.
 
-*Note: `config.conf` also has a `whitelist` array, which you can use in the same way, but this array will be ignored if `whitelist.txt` exists.*
+*Note: `config.yaml` also has a `whitelist` array, which you can use in the same way, but this array will be ignored if `whitelist.txt` exists.*
 
 ### 2. Getting the IP for the ST host machine
 
@@ -251,7 +259,7 @@ If the ST-hosting device is on the same wifi network, you will use the ST-host's
 
 If you (or someone else) want to connect to your hosted ST while not being on the same network, you will need the public IP of your ST-hosting device.
 
-* While using the ST-hosting device, access [this page](https://whatismyipaddress.com/) and look for for `IPv4`. This is what you would use to connect from the remote device.
+* While using the ST-hosting device, access [this page](https://whatismyipaddress.com/) and look for `IPv4`. This is what you would use to connect from the remote device.
 
 ### 3. Connect the remote device to the ST host machine
 
@@ -265,19 +273,19 @@ Use http:// NOT https://
 
 ### Opening your ST to all IPs
 
-We do not recommend doing this, but you can open `config.conf` and change `whitelist` to `false`.
+We do not recommend doing this, but you can open `config.yaml` and change `whitelistMode` to `false`.
 
 You must remove (or rename) `whitelist.txt` in the SillyTavern base install folder if it exists.
 
 This is usually an insecure practice, so we require you to set a username and password when you do this.
 
-The username and password are set in `config.conf`.
+The username and password are set in `config.yaml`.
 
 After restarting your ST server, any device will be able to connect to it, regardless of their IP as long as they know the username and password.
 
 ### Still Unable To Connect?
 
-* Create an inbound/outbound firewall rule for the port found in `config.conf`. Do NOT mistake this for port-forwarding on your router, otherwise, someone could find your chat logs and that's a big no-no.
+* Create an inbound/outbound firewall rule for the port found in `config.yaml`. Do NOT mistake this for port-forwarding on your router, otherwise, someone could find your chat logs and that's a big no-no.
 * Enable the Private Network profile type in Settings > Network and Internet > Ethernet. This is VERY important for Windows 11, otherwise, you would be unable to connect even with the aforementioned firewall rules.
 
 ## Performance issues?

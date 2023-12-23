@@ -133,9 +133,7 @@ function registerEndpoints(app, jsonParser, urlencodedParser) {
         catch (err) {
             console.log(err);
         }
-        finally {
-            return response.send(sprites);
-        }
+        return response.send(sprites);
     });
 
     app.post('/api/sprites/delete', jsonParser, async (request, response) => {
@@ -266,4 +264,4 @@ function registerEndpoints(app, jsonParser, urlencodedParser) {
 module.exports = {
     registerEndpoints,
     importRisuSprites,
-}
+};

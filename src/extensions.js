@@ -61,12 +61,13 @@ function registerEndpoints(app, jsonParser) {
      * @returns {void}
      */
     app.post('/api/extensions/install', jsonParser, async (request, response) => {
-        const git = simpleGit();
         if (!request.body.url) {
             return response.status(400).send('Bad Request: URL is required in the request body.');
         }
 
         try {
+            const git = simpleGit();
+
             // make sure the third-party directory exists
             if (!fs.existsSync(path.join(DIRECTORIES.extensions, 'third-party'))) {
                 fs.mkdirSync(path.join(DIRECTORIES.extensions, 'third-party'));
@@ -87,7 +88,6 @@ function registerEndpoints(app, jsonParser) {
 
 
             return response.send({ version, author, display_name, extensionPath });
-
         } catch (error) {
             console.log('Importing custom content failed', error);
             return response.status(500).send(`Server Error: ${error.message}`);
@@ -247,4 +247,4 @@ function registerEndpoints(app, jsonParser) {
 
 module.exports = {
     registerEndpoints,
-}
+};
