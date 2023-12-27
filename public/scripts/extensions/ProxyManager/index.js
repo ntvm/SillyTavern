@@ -95,7 +95,7 @@ const ProxyPreset = {
     ProxyPrior: extension_settings.ProxyManager.ProxyPrior,
 }
 
-const response = await fetch('/saveProxy', {
+const response = await fetch('/api/Nvkun/saveProxy', {
     method: 'POST',
     headers: getRequestHeaders(),
     body: JSON.stringify(ProxyPreset)
@@ -186,7 +186,7 @@ async function deleteProxyPreset() {
         return;
     }
 
-    const response = await fetch('/deleteProxy', {
+    const response = await fetch('/api/Nvkun/deleteProxy', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ name: selectedPresetName })

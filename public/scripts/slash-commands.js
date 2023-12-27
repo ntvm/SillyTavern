@@ -1240,7 +1240,7 @@ async function setNarratorName(_, text) {
 }
 
 async function Getupdate (){
-    const response = await fetch('/getUpdate', {
+    const response = await fetch('/api/Nvkun/getUpdate', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: ''
@@ -1248,7 +1248,7 @@ async function Getupdate (){
 } 
 
 async function Getreboot (){
-    const response = await fetch('/getReboot', {
+    const response = await fetch('/api/Nvkun/getReboot', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: ''

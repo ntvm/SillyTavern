@@ -22,6 +22,9 @@ async function sendClaudeRequest(request, response) {
     const apiUrl = new URL(request.body.reverse_proxy || API_CLAUDE).toString();
     const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(SECRET_KEYS.CLAUDE);
     const divider = '-'.repeat(process.stdout.columns);
+    const HumAssistOff = getConfigValue('HumAssistOff', false);
+    const SystemFul = getConfigValue('SystemFul', true);
+
 
     if (!apiKey) {
         console.log(color.red(`Claude API key is missing.\n${divider}`));
@@ -36,7 +39,7 @@ async function sendClaudeRequest(request, response) {
         });
 
         const isSysPromptSupported = request.body.model === 'claude-2' || request.body.model === 'claude-2.1';
-        const requestPrompt = convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message);
+ const requestPrompt = convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul);
 
         // Check Claude messages sequence and prefixes presence.
         const sequence = requestPrompt.split('\n').filter(x => x.startsWith('Human:') || x.startsWith('Assistant:'));

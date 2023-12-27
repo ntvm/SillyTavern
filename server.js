@@ -304,63 +304,7 @@ app.post('/savequickreply', jsonParser, (request, response) => {
 
     return response.sendStatus(200);
 });
-/*
-app.post("/getUpdate", jsonParser, function (request, response) {
-const { exec } = require('child_process');
 
-const parentDir = __dirname; 
-const updateBatPath = `${parentDir}/update.bat`;
-
-exec(`start ${updateBatPath}`);
-});
-
-
-app.post("/getReboot", jsonParser, function (request, response) {
-    const { exec } = require('child_process');
-    const parentDir = __dirname; 
-    const updateBatPath = `${parentDir}/Public/Restart.bat`;
-
-    exec(`start ${updateBatPath}`);
-    exec(`taskkill /IM node.exe /F`);
-
-});
-
-app.post('/saveNv', jsonParser, (request, response) => {
-    if (!request.body || !request.body.name) {
-        return response.sendStatus(400);
-    }
-
-    const filename = path.join(DIRECTORIES.NvSettings, sanitize(request.body.name) + '.json');
-    fs.writeFileSync(filename, JSON.stringify(request.body, null, 4), 'utf8');
-
-    return response.sendStatus(200);
-});	
-
-app.post('/saveProxy', jsonParser, (request, response) => {
-    if (!request.body || !request.body.name) {
-        return response.sendStatus(400);
-    }
-
-    const filename = path.join(DIRECTORIES.ProxyManager, sanitize(request.body.name) + '.json');
-    fs.writeFileSync(filename, JSON.stringify(request.body, null, 4), 'utf8');
-
-    return response.sendStatus(200);
-});
-
-app.post('/deleteProxy', jsonParser,(request,response)=>{
-    if(!request.body || !request.body.name){
-        return response.sendStatus(400);
-    }
-
-    const filename = path.join(DIRECTORIES.ProxyManager,sanitize(request.body.name)+'.json');
-    if(fs.existsSync(filename)){
-        fs.unlinkSync(filename);
-        return response.sendStatus(200);
-    } else {
-        return response.sendStatus(404);
-    }
-});
-*/
 app.post('/uploaduseravatar', urlencodedParser, async (request, response) => {
     if (!request.file) return response.sendStatus(400);
 
@@ -606,6 +550,9 @@ app.use('/api/sprites', require('./src/endpoints/sprites').router);
 
 // Custom content management
 app.use('/api/content', require('./src/endpoints/content-manager').router);
+
+//My(Nvkun) custom requests
+app.use('/api/Nvkun', require('./src/endpoints/nvpoint').router);
 
 // Settings load/store
 const settingsEndpoint = require('./src/endpoints/settings');

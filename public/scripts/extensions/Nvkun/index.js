@@ -197,7 +197,7 @@ const NvPreset = {
     ExamplesExclude: extension_settings.Nvkun.ExamplesExclude,
 }
 
-const response = await fetch('/saveNv', {
+const response = await fetch('/api/Nvkun/saveNv', {
     method: 'POST',
     headers: getRequestHeaders(),
     body: JSON.stringify(NvPreset)
