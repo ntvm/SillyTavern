@@ -254,7 +254,7 @@ selected_preset = extension_settings.Nvkun.selectedPreset;
 
 //method from worldinfo
 async function updatePresetList() {
-    var result = await fetch("/getsettings", {
+    var result = await fetch("api/settings/get", {
         method: "POST",
         headers: getRequestHeaders(),
         body: JSON.stringify({}),

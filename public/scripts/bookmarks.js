@@ -42,7 +42,7 @@ async function getExistingChatNames() {
         const data = await getGroupPastChats(selected_group);
         return data.map(x => x.file_name);
     } else {
-        const response = await fetch('/getallchatsofcharacter', {
+        const response = await fetch('/api/characters/chats', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify({ avatar_url: characters[this_chid].avatar }),
@@ -237,6 +237,12 @@ async function convertSoloToGroupChat() {
         return;
     }
 
+    const confirm = await callPopup('Are you sure you want to convert this chat to a group chat?', 'confirm');
+
+    if (!confirm) {
+        return;
+    }
+
     const character = characters[this_chid];
 
     // Populate group required fields
@@ -251,7 +257,7 @@ async function convertSoloToGroupChat() {
     const metadata = Object.assign({}, chat_metadata);
     delete metadata.main_chat;
 
-    const createGroupResponse = await fetch('/creategroup', {
+    const createGroupResponse = await fetch('/api/groups/create', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({
@@ -320,7 +326,7 @@ async function convertSoloToGroupChat() {
     }
 
     // Save group chat
-    const createChatResponse = await fetch('/savegroupchat', {
+    const createChatResponse = await fetch('/api/chats/group/save', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ id: chatName, chat: groupChat }),

@@ -3,7 +3,7 @@ import { download, debounce, initScrollHeight, resetScrollHeight, parseJsonFile,
 import { extension_settings, getContext } from './extensions.js';
 import { NOTE_MODULE_NAME, metadata_keys, shouldWIAddPrompt } from './authors-note.js';
 import { registerSlashCommand } from './slash-commands.js';
-import { getDeviceInfo } from './RossAscends-mods.js';
+import { isMobile } from './RossAscends-mods.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
 import { getTokenCount } from './tokenizers.js';
 import { power_user } from './power-user.js';
@@ -33,6 +33,12 @@ const world_info_insertion_strategy = {
     evenly: 0,
     character_first: 1,
     global_first: 2,
+};
+
+const world_info_logic = {
+    AND_ANY: 0,
+    NOT_ALL: 1,
+    NOT_ANY: 2,
 };
 
 let world_info = {};
@@ -289,7 +295,7 @@ function registerWorldInfoSlashCommands() {
             return '';
         }
 
-        const entry = entries.find(x => x.uid === uid);
+        const entry = entries.find(x => String(x.uid) === String(uid));
 
         if (!entry) {
             toastr.warning('Valid UID is required');
@@ -418,7 +424,7 @@ async function loadWorldInfoData(name) {
         return worldInfoCache[name];
     }
 
-    const response = await fetch('/getworldinfo', {
+    const response = await fetch('/api/worldinfo/get', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ name: name }),
@@ -435,7 +441,7 @@ async function loadWorldInfoData(name) {
 }
 
 async function updateWorldInfoList() {
-    const result = await fetch('/getsettings', {
+    const result = await fetch('/api/settings/get', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
@@ -843,7 +849,7 @@ function getWorldEntry(name, data, entry) {
         const uid = $(this).data('uid');
         const value = Number($(this).val());
         console.debug(`logic for ${entry.uid} set to ${value}`);
-        data.entries[uid].selectiveLogic = !isNaN(value) ? value : 0;
+        data.entries[uid].selectiveLogic = !isNaN(value) ? value : world_info_logic.AND_ANY;
         setOriginalDataValue(data, uid, 'selectiveLogic', data.entries[uid].selectiveLogic);
         saveWorldInfo(name, data);
     });
@@ -890,8 +896,8 @@ function getWorldEntry(name, data, entry) {
 
     const characterFilter = template.find('select[name="characterFilter"]');
     characterFilter.data('uid', entry.uid);
-    const deviceInfo = getDeviceInfo();
-    if (deviceInfo && deviceInfo.device.type === 'desktop') {
+
+    if (!isMobile()) {
         $(characterFilter).select2({
             width: '100%',
             placeholder: 'All characters will pull from this entry.',
@@ -1095,6 +1101,19 @@ function getWorldEntry(name, data, entry) {
     });
     orderInput.val(entry.order).trigger('input');
     orderInput.css('width', 'calc(3em + 15px)');
+
+    // group
+    const groupInput = template.find('input[name="group"]');
+    groupInput.data('uid', entry.uid);
+    groupInput.on('input', function () {
+        const uid = $(this).data('uid');
+        const value = String($(this).val()).trim();
+
+        data.entries[uid].group = value;
+        setOriginalDataValue(data, uid, 'extensions.group', data.entries[uid].group);
+        saveWorldInfo(name, data);
+    });
+    groupInput.val(entry.group ?? '').trigger('input');
 
     // probability
     if (entry.probability === undefined) {
@@ -1365,7 +1384,7 @@ const newEntryTemplate = {
     content: '',
     constant: false,
     selective: true,
-    selectiveLogic: 0,
+    selectiveLogic: world_info_logic.AND_ANY,
     addMemo: false,
     order: 100,
     position: 0,
@@ -1374,6 +1393,7 @@ const newEntryTemplate = {
     probability: 100,
     useProbability: true,
     depth: DEFAULT_DEPTH,
+    group: '',
 };
 
 function createWorldInfoEntry(name, data, fromSlashCommand = false) {
@@ -1395,7 +1415,7 @@ function createWorldInfoEntry(name, data, fromSlashCommand = false) {
 }
 
 async function _save(name, data) {
-    await fetch('/editworldinfo', {
+    await fetch('/api/worldinfo/edit', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ name: name, data: data }),
@@ -1457,7 +1477,7 @@ async function deleteWorldInfo(worldInfoName) {
         return;
     }
 
-    const response = await fetch('/deleteworldinfo', {
+    const response = await fetch('/api/worldinfo/delete', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ name: worldInfoName }),
@@ -1664,19 +1684,12 @@ async function checkWorldInfo(chat, maxContext) {
 
     // Add the depth or AN if enabled
     // Put this code here since otherwise, the chat reference is modified
-    if (extension_settings.note.allowWIScan) {
-        for (const key of Object.keys(context.extensionPrompts)) {
-            if (key.startsWith('DEPTH_PROMPT')) {
-                const depthPrompt = getExtensionPromptByName(key);
-                if (depthPrompt) {
-                    textToScan = `${depthPrompt}\n${textToScan}`;
-                }
+    for (const key of Object.keys(context.extensionPrompts)) {
+        if (context.extensionPrompts[key]?.scan) {
+            const prompt = getExtensionPromptByName(key);
+            if (prompt) {
+                textToScan = `${prompt}\n${textToScan}`;
             }
-        }
-
-        const anPrompt = getExtensionPromptByName(NOTE_MODULE_NAME);
-        if (anPrompt) {
-            textToScan = `${anPrompt}\n${textToScan}`;
         }
     }
 
@@ -1758,53 +1771,58 @@ async function checkWorldInfo(chat, maxContext) {
             if (Array.isArray(entry.key) && entry.key.length) { //check for keywords existing
                 // If selectiveLogic isn't found, assume it's AND, only do this once per entry
                 const selectiveLogic = entry.selectiveLogic ?? 0;
-                let notFlag = true;
+
                 primary: for (let key of entry.key) {
                     const substituted = substituteParams(key);
+
                     console.debug(`${entry.uid}: ${substituted}`);
+
                     if (substituted && matchKeys(textToScan, substituted.trim())) {
-                        console.debug(`${entry.uid}: got primary match`);
+                        console.debug(`WI UID ${entry.uid} found by primary match: ${substituted}.`);
+
                         //selective logic begins
                         if (
                             entry.selective && //all entries are selective now
                             Array.isArray(entry.keysecondary) && //always true
                             entry.keysecondary.length //ignore empties
                         ) {
-                            console.debug(`uid:${entry.uid}: checking logic: ${entry.selectiveLogic}`);
+                            console.debug(`WI UID:${entry.uid} found. Checking logic: ${entry.selectiveLogic}`);
+                            let hasAnyMatch = false;
                             secondary: for (let keysecondary of entry.keysecondary) {
                                 const secondarySubstituted = substituteParams(keysecondary);
-                                console.debug(`uid:${entry.uid}: filtering ${secondarySubstituted}`);
-                                //AND operator
-                                if (selectiveLogic === 0) {
-                                    console.debug('saw AND logic, checking..');
-                                    if (secondarySubstituted && matchKeys(textToScan, secondarySubstituted.trim())) {
-                                        console.debug(`activating entry ${entry.uid} with AND found`);
-                                        activatedNow.add(entry);
-                                        break secondary;
-                                    }
+                                const hasSecondaryMatch = secondarySubstituted && matchKeys(textToScan, secondarySubstituted.trim());
+                                console.debug(`WI UID:${entry.uid}: Filtering for secondary keyword - "${secondarySubstituted}".`);
+
+                                if (hasSecondaryMatch) {
+                                    hasAnyMatch = true;
                                 }
-                                //NOT operator
-                                if (selectiveLogic === 1) {
-                                    console.debug(`uid ${entry.uid}: checking NOT logic for ${secondarySubstituted}`);
-                                    if (secondarySubstituted && matchKeys(textToScan, secondarySubstituted.trim())) {
-                                        console.debug(`uid ${entry.uid}: canceled; filtered out by ${secondarySubstituted}`);
-                                        notFlag = false;
-                                        break primary;
+
+                                // Simplified AND ANY / NOT ALL if statement. (Proper fix for PR#1356 by Bronya)
+                                // If AND ANY logic and the main checks pass OR if NOT ALL logic and the main checks do not pass
+                                if ((selectiveLogic === world_info_logic.AND_ANY && hasSecondaryMatch) || (selectiveLogic === world_info_logic.NOT_ALL && !hasSecondaryMatch)) {
+                                    // Differ both logic statements in the debugger
+                                    if (selectiveLogic === world_info_logic.AND_ANY) {
+                                        console.debug(`(AND ANY Check) Activating WI Entry ${entry.uid}. Found match for word: ${substituted} ${secondarySubstituted}`);
+                                    } else {
+                                        console.debug(`(NOT ALL Check) Activating WI Entry ${entry.uid}. Found match for word "${substituted}" without secondary keyword: ${secondarySubstituted}`);
                                     }
+                                    activatedNow.add(entry);
+                                    break secondary;
                                 }
                             }
-                            //handle cases where secondary is empty
+
+                            // Handle NOT ANY logic
+                            if (selectiveLogic === world_info_logic.NOT_ANY && !hasAnyMatch) {
+                                console.debug(`(NOT ANY Check) Activating WI Entry ${entry.uid}, no secondary keywords found.`);
+                                activatedNow.add(entry);
+                            }
                         } else {
-                            console.debug(`uid ${entry.uid}: activated without filter logic`);
+                            // Handle cases where secondary is empty
+                            console.debug(`WI UID ${entry.uid}: Activated without filter logic.`);
                             activatedNow.add(entry);
                             break primary;
                         }
-                    } else { console.debug('no active entries for logic checks yet'); }
-                }
-                //for a NOT all entries must be checked, a single match invalidates activation
-                if (selectiveLogic === 1 && notFlag) {
-                    console.debug(`${entry.uid}: activated; passed NOT filter`);
-                    activatedNow.add(entry);
+                    } else { console.debug(`No active entries for logic checks for word: ${substituted}.`); }
                 }
             }
         }
@@ -1815,10 +1833,12 @@ async function checkWorldInfo(chat, maxContext) {
         let newContent = '';
         const textToScanTokens = getTokenCount(allActivatedText);
         const probabilityChecksBefore = failedProbabilityChecks.size;
+
+        filterByInclusionGroups(newEntries, allActivatedEntries);
+
         console.debug('-- PROBABILITY CHECKS BEGIN --');
         for (const entry of newEntries) {
             const rollValue = Math.random() * 100;
-
 
             if (entry.useProbability && rollValue > entry.probability) {
                 console.debug(`WI entry ${entry.uid} ${entry.key} failed probability check, skipping`);
@@ -1921,10 +1941,76 @@ async function checkWorldInfo(chat, maxContext) {
     if (shouldWIAddPrompt) {
         const originalAN = context.extensionPrompts[NOTE_MODULE_NAME].value;
         const ANWithWI = `${ANTopEntries.join('\n')}\n${originalAN}\n${ANBottomEntries.join('\n')}`;
-        context.setExtensionPrompt(NOTE_MODULE_NAME, ANWithWI, chat_metadata[metadata_keys.position], chat_metadata[metadata_keys.depth]);
+        context.setExtensionPrompt(NOTE_MODULE_NAME, ANWithWI, chat_metadata[metadata_keys.position], chat_metadata[metadata_keys.depth], extension_settings.note.allowWIScan);
     }
 
     return { worldInfoBefore, worldInfoAfter, WIDepthEntries };
+}
+
+/**
+ * Filters entries by inclusion groups.
+ * @param {object[]} newEntries Entries activated on current recursion level
+ * @param {Set<object>} allActivatedEntries Set of all activated entries
+ */
+function filterByInclusionGroups(newEntries, allActivatedEntries) {
+    console.debug('-- INCLUSION GROUP CHECKS BEGIN --');
+    const grouped = newEntries.filter(x => x.group).reduce((acc, item) => {
+        if (!acc[item.group]) {
+            acc[item.group] = [];
+        }
+        acc[item.group].push(item);
+        return acc;
+    }, {});
+
+    if (Object.keys(grouped).length === 0) {
+        console.debug('No inclusion groups found');
+        return;
+    }
+
+    for (const [key, group] of Object.entries(grouped)) {
+        console.debug(`Checking inclusion group '${key}' with ${group.length} entries`, group);
+
+        if (!Array.isArray(group) || group.length <= 1) {
+            console.debug('Skipping inclusion group check, only one entry');
+            continue;
+        }
+
+        if (Array.from(allActivatedEntries).some(x => x.group === key)) {
+            console.debug(`Skipping inclusion group check, group already activated '${key}'`);
+            continue;
+        }
+
+        // Do weighted random using probability of entry as weight
+        const totalWeight = group.reduce((acc, item) => acc + item.probability, 0);
+        const rollValue = Math.random() * totalWeight;
+        let currentWeight = 0;
+        let winner = null;
+
+        for (const entry of group) {
+            currentWeight += entry.probability;
+
+            if (rollValue <= currentWeight) {
+                console.debug(`Activated inclusion group '${key}' with entry '${entry.uid}'`, entry);
+                winner = entry;
+                break;
+            }
+        }
+
+        if (!winner) {
+            console.debug(`Failed to activate inclusion group '${key}', no winner found`);
+            continue;
+        }
+
+        // Remove every group item from newEntries but the winner
+        for (const entry of group) {
+            if (entry === winner) {
+                continue;
+            }
+
+            console.debug(`Removing loser from inclusion group '${key}' entry '${entry.uid}'`, entry);
+            newEntries.splice(newEntries.indexOf(entry), 1);
+        }
+    }
 }
 
 function matchKeys(haystack, needle) {
@@ -1962,6 +2048,7 @@ function convertAgnaiMemoryBook(inputObj) {
             content: entry.entry,
             constant: false,
             selective: false,
+            selectiveLogic: world_info_logic.AND_ANY,
             order: entry.weight,
             position: 0,
             disable: !entry.enabled,
@@ -1970,6 +2057,7 @@ function convertAgnaiMemoryBook(inputObj) {
             displayIndex: index,
             probability: null,
             useProbability: false,
+            group: '',
         };
     });
 
@@ -1988,6 +2076,7 @@ function convertRisuLorebook(inputObj) {
             content: entry.content,
             constant: entry.alwaysActive,
             selective: entry.selective,
+            selectiveLogic: world_info_logic.AND_ANY,
             order: entry.insertorder,
             position: world_info_position.before,
             disable: false,
@@ -1996,6 +2085,7 @@ function convertRisuLorebook(inputObj) {
             displayIndex: index,
             probability: entry.activationPercent ?? null,
             useProbability: entry.activationPercent ?? false,
+            group: '',
         };
     });
 
@@ -2019,6 +2109,7 @@ function convertNovelLorebook(inputObj) {
             content: entry.text,
             constant: false,
             selective: false,
+            selectiveLogic: world_info_logic.AND_ANY,
             order: entry.contextConfig?.budgetPriority ?? 0,
             position: 0,
             disable: !entry.enabled,
@@ -2027,6 +2118,7 @@ function convertNovelLorebook(inputObj) {
             displayIndex: index,
             probability: null,
             useProbability: false,
+            group: '',
         };
     });
 
@@ -2059,7 +2151,8 @@ function convertCharacterBook(characterBook) {
             probability: entry.extensions?.probability ?? null,
             useProbability: entry.extensions?.useProbability ?? false,
             depth: entry.extensions?.depth ?? DEFAULT_DEPTH,
-            selectiveLogic: entry.extensions?.selectiveLogic ?? 0,
+            selectiveLogic: entry.extensions?.selectiveLogic ?? world_info_logic.AND_ANY,
+            group: entry.extensions?.group ?? '',
         };
     });
 
@@ -2250,7 +2343,7 @@ export async function importWorldInfo(file) {
 
     jQuery.ajax({
         type: 'POST',
-        url: '/importworldinfo',
+        url: '/api/worldinfo/import',
         data: formData,
         beforeSend: () => { },
         cache: false,
@@ -2458,8 +2551,7 @@ jQuery(() => {
     $(document).on('click', '.chat_lorebook_button', assignLorebookToChat);
 
     // Not needed on mobile
-    const deviceInfo = getDeviceInfo();
-    if (deviceInfo && deviceInfo.device.type === 'desktop') {
+    if (!isMobile()) {
         $('#world_info').select2({
             width: '100%',
             placeholder: 'No Worlds active. Click here to select.',
