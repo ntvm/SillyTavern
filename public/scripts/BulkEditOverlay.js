@@ -7,9 +7,9 @@ import {
     event_types,
     eventSource,
     getCharacters,
+    getPastCharacterChats,
     getRequestHeaders,
     printCharacters,
-    this_chid,
 } from '../script.js';
 
 import { favsToHotswap } from './RossAscends-mods.js';
@@ -53,7 +53,7 @@ class CharacterContextMenu {
     static duplicate = async (characterId) => {
         const character = CharacterContextMenu.#getCharacter(characterId);
 
-        return fetch('/dupecharacter', {
+        return fetch('/api/characters/duplicate', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify({ avatar_url: character.avatar }),
@@ -69,30 +69,31 @@ class CharacterContextMenu {
      */
     static favorite = async (characterId) => {
         const character = CharacterContextMenu.#getCharacter(characterId);
+        const newFavState = !character.data.extensions.fav;
 
-        // Only set fav for V2 spec
         const data = {
             name: character.name,
             avatar: character.avatar,
             data: {
                 extensions: {
-                    fav: !character.data.extensions.fav,
+                    fav: newFavState,
                 },
             },
+            fav: newFavState,
         };
 
-        return fetch('/v2/editcharacterattribute', {
+        const mergeResponse = await fetch('/api/characters/merge-attributes', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify(data),
-        }).then((response) => {
-            if (response.ok) {
-                const element = document.getElementById(`CharID${characterId}`);
-                element.classList.toggle('is_fav');
-            } else {
-                response.json().then(json => toastr.error('Character not saved. Error: ' + json.message + '. Field: ' + json.error));
-            }
         });
+
+        if (!mergeResponse.ok) {
+            mergeResponse.json().then(json => toastr.error(`Character not saved. Error: ${json.message}. Field: ${json.error}`));
+        }
+
+        const element = document.getElementById(`CharID${characterId}`);
+        element.classList.toggle('is_fav');
     };
 
     /**
@@ -115,34 +116,23 @@ class CharacterContextMenu {
     static delete = async (characterId, deleteChats = false) => {
         const character = CharacterContextMenu.#getCharacter(characterId);
 
-        return fetch('/deletecharacter', {
+        return fetch('/api/characters/delete', {
             method: 'POST',
             headers: getRequestHeaders(),
             body: JSON.stringify({ avatar_url: character.avatar, delete_chats: deleteChats }),
             cache: 'no-cache',
         }).then(response => {
             if (response.ok) {
-                deleteCharacter(character.name, character.avatar).then(() => {
-                    if (deleteChats) {
-                        fetch('/getallchatsofcharacter', {
-                            method: 'POST',
-                            body: JSON.stringify({ avatar_url: character.avatar }),
-                            headers: getRequestHeaders(),
-                        }).then((response) => {
-                            let data = response.json();
-                            data = Object.values(data);
-                            const pastChats = data.sort((a, b) => a['file_name'].localeCompare(b['file_name'])).reverse();
-
-                            for (const chat of pastChats) {
-                                const name = chat.file_name.replace('.jsonl', '');
-                                eventSource.emit(event_types.CHAT_DELETED, name);
-                            }
-                        });
-                    }
+                return deleteCharacter(character.name, character.avatar, false).then(() => {
+                    eventSource.emit('characterDeleted', { id: characterId, character: characters[characterId] });
+                    if (deleteChats) getPastCharacterChats(characterId).then(pastChats => {
+                        for (const chat of pastChats) {
+                            const name = chat.file_name.replace('.jsonl', '');
+                            eventSource.emit(event_types.CHAT_DELETED, name);
+                        }
+                    });
                 });
             }
-
-            eventSource.emit('characterDeleted', { id: this_chid, character: characters[this_chid] });
         });
     };
 
@@ -484,7 +474,7 @@ class BulkEditOverlay {
             this.container.removeEventListener('mouseup', cancelHold);
             this.container.removeEventListener('touchend', cancelHold);
         },
-        BulkEditOverlay.longPressDelay);
+            BulkEditOverlay.longPressDelay);
     };
 
     handleLongPressEnd = (event) => {
@@ -529,7 +519,7 @@ class BulkEditOverlay {
 
     #getEnabledElements = () => [...this.container.getElementsByClassName(BulkEditOverlay.characterClass)];
 
-    #getDisabledElements = () =>[...this.container.getElementsByClassName(BulkEditOverlay.groupClass), ...this.container.getElementsByClassName(BulkEditOverlay.bogusFolderClass)];
+    #getDisabledElements = () => [...this.container.getElementsByClassName(BulkEditOverlay.groupClass), ...this.container.getElementsByClassName(BulkEditOverlay.bogusFolderClass)];
 
     toggleCharacterSelected = event => {
         event.stopPropagation();
@@ -572,12 +562,20 @@ class BulkEditOverlay {
     /**
      * Concurrently handle character favorite requests.
      *
-     * @returns {Promise<number>}
+     * @returns {Promise<void>}
      */
-    handleContextMenuFavorite = () => Promise.all(this.selectedCharacters.map(async characterId => CharacterContextMenu.favorite(characterId)))
-        .then(() => getCharacters())
-        .then(() => favsToHotswap())
-        .then(() => this.browseState());
+    handleContextMenuFavorite = async () => {
+        const promises = [];
+
+        for (const characterId of this.selectedCharacters) {
+            promises.push(CharacterContextMenu.favorite(characterId));
+        }
+
+        await Promise.allSettled(promises);
+        await getCharacters();
+        await favsToHotswap();
+        this.browseState();
+    };
 
     /**
      * Concurrently handle character duplicate requests.
@@ -617,12 +615,11 @@ class BulkEditOverlay {
 
                 showLoader();
                 toastr.info('We\'re deleting your characters, please wait...', 'Working on it');
-                Promise.all(this.selectedCharacters.map(async characterId => CharacterContextMenu.delete(characterId, deleteChats)))
+                Promise.allSettled(this.selectedCharacters.map(async characterId => CharacterContextMenu.delete(characterId, deleteChats)))
                     .then(() => getCharacters())
                     .then(() => this.browseState())
                     .finally(() => hideLoader());
-            },
-            );
+            });
     };
 
     /**

@@ -95,7 +95,7 @@ const ProxyPreset = {
     ProxyPrior: extension_settings.ProxyManager.ProxyPrior,
 }
 
-const response = await fetch('/saveProxy', {
+const response = await fetch('/api/Nvkun/saveProxy', {
     method: 'POST',
     headers: getRequestHeaders(),
     body: JSON.stringify(ProxyPreset)
@@ -152,7 +152,7 @@ selected_preset = extension_settings.ProxyManager.selectedPreset;
 
 //method from worldinfo
 async function updatePresetList() {
-    var result = await fetch("/getsettings", {
+    var result = await fetch("api/settings/get", {
         method: "POST",
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
@@ -186,7 +186,7 @@ async function deleteProxyPreset() {
         return;
     }
 
-    const response = await fetch('/deleteProxy', {
+    const response = await fetch('/api/Nvkun/deleteProxy', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ name: selectedPresetName })

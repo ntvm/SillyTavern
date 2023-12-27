@@ -12,7 +12,7 @@ module.exports = {
     overrides: [
         {
             // Server-side files (plus this configuration file)
-            files: ['src/**/*.js', 'server.js', '.eslintrc.js'],
+            files: ['src/**/*.js', './*.js', 'plugins/**/*.js'],
             env: {
                 node: true,
             },
@@ -58,6 +58,8 @@ module.exports = {
         'comma-dangle': ['error', 'always-multiline'],
         'eol-last': ['error', 'always'],
         'no-trailing-spaces': 'error',
+        'object-curly-spacing': ['error', 'always'],
+        'space-infix-ops': 'error',
 
         // These rules should eventually be enabled.
         'no-async-promise-executor': 'off',

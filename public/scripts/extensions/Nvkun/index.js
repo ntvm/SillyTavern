@@ -197,7 +197,7 @@ const NvPreset = {
     ExamplesExclude: extension_settings.Nvkun.ExamplesExclude,
 }
 
-const response = await fetch('/saveNv', {
+const response = await fetch('/api/Nvkun/saveNv', {
     method: 'POST',
     headers: getRequestHeaders(),
     body: JSON.stringify(NvPreset)
@@ -254,7 +254,7 @@ selected_preset = extension_settings.Nvkun.selectedPreset;
 
 //method from worldinfo
 async function updatePresetList() {
-    var result = await fetch("/getsettings", {
+    var result = await fetch("api/settings/get", {
         method: "POST",
         headers: getRequestHeaders(),
         body: JSON.stringify({}),

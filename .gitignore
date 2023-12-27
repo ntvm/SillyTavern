@@ -28,7 +28,8 @@ public/stats.json
 public/settings.json
 /thumbnails
 whitelist.txt
-.vscode
+.vscode/**
+!.vscode/extensions.json
 .idea/
 secrets.json
 /dist
@@ -62,5 +63,5 @@ public/characters/Darkness.png
 public/characters/Megumin.png
 public/css/user.css
 public/ProxyManager/
-
 config.yaml
+/plugins/
