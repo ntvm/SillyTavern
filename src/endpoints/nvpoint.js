@@ -41,6 +41,9 @@ const {
     forwardFetchResponse,
 } = require('../util');
 
+
+const { DIRECTORIES, UPLOADS_PATH, AVATAR_WIDTH, AVATAR_HEIGHT } = require('../constants');
+
 const router = express.Router();
 
 
@@ -60,8 +63,6 @@ const router = express.Router();
 
 
 */
-
-
 
 router.post("/getUpdate", jsonParser, async(request, response) => {
 const { exec } = require('child_process');
