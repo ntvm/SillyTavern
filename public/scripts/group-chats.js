@@ -368,18 +368,21 @@ export function getGroupCharacterCards(groupId, characterId) {
 
         switch (character.name) {
             case '': 
-                var CharStart = "<" + member + ">"
-                var CharEnd = "</" + member + ">"
+                var CharStart = "<" + member + ">";
+                var CharEnd = "</" + member + ">";
+                var Chnnm = member;
                 break
 
             case undefined: 
-                var CharStart = "<" + member + ">"
-                var CharEnd = "</" + member + ">"
+                var CharStart = "<" + member + ">";
+                var CharEnd = "</" + member + ">";
+                var Chnm = member;
                 break
             
             default:
-                var CharStart = "<" + character.name + ">"
-                var CharEnd = "</" + character.name + ">"
+                var CharStart = "<" + character.name + ">";
+                var CharEnd = "</" + character.name + ">";
+                var Chnm = character.name;
                 break
         }
 
@@ -388,7 +391,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 descriptions.push('');
                 break;
             default:
-                descriptions.push(baseChatReplace('\n' + CharStart + '\n' + character.description.trim() + '\n' + CharEnd + '\n', name1, character.name));
+                descriptions.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + '\n' + character.description.trim() + '\n' + CharEnd + '\n- - -' + '\n', name1, character.name));
                 break;
         }
 
@@ -397,7 +400,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 personalities.push('');
                 break;
             default:
-                personalities.push(baseChatReplace(CharStart + '\n' + character.personality.trim()+ '\n' + CharEnd + '\n' , name1, character.name));
+                personalities.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + '\n' + character.personality.trim()+ '\n' + CharEnd + '\n- - -' + '\n' , name1, character.name));
                 break;
         }
 
@@ -406,7 +409,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 scenarios.push('');
                 break;
             default:
-                scenarios.push(baseChatReplace('\n' + CharStart + character.scenario.trim() + CharEnd + '\n', name1, character.name));
+                scenarios.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + character.scenario.trim() + CharEnd + '\n- - -' + '\n', name1, character.name));
                 break;
         }
 
@@ -415,7 +418,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 mesExamplesArray.push('');
                 break;
             default:
-                mesExamplesArray.push(baseChatReplace('\n' + CharStart + character.mes_example.trim() + CharEnd + '\n', name1, character.name));
+                mesExamplesArray.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + character.mes_example.trim() + CharEnd + '\n- - -' + '\n', name1, character.name));
                 break;
         }
 
