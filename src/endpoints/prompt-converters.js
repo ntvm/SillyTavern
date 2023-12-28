@@ -11,116 +11,6 @@
  */
 function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill, withSysPromptSupport, useSystemPrompt, addSysHumanMsg, HumAssistOff, SystemFul) {
 
-    // Claude doesn't support message names, so we'll just add them to the message content.
-    var requestPrompt;
-
-
-    let systemPrompt = '';
-    if (withSysPromptSupport && useSystemPrompt == true) {
-        let lastSystemIdx = -1;
-
-        for (let i = 0; i < messages.length - 1; i++) {
-            const message = messages[i];
-            if (message.role === 'system' && !message.name) {
-                systemPrompt += message.content + '\n\n';
-            } else {
-                lastSystemIdx = i - 1;
-                break;
-            }
-        }
-        if (lastSystemIdx >= 0) {
-            messages.splice(0, lastSystemIdx + 1);
-        }
-    }
-
-
-    switch (HumAssistOff) {
-        // If it is true, Now you won't had H and A
-        case true:
-            requestPrompt = ''
-
-            if (withSysPromptSupport && useSystemPrompt == true) {
-                requestPrompt = systemPrompt + requestPrompt;
-            }
-
-            requestPrompt = requestPrompt + messages.map((v) => {
-                return v.content+"\n\n";
-            }).join('');
-
-            if (addSysHumanMsg) {
-                requestPrompt = "\n\nHuman: " + requestPrompt;
-            }
-
-            if (addAssistantPostfix) {
-                requestPrompt = requestPrompt + '\n\nAssistant: ';
-            }
-
-            return requestPrompt;
-            break
-        // If it is false or anything else, use the RisuAI original code
-        default:
-            // Claude doesn't support message names, so we'll just add them to the message content.
-            for (const message of messages) {
-                if (message.name && message.role !== "system") {
-                    message.content = message.name + ": " + message.content;
-                    delete message.name;
-                }
-            }
-
-            requestPrompt = messages.map((v) => {
-                let prefix = '';
-                switch (v.role) {
-                    case "assistant":
-                        prefix = "\n\nAssistant: ";
-                        break
-                    case "user":
-                        prefix = "\n\nHuman: ";
-                        break
-                    case "system":
-                        // According to the Claude docs, H: and A: should be used for example conversations.
-                        if (v.name === "example_assistant") {
-                            prefix = "\n\nA: ";
-                        } else if (v.name === "example_user") {
-                            prefix = "\n\nH: ";
-                        } else {
-                            switch (SystemFul) {
-                                case true:
-                                    prefix = "\n\nSystem: ";
-                                    break
-                                default:
-                                    prefix = "\n\n";
-                                    break
-                            }
-                        }
-                        break
-                }
-                return prefix + v.content;
-            }).join('');
-            if (addSysHumanMsg) {
-                requestPrompt = addSysHumanMsg + requestPrompt;
-                break
-            }
-
-            if (addAssistantPostfix) {
-                requestPrompt = requestPrompt + '\n\nAssistant: ';
-            }
-
-            if (withSysPromptSupport && useSystemPrompt == true) {
-                requestPrompt = systemPrompt + requestPrompt;
-            }
-
-            if (addAssistantPrefill && addAssistantPrefill.length > 0) {
-                requestPrompt = requestPrompt + addAssistantPrefill;
-            }
-
-            return requestPrompt;
-
-        }
-}
-
-
-/*function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill, withSysPromptSupport, useSystemPrompt, addSysHumanMsg) {
-
     //Prepare messages for claude.
     if (messages.length > 0) {
         messages[0].role = 'system';
@@ -160,21 +50,53 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
     }
 
     // Convert messages to the prompt.
-    let requestPrompt = messages.map((v, i) => {
-        // Set prefix according to the role.
-        let prefix = {
-            'assistant': '\n\nAssistant: ',
-            'user': '\n\nHuman: ',
-            'system': i === 0 ? '' : v.name === 'example_assistant' ? '\n\nA: ' : v.name === 'example_user' ? '\n\nH: ' : '\n\n',
-            'FixHumMsg': '\n\nFirst message: ',
-        }[v.role] ?? '';
-        // Claude doesn't support message names, so we'll just add them to the message content.
-        return `${prefix}${v.name && v.role !== 'system' ? `${v.name}: ` : ''}${v.content}`;
-    }).join('');
+	switch (HumAssistOff) {
+        default:
+            var requestPrompt = messages.map((v, i) => {
+                // Set prefix according to the role.
+                let prefix = {
+                    'assistant': '\n\nAssistant: ',
+                    'user': '\n\nHuman: ',
+                    'system': i === 0 ? '' : v.name === 'example_assistant' ? '\n\nA: ' : v.name === 'example_user' ? '\n\nH: ' : (SystemFul ? '\n\nSystem: ' : '\n\n'),
+                    'FixHumMsg': '\n\nFirst message: ',
+                }[v.role] ?? '';
+                // Claude doesn't support message names, so we'll just add them to the message content.
+                return `${prefix}${v.name && v.role !== 'system' ? `${v.name}: ` : ''}${v.content}`;
+            }).join('');
+            return requestPrompt;
+        case true:
+		    var requestPrompt = ''
+            messages.pop()
 
-    return requestPrompt;
+            if (withSysPromptSupport && useSystemPrompt == true) {
+                var combinedMessage = '';
+                while (messages.length > 0 && messages[0].role === 'system') {
+                    combinedMessage += messages[0].content;
+                    messages.shift();
+                }
+
+                requestPrompt = requestPrompt + combinedMessage + "\n\nHuman: " + addSysHumanMsg;
+
+            } else {requestPrompt ='\n\nHuman:'};
+
+            requestPrompt = requestPrompt + messages.map((v) => {
+                return v.content+"\n\n";
+            }).join('');
+
+            if (addAssistantPostfix) {
+                requestPrompt = requestPrompt + '\n\nAssistant: ';
+            }
+
+            if (addAssistantPrefill) {
+                requestPrompt = requestPrompt + addAssistantPrefill;
+            }
+
+            return requestPrompt;
+	}
+//    I guess, this stuff is working
+
 }
-*/
+
 /**
  * Convert a prompt from the ChatML objects to the format used by Google MakerSuite models.
  * @param {object[]} messages Array of messages
