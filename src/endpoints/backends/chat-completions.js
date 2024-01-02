@@ -72,7 +72,8 @@ async function sendClaudeRequest(request, response) {
             console.log(color.red(`Incorrect "Human:" prefix(es): ${humanErrorCount}.\nIncorrect "Assistant: " prefix(es): ${assistantErrorCount}.`));
             console.log(color.red('Check the prompt above and fix it in the SillyTavern.'));
             console.log(color.red('\nThe correct sequence should look like this:\nSystem prompt  <-(for the sysprompt format only, else have 2 empty lines above the first human\'s  message.)'));
-            console.log(color.red(`       <-----(Each message beginning with the "Assistant:/Human:" prefix must have one empty line above.)\nHuman:\n\nAssistant:\n...\n\nHuman:\n\nAssistant:\n${divider}`));
+            console.log(color.red(`       <-----(Each message beginning with the "Assistant:/Human:" prefix must have one empty line above.)\nHuman:\n\nAssistant:\n...\n\nHuman:\n\nAssistant:`));
+            console.log(color.white(`\nWhile, most probably you searching for it in case, when claude send you internal error. Check, does you even changed your proxy or if it even work?\n${divider}`));
         }
 
         // Add custom stop sequences
@@ -92,7 +93,7 @@ async function sendClaudeRequest(request, response) {
             stream: request.body.stream,
         };
 
-        console.log('Claude request:', requestBody);
+        console.log('Claude request:', requestPrompt); //requestBody); I REALLY hate this green format
 
         const generateResponse = await fetch(apiUrl + '/complete', {
             method: 'POST',
