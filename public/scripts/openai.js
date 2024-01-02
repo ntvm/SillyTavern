@@ -241,6 +241,7 @@ const default_settings = {
     use_google_tokenizer: false,
     exclude_assistant: false,
     claude_use_sysprompt: false,
+    claude_exclude_prefixes: false,
     use_alt_scale: false,
     squash_system_messages: false,
     image_inlining: false,
@@ -311,6 +312,7 @@ const oai_settings = {
     use_google_tokenizer: false,
     exclude_assistant: false,
     claude_use_sysprompt: false,
+    claude_exclude_prefixes: false,
     use_alt_scale: false,
     squash_system_messages: false,
     image_inlining: false,
@@ -528,7 +530,10 @@ function setOpenAIMessageExamples(mesExamplesArray) {
  */
 function setupChatCompletionPromptManager(openAiSettings) {
     // Do not set up prompt manager more than once
-    if (promptManager) return promptManager;
+    if (promptManager) {
+        promptManager.render(false);
+        return promptManager;
+    }
 
     promptManager = new PromptManager();
 
@@ -1160,9 +1165,6 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
         prompts.set(jbReplacement, prompts.index('jailbreak'));
     }
 
-    // Allow subscribers to manipulate the prompts object
-    eventSource.emit(event_types.OAI_BEFORE_CHATCOMPLETION, prompts);
-
     return prompts;
 }
 
@@ -1719,6 +1721,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['exclude_assistant'] = oai_settings.exclude_assistant;
         generate_data['claude_use_sysprompt'] = oai_settings.claude_use_sysprompt;
+        generate_data['claude_exclude_prefixes'] = oai_settings.claude_exclude_prefixes;
         generate_data['stop'] = getCustomStoppingStrings(); // Claude shouldn't have limits on stop strings.
         generate_data['human_sysprompt_message'] = substituteParams(oai_settings.human_sysprompt_message);
         // Don't add a prefill on quiet gens (summarization)
@@ -2543,6 +2546,7 @@ function loadOpenAISettings(data, settings) {
     if (settings.use_google_tokenizer !== undefined) oai_settings.use_google_tokenizer = !!settings.use_google_tokenizer;
     if (settings.exclude_assistant !== undefined) oai_settings.exclude_assistant = !!settings.exclude_assistant;
     if (settings.claude_use_sysprompt !== undefined) oai_settings.claude_use_sysprompt = !!settings.claude_use_sysprompt;
+    if (settings.claude_exclude_prefixes !== undefined) oai_settings.claude_exclude_prefixes = !!settings.claude_exclude_prefixes;
     if (settings.use_alt_scale !== undefined) { oai_settings.use_alt_scale = !!settings.use_alt_scale; updateScaleForm(); }
     $('#stream_toggle').prop('checked', oai_settings.stream_openai);
     $('#api_url_scale').val(oai_settings.api_url_scale);
@@ -2582,6 +2586,7 @@ function loadOpenAISettings(data, settings) {
     $('#use_google_tokenizer').prop('checked', oai_settings.use_google_tokenizer);
     $('#exclude_assistant').prop('checked', oai_settings.exclude_assistant);
     $('#claude_use_sysprompt').prop('checked', oai_settings.claude_use_sysprompt);
+    $('#claude_exclude_prefixes').prop('checked', oai_settings.claude_exclude_prefixes);
     $('#scale-alt').prop('checked', oai_settings.use_alt_scale);
     $('#openrouter_use_fallback').prop('checked', oai_settings.openrouter_use_fallback);
     $('#openrouter_force_instruct').prop('checked', oai_settings.openrouter_force_instruct);
@@ -2797,6 +2802,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         use_google_tokenizer: settings.use_google_tokenizer,
         exclude_assistant: settings.exclude_assistant,
         claude_use_sysprompt: settings.claude_use_sysprompt,
+        claude_exclude_prefixes: settings.claude_exclude_prefixes,
         use_alt_scale: settings.use_alt_scale,
         squash_system_messages: settings.squash_system_messages,
         image_inlining: settings.image_inlining,
@@ -3170,6 +3176,7 @@ function onSettingsPresetChange() {
         use_google_tokenizer: ['#use_google_tokenizer', 'use_google_tokenizer', true],
         exclude_assistant: ['#exclude_assistant', 'exclude_assistant', true],
         claude_use_sysprompt: ['#claude_use_sysprompt', 'claude_use_sysprompt', true],
+        claude_exclude_prefixes: ['#claude_exclude_prefixes', 'claude_exclude_prefixes', true],
         use_alt_scale: ['#use_alt_scale', 'use_alt_scale', true],
         squash_system_messages: ['#squash_system_messages', 'squash_system_messages', true],
         image_inlining: ['#openai_image_inlining', 'image_inlining', true],
@@ -3894,6 +3901,11 @@ $(document).ready(async function () {
     $('#claude_use_sysprompt').on('change', function () {
         oai_settings.claude_use_sysprompt = !!$('#claude_use_sysprompt').prop('checked');
         $('#claude_human_sysprompt_message_block').toggle(oai_settings.claude_use_sysprompt);
+        saveSettingsDebounced();
+    });
+
+    $('#claude_exclude_prefixes').on('change', function () {
+        oai_settings.claude_exclude_prefixes = !!$('#claude_exclude_prefixes').prop('checked');
         saveSettingsDebounced();
     });
 

@@ -21,7 +21,8 @@ AlwaysCharnames (Теперь в отдельном меню расширени�
 
 Команды внутри чата таверны: /UpdateST - Обновить SillyTavern. /RebootST - Полная перезагрузка процесса таверны; 
 
-В корне Таверны, config.conf: HumAssistOff (Убирает'Human:' и 'Assistant' из таверны) выключен. P.S. Самый изначальный Human и Assistant в последнем сообщении Юзера убрать невозможно, ибо они необходимы для API;  
+В корне Таверны, config.conf: HumAssistOff (Убирает'Human:' и 'Assistant' из таверны) выключен. P.S. Самый изначальный Human и Assistant в последнем сообщении Юзера убрать невозможно, ибо они необходимы для API;  (Поправка. Недавно стало частью основного репозитория силами DonMoralez. Если ты это смотришь, пожалуйста, в следующий раз ОПОВЕСТИ меня о том, что хочешь внести в репозиторий что-то отсюда)
+
 Systemful (Возвращает роль System для Claude)(Работает только в режиме с присутствующими Humans и assistants) включено (Как выключить? В config.yaml (РЯДОМ С Start.bat) меняешь Systemful = true; на Systemful = false;); 
 
 В интерфейсе Summarize встроенная возможность переключть оригинальный Summarize и вариант Hints от XML-кунов (После апдейта на базе данного изменения У вас просто есть переключатель, чтобы использовать вариант XML кунов без возни с настройками, однако основной функционал остается.)
@@ -32,9 +33,10 @@ Systemful (Возвращает роль System для Claude)(Работает 
 
 В силу деятельности одного "Ддосадолботряска" который даже неудосужился посмотреть какие конкретно изменения в коде сделал XML кун чтобы избежать ддоса прокси. Примеры Hints теперь будут лежать в colab/readme.md
 
-----------------------
 
-English | [中文](readme-zh_cn.md)
+DonMoralez. If you're watching this, please NOTIFY me next time you want to contribute something from here to the main repository
+
+English | [中文](readme-zh_cn.md) | [日本語](readme-ja_jp.md)
 
 ![SillyTavern-Banner](https://github.com/SillyTavern/SillyTavern/assets/18619528/c2be4c3f-aada-4f64-87a3-ae35a68b61a4)
 
@@ -121,7 +123,7 @@ SillyTavern has extensibility support, with some additional AI modules hosted vi
 * Stable Diffusion image generation (5 chat-related presets plus 'free mode')
 * Text-to-speech for AI response messages (via ElevenLabs, Silero, or the OS's System TTS)
 
-A full list of included extensions and tutorials on how to use them can be found in the [Docs](https://docs.sillytavern.app/extras/extensions/).
+A full list of included extensions and tutorials on how to use them can be found in the [Docs](https://docs.sillytavern.app/).
 
 ## UI/CSS/Quality of Life tweaks by RossAscends
 
@@ -197,6 +199,17 @@ Installing via ZIP download (discouraged)
   5. Once the server has prepared everything for you, it will open a tab in your browser.
 
 ### Linux
+
+#### Unofficial Debian/Ubuntu PKGBUILD
+
+> **This installation method is unofficial and not supported by the project. Report any issues to the PKGBUILD maintainer.**  
+> The method is intended for Debian-based distributions (Ubuntu, Mint, etc).
+
+1. Install [makedeb](https://www.makedeb.org/).
+2. Ensure you have Node.js v18 or higher installed by running `node -v`. If you need to upgrade, you can install a [node.js repo](https://mpr.makedeb.org/packages/nodejs-repo) (you'll might need to edit the version inside the PKGBUILD). As an alternative, install and configure [nvm](https://mpr.makedeb.org/packages/nvm) to manage multiple node.js installations. Finally, you can [install node.js manually](https://nodejs.org/en/download), but you will need to update the PATH variable of your environment.
+3. Now build the [sillytavern package](https://mpr.makedeb.org/packages/sillytavern). The build needs to run with the correct node.js version.
+
+#### Manual
 
   1. Ensure you have Node.js v18 or higher (the latest [LTS version](https://nodejs.org/en/download/) is recommended) installed by running `node -v`.
 Alternatively, use the [Node Version Manager](https://github.com/nvm-sh/nvm#installing-and-updating) script to quickly and easily manage your Node installations.
