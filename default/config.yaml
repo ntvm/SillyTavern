@@ -20,7 +20,7 @@ enableCorsProxy: false
 securityOverride: false
 # -- ADVANCED CONFIGURATION --
 # Open the browser automatically
-autorun: true
+autorun: false
 # Disable thumbnail generation
 disableThumbnails: false
 # Thumbnail quality (0-100)
@@ -31,7 +31,7 @@ avatarThumbnailsPng: false
 # Allow secret keys exposure via API
 allowKeysExposure: false
 # Skip new default content checks
-skipContentCheck: false
+skipContentCheck: true
 # Disable automatic chats backup
 disableChatBackup: false
 # API request overrides (for KoboldAI and Text Completion APIs)
@@ -45,7 +45,7 @@ requestOverrides: []
 # Enable UI extensions
 enableExtensions: true
 # Extension settings
-HumAssistOff: false
+HumAssistOff: false # There is existing "In-Tavern" analog of this feature. This one still work tho. probably
 SystemFul: true
 extras:
   # Disables automatic model download from HuggingFace
