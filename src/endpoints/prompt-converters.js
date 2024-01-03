@@ -57,7 +57,7 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
 
 
 
-//=======
+/*//=======
     let requestPrompt = messages.map((v, i) => {
         // Set prefix according to the role. Also, when "Exclude Human/Assistant prefixes" is checked, names are added via the system prefix.
         let prefix = {
@@ -70,7 +70,7 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
         return `${prefix}${v.name && v.role !== 'system' ? `${v.name}: ` : ''}${v.content}`;
     }).join('');
 //>>>>>>> staging	
-//<<<<<<< HEAD
+//<<<<<<< HEA*///D
 
     // Convert messages to the prompt.
 	switch (HumAssistOff) {
