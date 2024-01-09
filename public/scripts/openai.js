@@ -2171,8 +2171,13 @@ class ChatCompletion {
                     lastMessage.tokens = tokenHandler.count({ role: lastMessage.role, content: lastMessage.content });
                 }
                 else {
-                    squashedMessages.push(message);
-                    lastMessage = message;
+                    switch (message.content){
+                        case "":
+                            break;
+                        default:
+                            squashedMessages.push(message);
+                            lastMessage = message;
+                    }
                 }
             }
             else {
