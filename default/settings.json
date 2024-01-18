@@ -616,6 +616,7 @@
         "proxy_password": "",
         "assistant_prefill": "",
         "use_ai21_tokenizer": false,
-        "exclude_assistant": false
+        "exclude_assistant": false,
+        "bypass_status_check": true
     }
 }

@@ -46,12 +46,61 @@ function loadSettings() {
 
 }
 
-
+function getBaseproxy(){
+    var baseproxy = extension_settings.ProxyManager.ProxyURL;
+    baseproxy = baseproxy.split("/");
+    baseproxy.pop();
+	if (baseproxy[4] == 'aws' || baseproxy[4] == 'azure' || baseproxy[4] == 'openai' ) {baseproxy.pop();}
+    baseproxy = baseproxy.join("/")
+    return baseproxy
+}
 
 function onProxyURLInput() {
     const value = $(this).val();
     extension_settings.ProxyManager.ProxyURL = value;
     saveSettingsDebounced();
+}
+
+function onProxytypeChange(){
+    const value = $(this).val();
+    const baseproxy = getBaseproxy();
+    var chat_completion_source;
+    var noreturn;
+	switch (value){
+        case 'oai':
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/openai';
+            chat_completion_source = 'openai';
+			return chat_completion_source
+        case "oai2":
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/openai/turbo-instruct';
+            chat_completion_source = 'openai';
+            return chat_completion_source
+        case "azure":
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/azure/openai';
+            chat_completion_source = 'openai';
+            return chat_completion_source
+        case "claude":
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/anthropic';
+            chat_completion_source = 'claude';
+            return chat_completion_source
+        case "awsclaude":
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/aws/claude';
+            chat_completion_source = 'claude';
+            return chat_completion_source
+        case "google":
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/google-ai';
+            chat_completion_source = 'openai';
+            return chat_completion_source
+        case "mixtral":
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/mistral-ai';
+            chat_completion_source = 'openai';
+            return chat_completion_source
+        default: 
+            noreturn = 1
+			return noreturn
+    }
+    if (!noreturn) {$('#ProxyURL').val(extension_settings.ProxyManager.ProxyURL).trigger('input');  saveSettingsDebounced();}
+		
 }
 
 function onProxyPasswordInput() {
@@ -219,6 +268,17 @@ jQuery(function () {
                     <label for="ProxyURL">Current proxy URL: </label>
                     <textarea id="ProxyURL" class="text_pole textarea_compact" rows="2" placeholder="Put proxy URL here..."></textarea>
                     <div>
+                    <label for="Proxytype">API type:</label>
+                    <select id="Proxytype">
+                        <option value="Same">Same as address</option>
+                        <option value="oai">Openai</option>
+                        <option value="oai2">Openai instruct</option>
+                        <option value="azure">Openai Azure</option>
+						<option value="claude">Claude</option>
+                        <option value="awsclaude">AWS Claude</option>
+                        <option value="google">Google AI</option>
+                        <option value="mixtral">Mixtral</option>
+                    </select>
                     <label for="ProxyPassword">Current proxy password: </label>
                     <textarea id="ProxyPassword" class="text_pole textarea_compact" rows="2" placeholder="Put proxy password here..."></textarea>
                     <div>
@@ -245,6 +305,7 @@ jQuery(function () {
         $('#ProxyURL').on('input', onProxyURLInput);
         $('#ProxyPassword').on('input', onProxyPasswordInput);
         $("#ProxyDeleteButton").on('click', deleteProxyPreset);
+        $('#Proxytype').on('change', onProxytypeChange);
         $("#ProxyPresets").on('change', async function () {
             const ProxyPresetSelected = $(this).find(':selected').val();
             extension_settings.ProxyPreset = ProxyPresetSelected;
