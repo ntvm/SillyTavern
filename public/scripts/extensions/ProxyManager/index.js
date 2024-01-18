@@ -46,7 +46,7 @@ function loadSettings() {
 
 }
 
-function getBaseproxy(){
+function getBaseproxy(baseproxy){
     var baseproxy = extension_settings.ProxyManager.ProxyURL;
     baseproxy = baseproxy.split("/");
     baseproxy.pop();
@@ -54,6 +54,9 @@ function getBaseproxy(){
     baseproxy = baseproxy.join("/")
     return baseproxy
 }
+
+
+
 
 function onProxyURLInput() {
     const value = $(this).val();
@@ -63,43 +66,35 @@ function onProxyURLInput() {
 
 function onProxytypeChange(){
     const value = $(this).val();
-    const baseproxy = getBaseproxy();
-    var chat_completion_source;
-    var noreturn;
+    const baseproxy = getBaseproxy(value);
+    var noreturn
 	switch (value){
         case 'oai':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/openai';
-            chat_completion_source = 'openai';
-			return chat_completion_source
+            break
         case "oai2":
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/openai/turbo-instruct';
-            chat_completion_source = 'openai';
-            return chat_completion_source
+            break
         case "azure":
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/azure/openai';
-            chat_completion_source = 'openai';
-            return chat_completion_source
+            break
         case "claude":
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/anthropic';
-            chat_completion_source = 'claude';
-            return chat_completion_source
+            break
         case "awsclaude":
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/aws/claude';
-            chat_completion_source = 'claude';
-            return chat_completion_source
+            break
         case "google":
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/google-ai';
-            chat_completion_source = 'openai';
-            return chat_completion_source
+            break
         case "mixtral":
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/mistral-ai';
-            chat_completion_source = 'openai';
-            return chat_completion_source
+            break
         default: 
             noreturn = 1
 			return noreturn
     }
-    if (!noreturn) {$('#ProxyURL').val(extension_settings.ProxyManager.ProxyURL).trigger('input');  saveSettingsDebounced();}
+    if (!noreturn) {$('#ProxyURL').val(extension_settings.ProxyManager.ProxyURL).trigger('input'); saveSettingsDebounced();}
 		
 }
 
