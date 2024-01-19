@@ -3,16 +3,44 @@
  * @param {object[]} messages Array of messages
  * @param {boolean} addHumanPrefix Add Human prefix
  * @param {boolean} addAssistantPostfix Add Assistant postfix
+ * @param {boolean} withSystemPrompt Build system prompt before "\n\nHuman: "
  * @returns {string} Prompt for Claude
  * @copyright Prompt Conversion script taken from RisuAI by kwaroran (GPLv3).
  */
-function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix, HumAssistOff, SystemFul) {
+function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix, withSystemPrompt, HumAssistOff, SystemFul) {
     // Claude doesn't support message names, so we'll just add them to the message content.
-    let requestPrompt;
+    var requestPrompt;
+
+
+    let systemPrompt = '';
+    if (withSystemPrompt) {
+        let lastSystemIdx = -1;
+
+        for (let i = 0; i < messages.length - 1; i++) {
+            const message = messages[i];
+            if (message.role === 'system' && !message.name) {
+                systemPrompt += message.content + '\n\n';
+            } else {
+                lastSystemIdx = i - 1;
+                break;
+            }
+        }
+        if (lastSystemIdx >= 0) {
+            messages.splice(0, lastSystemIdx + 1);
+        }
+    }
+
+
     switch (HumAssistOff) {
         // If it is true, Now you won't had H and A
         case true:
-            requestPrompt = messages.map((v) => {
+            requestPrompt = ''
+
+            if (withSystemPrompt) {
+                requestPrompt = systemPrompt + requestPrompt;
+            }
+
+            requestPrompt = requestPrompt + messages.map((v) => {
                 return v.content+"\n\n";
             }).join('');
 
@@ -67,11 +95,22 @@ function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix, HumA
             }).join('');
 
             if (addHumanPrefix) {
-                requestPrompt = "\n\nHuman: " + requestPrompt;
+                switch (SystemFul) {
+                    case true:
+                        requestPrompt = "\n\nHuman: [Assistant must take in mind WHOLE chat context]" + requestPrompt;
+                        break
+                    default:
+                        requestPrompt = "\n\nHuman: " + requestPrompt;
+                        break
+				}
             }
 
             if (addAssistantPostfix) {
                 requestPrompt = requestPrompt + '\n\nAssistant: ';
+            }
+
+            if (withSystemPrompt) {
+                requestPrompt = systemPrompt + requestPrompt;
             }
 
             return requestPrompt;
@@ -81,4 +120,4 @@ function convertClaudePrompt(messages, addHumanPrefix, addAssistantPostfix, HumA
 
 module.exports = {
     convertClaudePrompt,
-}
+};

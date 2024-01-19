@@ -1,35 +1,35 @@
-import { substituteParams } from "../../../script.js";
-import { extension_settings } from "../../extensions.js";
+import { substituteParams } from '../../../script.js';
+import { extension_settings } from '../../extensions.js';
 export {
     regex_placement,
     getRegexedString,
-    runRegexScript
-}
+    runRegexScript,
+};
 
 const regex_placement = {
     // MD Display is deprecated. Do not use.
     MD_DISPLAY: 0,
     USER_INPUT: 1,
     AI_OUTPUT: 2,
-    SLASH_COMMAND: 3
-}
+    SLASH_COMMAND: 3,
+};
 
 const regex_replace_strategy = {
     REPLACE: 0,
     OVERLAY: 1,
-}
+};
 
 // Originally from: https://github.com/IonicaBizau/regex-parser.js/blob/master/lib/index.js
 function regexFromString(input) {
     try {
         // Parse input
         var m = input.match(/(\/?)(.+)\1([a-z]*)/i);
-    
+
         // Invalid flags
         if (m[3] && !/^(?!.*?(.).*?\1)[gmixXsuUAJ]+$/.test(m[3])) {
             return RegExp(input);
         }
-    
+
         // Create the regular expression
         return new RegExp(m[2], m[3]);
     } catch {
@@ -39,21 +39,26 @@ function regexFromString(input) {
 
 // Parent function to fetch a regexed version of a raw string
 
-function getRegexedString(rawString, placement, { characterOverride, isMarkdown } = {}) {
+function getRegexedString(rawString, placement, { characterOverride, isMarkdown, isPrompt } = {}) {
     let finalString = rawString; // Default to the raw string
     if (extension_settings.disabledExtensions.includes("regex") || !rawString || placement === undefined) {
         return finalString;
     } // Turn off regex if disabled
 
     extension_settings.regex.forEach((script) => {
-        if ((script.markdownOnly && !isMarkdown) || (!script.markdownOnly && isMarkdown)) {
-            return;
-        } // If the script is markdown only and we're not in markdown, skip it
-
-        if (script.placement.includes(placement)) {
-            finalString = runRegexScript(script, finalString, { characterOverride, placement });
-        } // If the script is not in the placement, skip it
-    }); // Run regex scripts
+        if (
+            // Script applies to Markdown and input is Markdown
+            (script.markdownOnly && isMarkdown) ||
+            // Script applies to Generate and input is Generate
+            (script.promptOnly && isPrompt) ||
+            // Script applies to all cases when neither "only"s are true, but there's no need to do it when `isMarkdown`, the as source (chat history) should already be changed beforehand
+            (!script.markdownOnly && !script.promptOnly && !isMarkdown)
+        ) {
+            if (script.placement.includes(placement)) {
+                finalString = runRegexScript(script, finalString, { characterOverride });
+            }
+        }
+    });
 
     return finalString;
 } //
@@ -92,10 +97,12 @@ function runRegexScript(regexScript, rawString, { characterOverride, placement }
         const subReplaceString = substituteRegexParams(
             regexScript.replaceString,
             trimCapturedMatch ?? trimFencedMatch, // The captured match or the entire match after trimming
+
             {
                 characterOverride,
                 replaceStrategy: regexScript.replaceStrategy ?? regex_replace_strategy.REPLACE,
-            }
+            },
+
         );
 
         if (extension_settings.Nvkun.RegexLogging == true) {
@@ -123,7 +130,7 @@ function filterString(rawString, trimStrings, { characterOverride } = {}) {
     let finalString = rawString;
     trimStrings.forEach((trimString) => {
         const subTrimString = substituteParams(trimString, undefined, characterOverride);
-        finalString = finalString.replaceAll(subTrimString, "");
+        finalString = finalString.replaceAll(subTrimString, '');
     });
 
     return finalString;
@@ -137,7 +144,7 @@ function substituteRegexParams(rawString, regexMatch, { characterOverride, repla
     let overlaidMatch = regexMatch;
     // TODO: Maybe move the for loops into a separate function?
     if (replaceStrategy === regex_replace_strategy.OVERLAY) {
-        const splitReplace = finalString.split("{{match}}");
+        const splitReplace = finalString.split('{{match}}');
 
         // There's a prefix
         if (splitReplace[0]) {
@@ -179,7 +186,7 @@ function substituteRegexParams(rawString, regexMatch, { characterOverride, repla
     }
 
     // Only one match is replaced. This is by design
-    finalString = finalString.replace("{{match}}", overlaidMatch) || finalString.replace("{{match}}", regexMatch);
+    finalString = finalString.replace('{{match}}', overlaidMatch) || finalString.replace('{{match}}', regexMatch);
 
     return finalString;
 }

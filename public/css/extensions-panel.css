@@ -103,6 +103,7 @@ input.extension_missing[type="checkbox"] {
 }
 
 /** LEFT COLUMN **/
+/* Must be always on top */
 #extensions_settings>#assets_ui {
     order: 1;
 }
