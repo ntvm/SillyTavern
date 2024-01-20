@@ -143,21 +143,21 @@ function throwIfInvalidModel() {
         throw new Error('Custom API URL is not set.');
     }
 }
-/*export function proxy_info(){
-	if (extension_settings.ProxyManager.Useinsteadkey == true){
+export function proxy_info(){
+    if (extension_settings.ProxyManager.Useinsteadkey == true){
         var use_manager = true;
-        var oai_proxy = extension_settings.ProxyManager.ProxyURL
-        var oai_password = extension_settings.ProxyManager.ProxyPassword
+        var oai_proxy = extension_settings.ProxyManager.ProxyURL;
+        var oai_password = extension_settings.ProxyManager.ProxyPassword;
         var ProxyArray = [use_manager, oai_proxy, oai_password];
-        return ProxyArray; 
+        return ProxyArray;
     } else {
         use_manager = false;
         ProxyArray = [use_manager];
-    return ProxyArray;
+        return ProxyArray;
     }
 }
 export function getBaseproxy(){
-    baseproxy = extension_settings.ProxyManager.ProxyURL
+    baseproxy = extension_settings.ProxyManager.ProxyURL;
     baseproxy = oai_proxy.split("/")
     baseproxy.pop()
-}*/
+}

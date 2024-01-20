@@ -331,10 +331,10 @@ export function getGroupDepthPrompts(groupId, characterId) {
  * @param {number} characterId Current Character ID
  * @returns {{description: string, personality: string, scenario: string, mesExamples: string}} Group character cards combined
  */
-    // Initialize depth prompt for the current character // skip if the current character is not in the group 
-    // Skip if the current character is disabled 
-    // Current character always is first character in the group
-    // All Characters should have <{{char}}>X</{{char}}> in theirs prompts
+// Initialize depth prompt for the current character // skip if the current character is not in the group
+// Skip if the current character is disabled
+// Current character always is first character in the group
+// All Characters should have <{{char}}>X</{{char}}> in theirs prompts
 export function getGroupCharacterCards(groupId, characterId) {
     console.debug('getGroupCharacterCards entered for group: ', groupId);
     const group = groups.find(x => x.id === groupId);
@@ -367,23 +367,23 @@ export function getGroupCharacterCards(groupId, characterId) {
         }
 
         switch (character.name) {
-            case '': 
-                var CharStart = "<" + member + ">";
-                var CharEnd = "</" + member + ">";
-                var Chnnm = member;
-                break
-
-            case undefined: 
-                var CharStart = "<" + member + ">";
-                var CharEnd = "</" + member + ">";
+            case '':
+                var CharStart = '<' + member + '>';
+                var CharEnd = '</' + member + '>';
                 var Chnm = member;
-                break
-            
+                break;
+
+            case undefined:
+                CharStart = '<' + member + '>';
+                CharEnd = '</' + member + '>';
+                Chnm = member;
+                break;
+
             default:
-                var CharStart = "<" + character.name + ">";
-                var CharEnd = "</" + character.name + ">";
-                var Chnm = character.name;
-                break
+                CharStart = '<' + character.name + '>';
+                CharEnd = '</' + character.name + '>';
+                Chnm = character.name;
+                break;
         }
 
         switch (character.description.trim()) {
@@ -400,7 +400,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 personalities.push('');
                 break;
             default:
-                personalities.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + '\n' + character.personality.trim()+ '\n' + CharEnd + '\n- - -' + '\n' , name1, character.name));
+                personalities.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + '\n' + character.personality.trim() + '\n' + CharEnd + '\n- - -' + '\n' , name1, character.name));
                 break;
         }
 
@@ -424,56 +424,67 @@ export function getGroupCharacterCards(groupId, characterId) {
 
     }
 
-
-
-
-    var Df1 = descriptions.join('')
+    switch (extension_settings.Nvkun.SubPromptsUsage){
+        case true:
+            var Df1Prompt = '### This section contains characters descriptions. The AI should accurately convey the original descriptions provided by the system, while consider fact, that characters may be written by various peoples, and had very different styles.';
+            var Df2Prompt = '### This section contains characters personalities.';
+            var Df3Prompt = '### [Story buildup and other miscellaneous information.]';
+            var Df4Prompt = '### [The information within <Characters_MessagesExamples> is not to be taken literally as what happens within the current story.]';
+            break;
+        default:
+            Df1Prompt = '';
+            Df2Prompt = '';
+            Df3Prompt = '';
+            Df4Prompt = '';
+            break;
+    }
+    var Df1 = descriptions.join('');
     switch (Df1) {
         case '':
-            var description = "";
+            var description = '';
             break;
         default:
-            var description = "<Characters_descriptions>" + '\n' + Df1 + "</Characters_descriptions>";
+            description = '\n<Characters_descriptions>\n\n' + Df1Prompt + '\n' + Df1 + '</Characters_descriptions>';
             break;
-    }   
-    
-    var Df2 = personalities.join('')
+    }
+
+    var Df2 = personalities.join('');
     switch (Df2) {
         case '':
-            var personality = "";
+            var personality = '';
             break;
         default:
-            var personality = "<Characters_personalities>" + '\n' + Df2 + "</Characters_personalities>";
+            personality = '\n<Characters_personalities>\n\n' + Df2Prompt + '\n' + Df2 + '</Characters_personalities>';
             break;
     }
-    
-    var Df3 = scenarios.join('')
+
+    var Df3 = scenarios.join('');
     switch (Df3) {
         case '':
-            var scenario = "";
+            var scenario = '';
             break;
         default:
-            var scenario = scenarioOverride?.trim() || "<Characters_Scenarios>" + '\n' + Df3 + "</Characters_Scenarios>" ;
+            scenario = scenarioOverride?.trim() || '\n<Characters_Scenarios>\n\n' + Df3Prompt + '\n'  + Df3 + '</Characters_Scenarios>';
             break;
     }
-    
-    var Df4 = mesExamplesArray.join('')
-	switch (extension_settings.Nvkun.ExamplesExclude){
+
+    var Df4 = mesExamplesArray.join('');
+    switch (extension_settings.Nvkun.ExamplesExclude){
         default:
             switch (Df4) {
                 case '':
                     break;
                 default:
-                    var mesExamples = "<Characters_MessagesExamples>" + '\n' + Df4 + "</Characters_MessagesExamples>" ;
+                    var mesExamples = '\n<Characters_MessagesExamples>\n\n' + Df4Prompt + '\n'  + Df4 + '</Characters_MessagesExamples>';
                     break;
             }
             break;
         case true:
-            var mesExamples = '';
-			break;
-	}
-    
-    
+            mesExamples = '';
+            break;
+    }
+
+
 
 
     return { description, personality, scenario, mesExamples };
@@ -799,7 +810,7 @@ async function generateGroupWrapper(by_auto_mode, type = null, params = {}) {
                 activatedMembers = activateListOrder(group.members.slice(0, 1));
             }
         }
-        else if (type === "swipe" || type === 'continue' || type === 'lookaround') {
+        else if (type === 'swipe' || type === 'continue' || type === 'lookaround') {
             activatedMembers = activateSwipe(group.members);
 
             if (activatedMembers.length === 0) {

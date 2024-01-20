@@ -31,18 +31,19 @@ let defaultPrompt = '';
 
 
 const defaultSettings = {
-    
+
     RegexLogging: false,
     Inputer_frozen: false,
     Inputer_prompt: defaultPrompt,
     position: extension_prompt_types.AFTER_SCENARIO,
     depth: 2,
-	AlwaysCharnames: true,
+    AlwaysCharnames: true,
     selectedPreset: '',
     exclude_Prefill: false,
     CurrentGroup: selected_group,
     MulChar: '',
-    ExamplesExclude: false
+    ExamplesExclude: false,
+    SubPromptsUsage: false,
 };
 
 
@@ -57,7 +58,7 @@ function loadSettings() {
         }
     }
 
-    updatePresetList()   
+    updatePresetList();
 
     $('#AlwaysCharnames').val(extension_settings.Nvkun.AlwaysCharnames).trigger('change');
     $('#Inputer_frozen').prop('checked', extension_settings.Nvkun.Inputer_frozen).trigger('input');
@@ -65,6 +66,7 @@ function loadSettings() {
     $('#exclude_Prefill').prop('checked', extension_settings.Nvkun.exclude_Prefill).trigger('input');
     $('#Regex_Logging').prop('checked', extension_settings.Nvkun.RegexLogging).trigger('input');
     $('#ExamplesExclude').prop('checked', extension_settings.Nvkun.ExamplesExclude).trigger('input');
+    $('#SubPromptsUsage').prop('checked', extension_settings.Nvkun.SubPromptsUsage).trigger('input');
 }
 
 
@@ -74,7 +76,7 @@ function onAlwaysCharnamesChange(event) {
     extension_settings.Nvkun.AlwaysCharnames = value;
     $('#Nvkun_settings [AlwaysCharnames]').each((_, element) => {
         const source = $(element).data('source');
-    });    
+    });
     saveSettingsDebounced();
 }
 
@@ -95,9 +97,16 @@ function onRegexLogging() {
     extension_settings.Nvkun.RegexLogging = value;
     saveSettingsDebounced();
 }
+
 function onExamplesExclude() {
     const value = Boolean($(this).prop('checked'));
     extension_settings.Nvkun.ExamplesExclude = value;
+    saveSettingsDebounced();
+}
+
+function onSubPromptsUsage() {
+    const value = Boolean($(this).prop('checked'));
+    extension_settings.Nvkun.SubPromptsUsage = value;
     saveSettingsDebounced();
 }
 
@@ -105,49 +114,48 @@ function onInputerPromptInput() {
     const value = $(this).val();
     extension_settings.Nvkun.Inputer_prompt = value;
     saveSettingsDebounced();
-	setInputerContext(value, true);
+    setInputerContext(value, true);
 }
 
 
 
 function setInputerContext(value, saveToMessage) {
-	switch (Inputer_frozen) {
-		case true:
-			break
-		default:
+    switch (extension_settings.Nvkun.Inputer_frozen) {
+        case true:
+            break;
+        default:
             var context = getContext();
-			if (value == undefined) {
-			extension_settings.Nvkun.Inputer_prompt = value;}
-			
-			var formatMemoryValue = (value) => value ? `\n${value.trim()}` : '';
-			context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.AFTER_SCENARIO, extension_settings.Nvkun.depth);
-			$('#Inputer_prompt').val(value);
-			console.log('After Scenario injected');
-			console.debug('Position: ' + extension_settings.Nvkun.position);
-			console.debug('Depth: ' + extension_settings.Nvkun.depth);
+            if (value == undefined) {
+                extension_settings.Nvkun.Inputer_prompt = value;}
+            var formatMemoryValue = (value) => value ? `\n${value.trim()}` : '';
+            context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_prompt_types.AFTER_SCENARIO, extension_settings.Nvkun.depth);
+            $('#Inputer_prompt').val(value);
+            console.log('After Scenario injected');
+            console.debug('Position: ' + extension_settings.Nvkun.position);
+            console.debug('Depth: ' + extension_settings.Nvkun.depth);
             const idx = context.chat.length - 2;
-			const mes = context.chat[idx < 0 ? 0 : idx];
+            const mes = context.chat[idx < 0 ? 0 : idx];
 
-			if (!mes.extra) {
-			mes.extra = {};
-			}
-            
-			
-			mes.extra.Nvkun = value;
-			saveSettingsDebounced();
-			
-			break
-		}
+            if (!mes.extra) {
+                mes.extra = {};
+            }
+
+
+            mes.extra.Nvkun = value;
+            saveSettingsDebounced();
+
+            break;
+    }
 }
 
 /*
 var PushPrompts = true
 
     switch (PushPrompts) {
-        default: 
+        default:
             break
     case true:
-	    var 
+	    var
 		var Names = GetCharsName();
         console.log('' + Names);
 		break
@@ -158,72 +166,73 @@ var PushPrompts = true
 async function onChatEvent() {
     // Chat/character/group changed
 
-	var value = extension_settings.Nvkun.Inputer_prompt ;
-	setInputerContext(value, true);
+    var value = extension_settings.Nvkun.Inputer_prompt ;
+    setInputerContext(value, true);
     return;
 }
 
 
 
-/*    
+/*
 function GetCharsName() {
 const GId = CurrentGroup
 getGroupChatNames(GId)
-*/ 
-  
+*/
+
 
 //GroupchatPush
 
 
 
 
-//Savesets	
+//Savesets
 
 async function savePreset() {
-const name = await callPopup('Enter a name for Preset:', 'input');
-if (!name) {
-    return;
-}
-
-const NvPreset = {
-    name: name,
-    Inputer_frozen: extension_settings.Nvkun.Inputer_frozen,
-    Inputer_prompt: extension_settings.Nvkun.Inputer_prompt,
-    position: extension_settings.Nvkun.position,
-    depth: extension_settings.Nvkun.depth,
-	AlwaysCharnames: extension_settings.Nvkun.AlwaysCharnames,
-    exclude_Prefill: extension_settings.Nvkun.exclude_Prefill,
-    Regex_logging: extension_settings.Nvkun.RegexLogging,
-    ExamplesExclude: extension_settings.Nvkun.ExamplesExclude,
-}
-
-const response = await fetch('/api/Nvkun/saveNv', {
-    method: 'POST',
-    headers: getRequestHeaders(),
-    body: JSON.stringify(NvPreset)
-});
-
-if (response.ok) {
-    const PresetIndex = presets.findIndex(x => x.name == name);
-
-    if (PresetIndex == -1) {
-        presets.push(NvPreset);
-        const option = document.createElement('option');
-        option.selected = true;
-        option.value = name;
-        option.innerText = name;
-        $('#NvPresets').append(option);
+    const name = await callPopup('Enter a name for Preset:', 'input');
+    if (!name) {
+        return;
     }
-    else {
-        presets[PresetIndex] = NvPreset;
-        $(`#NvPresets option[value="${name}"]`).attr('selected', true);
+
+    const NvPreset = {
+        name: name,
+        Inputer_frozen: extension_settings.Nvkun.Inputer_frozen,
+        Inputer_prompt: extension_settings.Nvkun.Inputer_prompt,
+        position: extension_settings.Nvkun.position,
+        depth: extension_settings.Nvkun.depth,
+        AlwaysCharnames: extension_settings.Nvkun.AlwaysCharnames,
+        exclude_Prefill: extension_settings.Nvkun.exclude_Prefill,
+        Regex_logging: extension_settings.Nvkun.RegexLogging,
+        ExamplesExclude: extension_settings.Nvkun.ExamplesExclude,
+        SubPromptsUsage: extension_settings.Nvkun.SubPromptsUsage,
+    };
+
+    const response = await fetch('/api/Nvkun/saveNv', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(NvPreset),
+    });
+
+    if (response.ok) {
+        const PresetIndex = presets.findIndex(x => x.name == name);
+
+        if (PresetIndex == -1) {
+            presets.push(NvPreset);
+            const option = document.createElement('option');
+            option.selected = true;
+            option.value = name;
+            option.innerText = name;
+            $('#NvPresets').append(option);
+        }
+        else {
+            presets[PresetIndex] = NvPreset;
+            $(`#NvPresets option[value="${name}"]`).attr('selected', true);
+        }
+        saveSettingsDebounced();
+    } else {
+        toastr.warning('Failed to save  Preset.')
     }
-    saveSettingsDebounced();
-} else {
-    toastr.warning('Failed to save  Preset.')
 }
-}
-	
+
 async function applyNvPreset(name) {
     const NvPreset = presets.find(x => x.name == name);
 
@@ -234,10 +243,10 @@ async function applyNvPreset(name) {
 
     extension_settings.Nvkun = NvPreset;
     extension_settings.Nvkun.selectedPreset = name;
-    saveSettingsDebounced()
-    loadFSettings()
-    loadSettings()
-	moduleWorker();
+    saveSettingsDebounced();
+    loadFSettings();
+    loadSettings();
+    moduleWorker();
 
     $(`#NvPresets option[value="${name}"]`).attr('selected', true);
     console.debug('QR Preset applied: ' + name);
@@ -245,17 +254,17 @@ async function applyNvPreset(name) {
 
 
 async function loadFSettings(type) {
-await updatePresetList()
+    await updatePresetList();
 }
 
 async function moduleWorker() {
-selected_preset = extension_settings.Nvkun.selectedPreset;
-}	
+    selected_preset = extension_settings.Nvkun.selectedPreset;
+}
 
 //method from worldinfo
 async function updatePresetList() {
-    var result = await fetch("api/settings/get", {
-        method: "POST",
+    var result = await fetch('api/settings/get', {
+        method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
     });
@@ -263,13 +272,13 @@ async function updatePresetList() {
     if (result.ok) {
         var data = await result.json();
         presets = data.NvPresets?.length ? data.NvPresets : [];
-        console.log(presets)
-        $("#NvPresets").find('option[value!=""]').remove();
+        console.log(presets);
+        $('#NvPresets').find('option[value!=""]').remove();
 
 
         if (presets !== undefined) {
             presets.forEach((item, i) => {
-                $("#NvPresets").append(`<option value='${item.name}'${selected_preset.includes(item.name) ? ' selected' : ''}>${item.name}</option>`);
+                $('#NvPresets').append(`<option value='${item.name}'${selected_preset.includes(item.name) ? ' selected' : ''}>${item.name}</option>`);
             });
         }
     }
@@ -307,7 +316,10 @@ jQuery(function () {
                          <label class="checkbox_label for="RegexLogging"><input id="Regex_Logging" type="checkbox" />Activate Regex logging</label>
                     </div>
                     <div>
-                         <label class="checkbox_label for="ExamplesExclude"><input id="ExamplesExclude" type="checkbox" />Exclude examples from group conjoined mode</label>
+                         <label class="checkbox_label for="ExamplesExclude"><input id="ExamplesExclude" type="checkbox" />Exclude examples from Grp. Join mode</label>
+                    </div>
+                    <div>
+                         <label class="checkbox_label for="SubPromptsUsage"><input id="SubPromptsUsage" type="checkbox" />Use subprompts within Grp. Join mode</label>
                     </div>
                     <div>
                         <select id="NvPresets" name="preset">
@@ -323,17 +335,18 @@ jQuery(function () {
         $('#exclude_Prefill').on('input', onExclude_Prefill);
         $('#AlwaysCharnames').on('change', onAlwaysCharnamesChange);
         $('#Inputer_prompt').on('input', onInputerPromptInput);
-        $("#PresetSaveButton").on('click', savePreset);
-        $("#NvPresets").on('change', async function () {
+        $('#PresetSaveButton').on('click', savePreset);
+        $('#NvPresets').on('change', async function () {
             const NvPresetSelected = $(this).find(':selected').val();
             extension_settings.NvPreset = NvPresetSelected;
             applyNvPreset(NvPresetSelected);
             saveSettingsDebounced();
-		});
+        });
         $('#Regex_Logging').on('input', onRegexLogging);
         $('#ExamplesExclude').on('input', onExamplesExclude);
+        $('#SubPromptsUsage').on('input', onSubPromptsUsage);
     }
-	
+
     addExtensionControls();
     loadSettings();
     eventSource.on(event_types.CHAT_CHANGED, onChatEvent);

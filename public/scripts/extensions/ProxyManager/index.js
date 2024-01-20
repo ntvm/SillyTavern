@@ -1,9 +1,9 @@
-import { debounce } from "../../utils.js";
-import { extension_settings, modules } from "../../extensions.js";
-import { writeSecret } from "../../secrets.js";
-import { eventSource, event_types, callPopup, getRequestHeaders, saveSettingsDebounced, saveSettings, substituteParams  } from "../../../script.js";
-import { oai_settings } from "../../openai.js";
-
+import { extension_settings /*,modules*/ } from '../../extensions.js';
+import { writeSecret } from '../../secrets.js';
+import { proxy_info } from '../shared.js';
+import { callPopup, getRequestHeaders, saveSettingsDebounced } from '../../../script.js'; /*eventSource, event_types, saveSettings, substituteParams,*/
+//import { oai_settings } from "../../openai.js";
+//import { debounce } from "../../utils.js";
 
 
 export { MODULE_NAME };
@@ -13,11 +13,10 @@ const MODULE_NAME = 'ProxyManager';
 
 let presets = [];
 let selected_preset = '';
-let defaultPrompt = '';
+//let defaultPrompt = '';
 
 
 const defaultSettings = {
-    
     selectedPreset: '',
     ProxyURL: '',
     ProxyPassword: '',
@@ -37,7 +36,7 @@ function loadSettings() {
         }
     }
 
-    updatePresetList()   
+    updatePresetList();
 
     $('#ProxyURL').val(extension_settings.ProxyManager.ProxyURL).trigger('input');
     $('#ProxyPassword').val(extension_settings.ProxyManager.ProxyPassword).trigger('input');
@@ -47,12 +46,12 @@ function loadSettings() {
 }
 
 function getBaseproxy(baseproxy){
-    var baseproxy = extension_settings.ProxyManager.ProxyURL;
-    baseproxy = baseproxy.split("/");
+    baseproxy = extension_settings.ProxyManager.ProxyURL;
+    baseproxy = baseproxy.split('/');
     baseproxy.pop();
-	if (baseproxy[4] == 'aws' || baseproxy[4] == 'azure' || baseproxy[4] == 'openai' ) {baseproxy.pop();}
-    baseproxy = baseproxy.join("/")
-    return baseproxy
+    if (baseproxy[4] == 'aws' || baseproxy[4] == 'azure' || baseproxy[4] == 'openai' ) {baseproxy.pop();}
+    baseproxy = baseproxy.join('/');
+    return baseproxy;
 }
 
 
@@ -67,35 +66,35 @@ function onProxyURLInput() {
 function onProxytypeChange(){
     const value = $(this).val();
     const baseproxy = getBaseproxy(value);
-    var noreturn
-	switch (value){
+    var noreturn;
+    switch (value){
         case 'oai':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/openai';
-            break
-        case "oai2":
+            break;
+        case 'oai2':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/openai/turbo-instruct';
-            break
-        case "azure":
+            break;
+        case 'azure':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/azure/openai';
-            break
-        case "claude":
+            break;
+        case 'claude':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/anthropic';
-            break
-        case "awsclaude":
+            break;
+        case 'awsclaude':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/aws/claude';
-            break
-        case "google":
+            break;
+        case 'google':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/google-ai';
-            break
-        case "mixtral":
+            break;
+        case 'mixtral':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/mistral-ai';
-            break
-        default: 
-            noreturn = 1
-			return noreturn
+            break;
+        default:
+            noreturn = 1;
+            return noreturn;
     }
     if (!noreturn) {$('#ProxyURL').val(extension_settings.ProxyManager.ProxyURL).trigger('input'); saveSettingsDebounced();}
-		
+
 }
 
 function onProxyPasswordInput() {
@@ -109,63 +108,61 @@ function onProxyPrior() {
     extension_settings.ProxyManager.ProxyPrior = value;
     saveSettingsDebounced();
 }
-	
+
 function onUseinsteadkey() {
     const value = Boolean($(this).prop('checked'));
     extension_settings.ProxyManager.Useinsteadkey = value;
     saveSettingsDebounced();
 }
 
-
-
 function onSecretWrite(){
     var array = proxy_info();
-    var stype = "api_oai_proxy";
+    var stype = 'api_oai_proxy';
     writeSecret(stype, array);
 }
 
-//Savesets	
+//Savesets
 
 async function saveProxy() {
-const name = await callPopup('Enter a name for Preset:', 'input');
-if (!name) {
-    return;
-}
-
-const ProxyPreset = {
-    name: name,
-    ProxyURL: extension_settings.ProxyManager.ProxyURL,
-    ProxyPassword: extension_settings.ProxyManager.ProxyPassword,
-    ProxyPrior: extension_settings.ProxyManager.ProxyPrior,
-}
-
-const response = await fetch('/api/Nvkun/saveProxy', {
-    method: 'POST',
-    headers: getRequestHeaders(),
-    body: JSON.stringify(ProxyPreset)
-});
-
-if (response.ok) {
-    const PresetIndex = presets.findIndex(x => x.name == name);
-
-    if (PresetIndex == -1) {
-        presets.push(ProxyPreset);
-        const option = document.createElement('option');
-        option.selected = true;
-        option.value = name;
-        option.innerText = name;
-        $('#ProxyPresets').append(option);
+    const name = await callPopup('Enter a name for Preset:', 'input');
+    if (!name) {
+        return;
     }
-    else {
-        presets[PresetIndex] = ProxyPreset;
-        $(`#ProxyPresets option[value="${name}"]`).attr('selected', true);
+
+    const ProxyPreset = {
+        name: name,
+        ProxyURL: extension_settings.ProxyManager.ProxyURL,
+        ProxyPassword: extension_settings.ProxyManager.ProxyPassword,
+        ProxyPrior: extension_settings.ProxyManager.ProxyPrior,
+    };
+
+    const response = await fetch('/api/Nvkun/saveProxy', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(ProxyPreset),
+    });
+
+    if (response.ok) {
+        const PresetIndex = presets.findIndex(x => x.name == name);
+
+        if (PresetIndex == -1) {
+            presets.push(ProxyPreset);
+            const option = document.createElement('option');
+            option.selected = true;
+            option.value = name;
+            option.innerText = name;
+            $('#ProxyPresets').append(option);
+        }
+        else {
+            presets[PresetIndex] = ProxyPreset;
+            $(`#ProxyPresets option[value="${name}"]`).attr('selected', true);
+        }
+        saveSettingsDebounced();
+    } else {
+        toastr.warning('Failed to save Preset.')
     }
-    saveSettingsDebounced();
-} else {
-    toastr.warning('Failed to save  Preset.')
 }
-}
-	
+
 async function applyProxyPreset(name) {
     const ProxyPreset = presets.find(x => x.name == name);
 
@@ -176,10 +173,10 @@ async function applyProxyPreset(name) {
 
     extension_settings.ProxyManager = ProxyPreset;
     extension_settings.ProxyManager.selectedPreset = name;
-    saveSettingsDebounced()
-    loadFSettings()
-    loadSettings()
-	moduleWorker();
+    saveSettingsDebounced();
+    loadFSettings();
+    loadSettings();
+    moduleWorker();
 
     $(`#ProxyPresets option[value="${name}"]`).attr('selected', true);
     console.debug('QR Preset applied: ' + name);
@@ -187,17 +184,17 @@ async function applyProxyPreset(name) {
 
 
 async function loadFSettings(type) {
-await updatePresetList()
+    await updatePresetList();
 }
 
 async function moduleWorker() {
-selected_preset = extension_settings.ProxyManager.selectedPreset;
-}	
+    selected_preset = extension_settings.ProxyManager.selectedPreset;
+}
 
 //method from worldinfo
 async function updatePresetList() {
-    var result = await fetch("api/settings/get", {
-        method: "POST",
+    var result = await fetch('api/settings/get', {
+        method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
     });
@@ -206,12 +203,12 @@ async function updatePresetList() {
         var data = await result.json();
         presets = data.ProxyManager?.length ? data.ProxyManager : [];
         console.log(presets)
-        $("#ProxyPresets").find('option[value!=""]').remove();
+        $('#ProxyPresets').find('option[value!=""]').remove();
 
 
         if (presets !== undefined) {
             presets.forEach((item, i) => {
-                $("#ProxyPresets").append(`<option value='${item.name}'${selected_preset.includes(item.name) ? ' selected' : ''}>${item.name}</option>`);
+                $('#ProxyPresets').append(`<option value='${item.name}'${selected_preset.includes(item.name) ? ' selected' : ''}>${item.name}</option>`);
             });
         }
     }
@@ -293,22 +290,22 @@ jQuery(function () {
         </div>
         `;
         $('#extensions_settings2').append(settingsHtml);
-        $("#ProxySaveButton").on('click', saveProxy);
+        $('#ProxySaveButton').on('click', saveProxy);
         $('#ProxyPrior').on('input', onProxyPrior);
         $('#SaveInSecretButton').on('click', onSecretWrite);
         $('#Useinsteadkey').on('input', onUseinsteadkey);
         $('#ProxyURL').on('input', onProxyURLInput);
         $('#ProxyPassword').on('input', onProxyPasswordInput);
-        $("#ProxyDeleteButton").on('click', deleteProxyPreset);
+        $('#ProxyDeleteButton').on('click', deleteProxyPreset);
         $('#Proxytype').on('change', onProxytypeChange);
-        $("#ProxyPresets").on('change', async function () {
+        $('#ProxyPresets').on('change', async function () {
             const ProxyPresetSelected = $(this).find(':selected').val();
             extension_settings.ProxyPreset = ProxyPresetSelected;
             applyProxyPreset(ProxyPresetSelected);
             saveSettingsDebounced();
-		});
+        });
     }
-	
+
     addExtensionControls();
     loadSettings();
 });
