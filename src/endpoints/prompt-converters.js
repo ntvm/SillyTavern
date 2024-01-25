@@ -56,8 +56,7 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
     }
 
 
-
-/*//=======
+    /*//=======
     let requestPrompt = messages.map((v, i) => {
         // Set prefix according to the role. Also, when "Exclude Human/Assistant prefixes" is checked, names are added via the system prefix.
         let prefix = {
@@ -69,11 +68,11 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
         // Claude doesn't support message names, so we'll just add them to the message content.
         return `${prefix}${v.name && v.role !== 'system' ? `${v.name}: ` : ''}${v.content}`;
     }).join('');
-//>>>>>>> staging	
+//>>>>>>> staging
 //<<<<<<< HEA*///D
 
     // Convert messages to the prompt.
-	switch (HumAssistOff) {
+    switch (HumAssistOff) {
         default:
             var requestPrompt = messages.map((v, i) => {
                 // Set prefix according to the role. Also, when "Exclude Human/Assistant prefixes" is checked, names are added via the system prefix.																																												//Nv note. Please. Do NOT take changes from me without ask first.
@@ -88,8 +87,8 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
             }).join('');
             return requestPrompt;
         case true:
-		    var requestPrompt = ''
-            messages.pop()
+            requestPrompt = '';
+            messages.pop();
 
             if (withSysPromptSupport && useSystemPrompt == true) {
                 var combinedMessage = '';
@@ -98,12 +97,12 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
                     messages.shift();
                 }
 
-                requestPrompt = requestPrompt + combinedMessage + "\n\nHuman: " + addSysHumanMsg;
+                requestPrompt = requestPrompt + combinedMessage + '\n\nHuman: ' + addSysHumanMsg;
 
-            } else {requestPrompt ='\n\nHuman:'};
+            } else {requestPrompt = '\n\nHuman:';}
 
             requestPrompt = requestPrompt + messages.map((v) => {
-                return v.content+"\n\n";
+                return v.content + '\n\n';
             }).join('');
 
             if (addAssistantPostfix) {
@@ -115,9 +114,8 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
             }
 
             return requestPrompt;
-	}
+    }
 //    I guess, this stuff is working
-
 }
 
 /**
