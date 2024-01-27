@@ -3234,6 +3234,9 @@ function getMaxContextOpenAI(value) {
     else if (value.includes('gpt-4-vision')) {
         return max_128k;
     }
+    else if (value.includes('gpt-4-0125')) {
+        return max_128k;
+    }
     else if (value.includes('gpt-3.5-turbo-1106')) {
         return max_16k;
     }
