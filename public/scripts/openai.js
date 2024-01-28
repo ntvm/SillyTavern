@@ -193,7 +193,7 @@ const default_settings = {
     top_p_openai: 1.0,
     top_k_openai: 0,
     stream_openai: false,
-    openai_max_context: max_4k,
+    openai_max_context: max_128k,
     openai_max_tokens: 300,
     wrap_in_quotes: false,
     names_in_completion: false,
