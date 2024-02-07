@@ -60,7 +60,7 @@ function getRegexedString(rawString, placement, { characterOverride, isMarkdown,
     let finalString = rawString;
     if (extension_settings.disabledExtensions.includes('regex') || !rawString || placement === undefined) {
         return finalString;
-    } // Turn off regex if disabled
+    }
 
     extension_settings.regex.forEach((script) => {
         if (
@@ -73,12 +73,12 @@ function getRegexedString(rawString, placement, { characterOverride, isMarkdown,
         ) {
             // Check if the depth is within the min/max depth
             if (typeof depth === 'number' && depth >= 0) {
-                if (!isNaN(script.minDepth) && script.minDepth >= 0 && depth < script.minDepth) {
+                if (!isNaN(script.minDepth) && script.minDepth !== null && script.minDepth >= 0 && depth < script.minDepth) {
                     console.debug(`getRegexedString: Skipping script ${script.scriptName} because depth ${depth} is less than minDepth ${script.minDepth}`);
                     return;
                 }
 
-                if (!isNaN(script.maxDepth) && script.maxDepth >= 0 && depth > script.maxDepth) {
+                if (!isNaN(script.maxDepth) && script.maxDepth !== null && script.maxDepth >= 0 && depth > script.maxDepth) {
                     console.debug(`getRegexedString: Skipping script ${script.scriptName} because depth ${depth} is greater than maxDepth ${script.maxDepth}`);
                     return;
                 }
@@ -91,7 +91,7 @@ function getRegexedString(rawString, placement, { characterOverride, isMarkdown,
     });
 
     return finalString;
-} //
+}
 
 /**
  * Runs the provided regex script on the given string
@@ -105,7 +105,7 @@ function runRegexScript(regexScript, rawString, { characterOverride } = {}) {
     let newString = rawString;
     if (!regexScript || !!(regexScript.disabled) || !regexScript?.findRegex || !rawString) {
         return newString;
-    } // If the script is disabled, skip it
+    }
 
     const findRegex = regexFromString(regexScript.substituteRegex ? substituteParams(regexScript.findRegex) : regexScript.findRegex);
 
@@ -161,83 +161,4 @@ function filterString(rawString, trimStrings, { characterOverride } = {}) {
     });
 
     return finalString;
-}//
-
-
-/*<<<<<<< HEAD
-// Substitutes regex-specific and normal parameters
-function substituteRegexParams(rawString, regexMatch, { characterOverride, replaceStrategy } = {}) {
-    let finalString = rawString;
-    finalString = substituteParams(finalString, undefined, characterOverride);
-
-    let overlaidMatch = regexMatch;
-    // TODO: Maybe move the for loops into a separate function?
-    if (replaceStrategy === regex_replace_strategy.OVERLAY) {
-        const splitReplace = finalString.split('{{match}}');
-
-        // There's a prefix
-        if (splitReplace[0]) {
-            // Fetch the prefix
-            const splicedPrefix = spliceSymbols(splitReplace[0], false);
-
-            // Sequentially remove all occurrences of prefix from start of split
-            const splitMatch = overlaidMatch.split(splicedPrefix);
-            let sliceNum = 0;
-            for (let index = 0; index < splitMatch.length; index++) {
-                if (splitMatch[index].length === 0) {
-                    sliceNum++;
-                } else {
-                    break;
-                }
-            }
-
-            overlaidMatch = splitMatch.slice(sliceNum, splitMatch.length).join(splicedPrefix);
-        }
-
-        // There's a suffix
-        if (splitReplace[1]) {
-            // Fetch the suffix
-            const splicedSuffix = spliceSymbols(splitReplace[1], true);
-
-            // Sequential removal of all suffix occurrences from end of split
-            const splitMatch = overlaidMatch.split(splicedSuffix);
-            let sliceNum = 0;
-            for (let index = splitMatch.length - 1; index >= 0; index--) {
-                if (splitMatch[index].length === 0) {
-                    sliceNum++;
-                } else {
-                    break;
-                }
-            }
-
-            overlaidMatch = splitMatch.slice(0, splitMatch.length - sliceNum).join(splicedSuffix);
-        }
-    }
-
-    // Only one match is replaced. This is by design
-    finalString = finalString.replace('{{match}}', overlaidMatch) || finalString.replace('{{match}}', regexMatch);
-
-    return finalString;
 }
-}
-// Splices common sentence symbols and whitespace from the beginning and end of a string
-// Using a for loop due to sequential ordering
-// Later. Right now strategy 3 not required there.
-// TODO: Add in support for strategy 3... maybe... 
-function spliceSymbols(rawString, isSuffix) {
-    let offset = 0;
-
-    for (const ch of isSuffix ? rawString.split('').reverse() : rawString) {
-        if (ch.match(/[^\w.,?'!]/)) {
-            offset++;
-        } else {
-            break;
-        }
-    }
-
-    return isSuffix ? rawString.substring(0, rawString.length - offset) : rawString.substring(offset);
-}
-//=======
-//>>>>>>> staging
-//IDK
-*/

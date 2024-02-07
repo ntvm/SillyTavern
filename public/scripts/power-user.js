@@ -164,6 +164,7 @@ let power_user = {
     auto_fix_generated_markdown: true,
     send_on_enter: send_on_enter_options.AUTO,
     console_log_prompts: false,
+    request_token_probabilities: false,
     render_formulas: false,
     allow_name1_display: false,
     allow_name2_display: false,
@@ -224,6 +225,7 @@ let power_user = {
     persona_description: '',
     persona_description_position: persona_description_positions.IN_PROMPT,
     persona_show_notifications: true,
+    persona_sort_order: 'asc',
 
     custom_stopping_strings: '',
     custom_stopping_strings_macro: true,
@@ -500,6 +502,11 @@ async function switchLabMode() {
         $('#labModeWarning').removeClass('displayNone');
         //$("#advanced-ai-config-block input[type='range']").hide()
 
+        $('#amount_gen').attr('min', '1')
+            .attr('max', '99999')
+            .attr('step', '1');
+
+
     } else {
         //re apply the original sliders values to each input
         originalSliderValues.forEach(function (slider) {
@@ -511,6 +518,10 @@ async function switchLabMode() {
         });
         $('#advanced-ai-config-block input[type=\'range\']').show();
         $('#labModeWarning').addClass('displayNone');
+
+        $('#amount_gen').attr('min', '16')
+            .attr('max', '2048')
+            .attr('step', '1');
     }
 }
 
@@ -610,7 +621,9 @@ async function CreateZenSliders(elmnt) {
         decimals = 0;
     }
     if (sliderID == 'min_temp_textgenerationwebui' ||
-        sliderID == 'max_temp_textgenerationwebui') {
+        sliderID == 'max_temp_textgenerationwebui' ||
+        sliderID == 'dynatemp_exponent_textgenerationwebui' ||
+        sliderID == 'smoothing_factor_textgenerationwebui') {
         decimals = 2;
     }
     if (sliderID == 'eta_cutoff_textgenerationwebui' ||
@@ -1454,6 +1467,7 @@ function loadPowerUserSettings(settings, data) {
     $(`#example_messages_behavior option[value="${getExampleMessagesBehavior()}"]`).prop('selected', true);
 
     $('#console_log_prompts').prop('checked', power_user.console_log_prompts);
+    $('#request_token_probabilities').prop('checked', power_user.request_token_probabilities);
     $('#auto_fix_generated_markdown').prop('checked', power_user.auto_fix_generated_markdown);
     $('#auto_scroll_chat_to_bottom').prop('checked', power_user.auto_scroll_chat_to_bottom);
     $('#bogus_folders').prop('checked', power_user.bogus_folders);
@@ -1824,6 +1838,23 @@ export function fuzzySearchWorldInfo(data, searchValue) {
     const results = fuse.search(searchValue);
     console.debug('World Info fuzzy search results for ' + searchValue, results);
     return results.map(x => x.item?.uid);
+}
+
+export function fuzzySearchPersonas(data, searchValue) {
+    data = data.map(x => ({ key: x, description: power_user.persona_descriptions[x]?.description ?? '', name: power_user.personas[x] ?? '' }));
+    const fuse = new Fuse(data, {
+        keys: [
+            { name: 'name', weight: 4 },
+            { name: 'description', weight: 1 },
+        ],
+        includeScore: true,
+        ignoreLocation: true,
+        threshold: 0.2,
+    });
+
+    const results = fuse.search(searchValue);
+    console.debug('Personas fuzzy search results for ' + searchValue, results);
+    return results.map(x => x.item?.key);
 }
 
 export function fuzzySearchTags(searchValue) {
@@ -2951,6 +2982,11 @@ $(document).ready(() => {
 
     $('#console_log_prompts').on('input', function () {
         power_user.console_log_prompts = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#request_token_probabilities').on('input', function () {
+        power_user.request_token_probabilities = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 

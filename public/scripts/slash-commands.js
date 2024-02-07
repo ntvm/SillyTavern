@@ -31,8 +31,8 @@ import {
     substituteParams,
     system_avatar,
     system_message_types,
-    getRequestHeaders,
     this_chid,
+    getRequestHeaders,
 } from '../script.js';
 import { getMessageTimeStamp } from './RossAscends-mods.js';
 import { hideChatMessage, unhideChatMessage } from './chats.js';
@@ -152,9 +152,6 @@ parser.addCommand('flat', setFlatModeCallback, ['default'], ' – sets the messa
 parser.addCommand('continue', continueChatCallback, ['cont'], ' – continues the last message in the chat', true, true);
 parser.addCommand('go', goToCharacterCallback, ['char'], '<span class="monospace">(name)</span> – opens up a chat with the character or group by its name', true, true);
 parser.addCommand('sysgen', generateSystemMessage, [], '<span class="monospace">(prompt)</span> – generates a system message using a specified prompt', true, true);
-parser.addCommand('lookaround', lookChatCallback, ['look'], ' – Look around, and behold beauty of this world', true, true);
-parser.addCommand('UpdateST', Getupdate, [], '<span class="monospace">(text)</span> – Update Silly Tavern', true, true);
-parser.addCommand('RebootST', Getreboot, [], '<span class="monospace">(text)</span> – Reboot Silly Tavern', true, true);
 parser.addCommand('ask', askCharacter, [], '<span class="monospace">(prompt)</span> – asks a specified character card a prompt', true, true);
 parser.addCommand('delname', deleteMessagesByNameCallback, ['cancel'], '<span class="monospace">(name)</span> – deletes all messages attributed to a specified name', true, true);
 parser.addCommand('send', sendUserMessageCallback, [], '<span class="monospace">(text)</span> – adds a user message to the chat log without triggering a generation', true, true);
@@ -188,11 +185,13 @@ parser.addCommand('trimtokens', trimTokensCallback, [], '<span class="monospace"
 parser.addCommand('trimstart', trimStartCallback, [], '<span class="monospace">(text)</span> – trims the text to the start of the first full sentence.', true, true);
 parser.addCommand('trimend', trimEndCallback, [], '<span class="monospace">(text)</span> – trims the text to the end of the last full sentence.', true, true);
 parser.addCommand('inject', injectCallback, [], '<span class="monospace">id=injectId (position=before/after/chat depth=number [text])</span> – injects a text into the LLM prompt for the current chat. Requires a unique injection ID. Positions: "before" main prompt, "after" main prompt, in-"chat" (default: after). Depth: injection depth for the prompt (default: 4).', true, true);
+parser.addCommand('lookaround', lookChatCallback, ['look'], ' – Look around, and behold beauty of this world', true, true);
+parser.addCommand('UpdateST', Getupdate, [], '<span class="monospace">(text)</span> – Update Silly Tavern', true, true);
+parser.addCommand('RebootST', Getreboot, [], '<span class="monospace">(text)</span> – Reboot Silly Tavern', true, true);
 parser.addCommand('listinjects', listInjectsCallback, [], ' – lists all script injections for the current chat.', true, true);
 parser.addCommand('flushinjects', flushInjectsCallback, [], ' – removes all script injections for the current chat.', true, true);
 parser.addCommand('tokens', (_, text) => getTokenCount(text), [], '<span class="monospace">(text)</span> – counts the number of tokens in the text.', true, true);
 registerVariableCommands();
-
 
 const NARRATOR_NAME_KEY = 'narrator_name';
 const NARRATOR_NAME_DEFAULT = 'System';
@@ -359,8 +358,8 @@ function trimTokensCallback(arg, value) {
         }
 
         const sliceTokens = direction === 'start' ? textTokens.slice(0, limit) : textTokens.slice(-limit);
-        const decodedText = decodeTextTokens(tokenizerId, sliceTokens);
-        return decodedText;
+        const { text } = decodeTextTokens(tokenizerId, sliceTokens);
+        return text;
     } catch (error) {
         console.warn('WARN: Tokenization failed for /trimtokens command, returning original', error);
         return value;
@@ -713,6 +712,30 @@ async function deleteSwipeCallback(_, arg) {
     await saveChatConditional();
     await reloadCurrentChat();
 }
+
+function lookChatCallback() {
+    // Prevent infinite recursion
+    $('#send_textarea').val('');
+    $('#option_lookaround').trigger('click', { fromSlashCommand: true });
+}
+
+async function Getupdate (){
+    const response = await fetch('/api/Nvkun/getUpdate', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: ''
+    });
+}
+
+async function Getreboot (){
+    const response = await fetch('/api/Nvkun/getReboot', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: ''
+    });
+
+}
+
 
 async function askCharacter(_, text) {
     // Prevent generate recursion
@@ -1176,12 +1199,6 @@ function continueChatCallback() {
     return '';
 }
 
-function lookChatCallback() {
-    // Prevent infinite recursion
-    $('#send_textarea').val('');
-    $('#option_lookaround').trigger('click', { fromSlashCommand: true });
-}
-
 export async function generateSystemMessage(_, prompt) {
     $('#send_textarea').val('').trigger('input');
 
@@ -1245,23 +1262,6 @@ async function setNarratorName(_, text) {
     toastr.info(`System narrator name set to ${name}`);
     await saveChatConditional();
 }
-
-async function Getupdate (){
-    const response = await fetch('/api/Nvkun/getUpdate', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: ''
-    });    
-} 
-
-async function Getreboot (){
-    const response = await fetch('/api/Nvkun/getReboot', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: ''
-    });    
-
-} 
 
 export async function sendMessageAs(args, text) {
     if (!text) {
@@ -1589,8 +1589,26 @@ async function executeSlashCommands(text, unescape = false) {
             }
         }
 
-        if (typeof unnamedArg === 'string' && /{{pipe}}/i.test(unnamedArg)) {
-            unnamedArg = unnamedArg.replace(/{{pipe}}/i, pipeResult ?? '');
+        if (typeof unnamedArg === 'string') {
+            if (/{{pipe}}/i.test(unnamedArg)) {
+                unnamedArg = unnamedArg.replace(/{{pipe}}/i, pipeResult ?? '');
+            }
+
+            unnamedArg = unnamedArg
+                ?.replace(/\\\|/g, '|')
+                ?.replace(/\\\{/g, '{')
+                ?.replace(/\\\}/g, '}')
+            ;
+        }
+
+        for (const [key, value] of Object.entries(result.args)) {
+            if (typeof value === 'string') {
+                result.args[key] = value
+                    .replace(/\\\|/g, '|')
+                    .replace(/\\\{/g, '{')
+                    .replace(/\\\}/g, '}')
+                ;
+            }
         }
 
         pipeResult = await result.command.callback(result.args, unnamedArg);

@@ -1,4 +1,4 @@
-const { readSecret, SECRET_KEYS } = require('./secrets');
+const { readSecret, SECRET_KEYS, getBaseproxy } = require('./secrets');
 const fetch = require('node-fetch').default;
 const express = require('express');
 const FormData = require('form-data');
@@ -15,15 +15,15 @@ function Proxystuff(Uscase){
     var allowProxy = array.pop();
 
     switch (Uscase){
-        case "useproxy":
+        case 'useproxy':
             if (passw == false) { allowProxy = false; return allowProxy}
             return allowProxy;
-        case "getkey":
+        case 'getkey':
             return passw;
-        case "getURL":
+        case 'getURL':
             url = getBaseproxy(url);
-            return url;		
-	}
+            return url;
+    }
 
 }
 
@@ -31,14 +31,15 @@ const router = express.Router();
 
 router.post('/caption-image', jsonParser, async (request, response) => {
     try {
+        var proxy
         let key = '';
         let headers = {};
         let bodyParams = {};
-        var rn = "useproxy";
+        var rn = 'useproxy';
         var allowProxy = Proxystuff(rn);
-		
-        if (allowProxy == true) {var proxy = true};
-		
+
+        if (allowProxy == true) {proxy = true};
+
         if (request.body.api === 'openai' && !request.body.reverse_proxy && (proxy !== true) ) {
             key = readSecret(SECRET_KEYS.OPENAI);
         }
@@ -57,12 +58,13 @@ router.post('/caption-image', jsonParser, async (request, response) => {
             mergeObjectWithYaml(headers, request.body.custom_include_headers);
         }
 
-        if (proxy = true) {
-            rn = "getkey";
+        if (proxy == true) {
+            rn = 'getkey';
             key = Proxystuff(rn);
         }
 
         if (request.body.api === 'ooba') {
+            key = readSecret(SECRET_KEYS.OOBA);
             bodyParams.temperature = 0.1;
         }
 
@@ -101,7 +103,7 @@ router.post('/caption-image', jsonParser, async (request, response) => {
         console.log('Multimodal captioning request', body);
 
         var apiUrl = '';
-		
+
 
         if (request.body.api === 'openrouter' && (proxy !== true)) {
             apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
@@ -113,9 +115,9 @@ router.post('/caption-image', jsonParser, async (request, response) => {
         }
 
         if (proxy == true) {
-            rn = "getURL";
-            apiURl = Proxystuff(rn);
-            apiURL = apiURL + '/openai/chat/completions';
+            rn = 'getURL';
+            apiUrl = Proxystuff(rn);
+            apiUrl = apiUrl + '/openai/chat/completions';
         }
 
         if (request.body.reverse_proxy) {
@@ -262,18 +264,19 @@ router.post('/generate-voice', jsonParser, async (request, response) => {
 
 router.post('/generate-image', jsonParser, async (request, response) => {
     try {
-        if (proxy !== true) {var key = readSecret(SECRET_KEYS.OPENAI);}
-
-        var rn = "useproxy";
+        var rn = 'useproxy';
         var allowProxy = Proxystuff(rn);
+        var proxy;
+        if (allowProxy == true) {proxy = true};
+        if (proxy !== true) {var key = readSecret(SECRET_KEYS.OPENAI);}
         switch (allowProxy) {
             case false:
                 key = readSecret(SECRET_KEYS.OPENAI);
                 break;
             case true:
-                rn = "getkey";
+                rn = 'getkey';
                 key = Proxystuff(rn);
-                break
+                break;
         }
 
         if (!key) {
@@ -285,7 +288,7 @@ router.post('/generate-image', jsonParser, async (request, response) => {
 
         switch (allowProxy) {
             case true:
-                rn = "getURL";
+                rn = 'getURL';
                 apiURL = Proxystuff(rn);
                 apiURL = apiURL + '/openai-image/images/generations';
                 break;

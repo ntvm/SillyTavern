@@ -305,8 +305,6 @@ app.post('/savequickreply', jsonParser, (request, response) => {
     return response.sendStatus(200);
 });
 
-//<<<<<<< HEAD
-//=======
 app.post('/deletequickreply', jsonParser, (request, response) => {
     if (!request.body || !request.body.name) {
         return response.sendStatus(400);
@@ -609,6 +607,9 @@ app.use('/api/backends/chat-completions', require('./src/endpoints/backends/chat
 
 // Scale (alt method)
 app.use('/api/backends/scale-alt', require('./src/endpoints/backends/scale-alt').router);
+
+// Speech (text-to-speech and speech-to-text)
+app.use('/api/speech', require('./src/endpoints/speech').router);
 
 const tavernUrl = new URL(
     (cliArguments.ssl ? 'https://' : 'http://') +

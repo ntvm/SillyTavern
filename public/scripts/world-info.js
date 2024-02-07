@@ -295,6 +295,7 @@ function setWorldInfoSettings(settings, data) {
     $('#world_info_budget').val(world_info_budget);
 
     $('#world_info_recursive').prop('checked', world_info_recursive);
+    $('#world_info_tagify').prop('checked', world_info_tagify);	
     $('#world_info_overflow_alert').prop('checked', world_info_overflow_alert);
     $('#world_info_case_sensitive').prop('checked', world_info_case_sensitive);
     $('#world_info_match_whole_words').prop('checked', world_info_match_whole_words);
@@ -2719,6 +2720,11 @@ jQuery(() => {
     $('#world_info_budget').on('input', function () {
         world_info_budget = Number($(this).val());
         $('#world_info_budget_counter').val($(this).val());
+        saveSettings();
+    });
+
+    $('#world_info_tagify').on('input', function () {
+        extension_settings.Nvkun.witaggify = !!$(this).prop('checked');
         saveSettings();
     });
 

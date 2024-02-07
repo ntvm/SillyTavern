@@ -77,15 +77,15 @@ export let quickReplyApi;
 
 
 const loadSets = async () => {
-    const response = await fetch('/api/settings/get?type=quickReplyPresets', {
+    const response = await fetch('/api/settings/get', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
     });
 
     if (response.ok) {
-        const getList = (await response.json()).quickReplyPresets ?? [];
-        let setList = getList.filter(item => item.Inputer_frozen === undefined);
+        const getList = (await response.json()).quickReplyPresets ?? []; //I hate migrations... They don't expect garbge within folder
+        let setList = getList.filter(item => item.disableSend !== undefined || item.quickReplyEnabled !== undefined);
         for (const set of setList) {
             if (set.version !== 2) {
                 // migrate old QR set
@@ -93,7 +93,7 @@ const loadSets = async () => {
                 set.disableSend = set.quickActionEnabled ?? false;
                 set.placeBeforeInput = set.placeBeforeInputEnabled ?? false;
                 set.injectInput = set.AutoInputInject ?? false;
-                    set.qrList = set.quickReplySlots.map((slot,idx)=>{
+                set.qrList = set.quickReplySlots.map((slot,idx)=>{
                     const qr = {};
                     qr.id = idx + 1;
                     qr.label = slot.label ?? '';

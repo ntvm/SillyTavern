@@ -44,6 +44,7 @@ const defaultSettings = {
     MulChar: '',
     ExamplesExclude: false,
     SubPromptsUsage: false,
+    witaggify: false,
 };
 
 
@@ -236,6 +237,10 @@ async function savePreset() {
 async function applyNvPreset(name) {
     const NvPreset = presets.find(x => x.name == name);
 
+    if (name == ''){
+        return;
+    }
+
     if (!NvPreset) {
         toastr.warning(`error, preset '${name}' not found. Confirm you are using proper case sensitivity!`)
         return;
@@ -323,6 +328,9 @@ jQuery(function () {
                     </div>
                     <div>
                         <select id="NvPresets" name="preset">
+                            <option value="">
+                                <span>-- Selected to change --</span>
+                            </option>
                         </select>
                         <i id="PresetSaveButton" class="fa-solid fa-save"></i>
                     </div>
