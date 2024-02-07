@@ -66,6 +66,7 @@ import {
     formatInstructModePrompt,
     formatInstructModeSystemPrompt,
 } from './instruct-mode.js';
+import { isMobile } from './RossAscends-mods.js';
 
 export {
     openai_messages_count,
@@ -192,6 +193,9 @@ const default_settings = {
     count_pen: 0.0,
     top_p_openai: 1.0,
     top_k_openai: 0,
+    min_p_openai: 0,
+    top_a_openai: 1,
+    repetition_penalty_openai: 1,
     stream_openai: false,
     openai_max_context: max_4k,
     openai_max_tokens: 300,
@@ -263,6 +267,9 @@ const oai_settings = {
     count_pen: 0.0,
     top_p_openai: 1.0,
     top_k_openai: 0,
+    min_p_openai: 0,
+    top_a_openai: 1,
+    repetition_penalty_openai: 1,
     stream_openai: false,
     openai_max_context: max_4k,
     openai_max_tokens: 300,
@@ -1282,6 +1289,7 @@ function tryParseStreamingError(response, decoded) {
         }
 
         checkQuotaError(data);
+        checkModerationError(data);
 
         if (data.error) {
             toastr.error(data.error.message || response.statusText, 'Chat Completion API');
@@ -1306,6 +1314,15 @@ function checkQuotaError(data) {
     if (data.quota_error) {
         callPopup(errorText, 'text');
         throw new Error(data);
+    }
+}
+
+function checkModerationError(data) {
+    const moderationError = data?.error?.message?.includes('requires moderation');
+    if (moderationError) {
+        const moderationReason = `Reasons: ${data?.error?.metadata?.reasons?.join(', ') ?? '(N/A)'}`;
+        const flaggedText = data?.error?.metadata?.flagged_input ?? '(N/A)';
+        toastr.info(flaggedText, moderationReason, { timeOut: 10000 });
     }
 }
 
@@ -1427,6 +1444,25 @@ function getChatCompletionModel() {
     }
 }
 
+function getOpenRouterModelTemplate(option) {
+    const model = model_list.find(x => x.id === option?.element?.value);
+
+    if (!option.id || !model) {
+        return option.text;
+    }
+
+    let tokens_dollar = Number(1 / (1000 * model.pricing?.prompt));
+    let tokens_rounded = (Math.round(tokens_dollar * 1000) / 1000).toFixed(0);
+
+    const price = 0 === Number(model.pricing?.prompt) ? 'Free' : `${tokens_rounded}k t/$ `;
+
+    return $((`
+        <div class="flex-container flexFlowColumn" title="${DOMPurify.sanitize(model.id)}">
+            <div><strong>${DOMPurify.sanitize(model.name)}</strong> | ${model.context_length} ctx | <small>${price}</small></div>
+        </div>
+    `));
+}
+
 function calculateOpenRouterCost() {
     if (oai_settings.chat_completion_source !== chat_completion_sources.OPENROUTER) {
         return;
@@ -1450,7 +1486,7 @@ function calculateOpenRouterCost() {
 }
 
 function saveModelList(data) {
-    model_list = data.map((model) => ({ id: model.id, context_length: model.context_length, pricing: model.pricing, architecture: model.architecture }));
+    model_list = data.map((model) => ({ ...model }));
     model_list.sort((a, b) => a?.id && b?.id && a.id.localeCompare(b.id));
 
     if (oai_settings.chat_completion_source == chat_completion_sources.OPENROUTER) {
@@ -1505,16 +1541,10 @@ function appendOpenRouterOptions(model_list, groupModels = false, sort = false) 
     $('#model_openrouter_select').append($('<option>', { value: openrouter_website_model, text: 'Use OpenRouter website setting' }));
 
     const appendOption = (model, parent = null) => {
-        let tokens_dollar = Number(1 / (1000 * model.pricing?.prompt));
-        let tokens_rounded = (Math.round(tokens_dollar * 1000) / 1000).toFixed(0);
-
-        const price = 0 === Number(model.pricing?.prompt) ? 'Free' : `${tokens_rounded}k t/$ `;
-
-        let model_description = `${model.id} | ${price} | ${model.context_length} ctx`;
         (parent || $('#model_openrouter_select')).append(
             $('<option>', {
                 value: model.id,
-                text: model_description,
+                text: model.name,
             }));
     };
 
@@ -1543,7 +1573,7 @@ const openRouterSortBy = (data, property = 'alphabetically') => {
             return parseFloat(a.pricing.prompt) - parseFloat(b.pricing.prompt);
         } else {
             // Alphabetically
-            return a?.id && b?.id && a.id.localeCompare(b.id);
+            return a?.name && b?.name && a.name.localeCompare(b.name);
         }
     });
 };
@@ -1732,6 +1762,9 @@ async function sendOpenAIRequest(type, messages, signal) {
 
     if (isOpenRouter) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
+        generate_data['min_p'] = Number(oai_settings.min_p_openai);
+        generate_data['repetition_penalty'] = Number(oai_settings.repetition_penalty_openai);
+        generate_data['top_a'] = Number(oai_settings.top_a_openai);
         generate_data['use_fallback'] = oai_settings.openrouter_use_fallback;
 
         if (isTextCompletion) {
@@ -1757,7 +1790,7 @@ async function sendOpenAIRequest(type, messages, signal) {
     }
 
     if (isMistral) {
-        generate_data['safe_mode'] = false; // already defaults to false, but just incase they change that in the future.
+        generate_data['safe_prompt'] = false; // already defaults to false, but just incase they change that in the future.
     }
 
     if (isCustom) {
@@ -1811,6 +1844,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         const data = await response.json();
 
         checkQuotaError(data);
+        checkModerationError(data);
 
         if (data.error) {
             toastr.error(data.error.message || response.statusText, 'API returned an error');
@@ -2498,6 +2532,9 @@ function loadOpenAISettings(data, settings) {
     oai_settings.count_pen = settings.count_pen ?? default_settings.count_pen;
     oai_settings.top_p_openai = settings.top_p_openai ?? default_settings.top_p_openai;
     oai_settings.top_k_openai = settings.top_k_openai ?? default_settings.top_k_openai;
+    oai_settings.top_a_openai = settings.top_a_openai ?? default_settings.top_a_openai;
+    oai_settings.min_p_openai = settings.min_p_openai ?? default_settings.min_p_openai;
+    oai_settings.repetition_penalty_openai = settings.repetition_penalty_openai ?? default_settings.repetition_penalty_openai;
     oai_settings.stream_openai = settings.stream_openai ?? default_settings.stream_openai;
     oai_settings.openai_max_context = settings.openai_max_context ?? default_settings.openai_max_context;
     oai_settings.openai_max_tokens = settings.openai_max_tokens ?? default_settings.openai_max_tokens;
@@ -2631,6 +2668,12 @@ function loadOpenAISettings(data, settings) {
 
     $('#top_k_openai').val(oai_settings.top_k_openai);
     $('#top_k_counter_openai').val(Number(oai_settings.top_k_openai).toFixed(0));
+    $('#top_a_openai').val(oai_settings.top_a_openai);
+    $('#top_a_counter_openai').val(Number(oai_settings.top_a_openai));
+    $('#min_p_openai').val(oai_settings.min_p_openai);
+    $('#min_p_counter_openai').val(Number(oai_settings.min_p_openai));
+    $('#repetition_penalty_openai').val(oai_settings.repetition_penalty_openai);
+    $('#repetition_penalty_counter_openai').val(Number(oai_settings.repetition_penalty_openai));
     $('#seed_openai').val(oai_settings.seed);
 
     if (settings.reverse_proxy !== undefined) oai_settings.reverse_proxy = settings.reverse_proxy;
@@ -2775,6 +2818,9 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         count_penalty: settings.count_pen,
         top_p: settings.top_p_openai,
         top_k: settings.top_k_openai,
+        top_a: settings.top_a_openai,
+        min_p: settings.min_p_openai,
+        repetition_penalty: settings.repetition_penalty_openai,
         openai_max_context: settings.openai_max_context,
         openai_max_tokens: settings.openai_max_tokens,
         wrap_in_quotes: settings.wrap_in_quotes,
@@ -3135,6 +3181,9 @@ function onSettingsPresetChange() {
         count_penalty: ['#count_pen', 'count_pen', false],
         top_p: ['#top_p_openai', 'top_p_openai', false],
         top_k: ['#top_k_openai', 'top_k_openai', false],
+        top_a: ['#top_a_openai', 'top_a_openai', false],
+        min_p: ['#min_p_openai', 'min_p_openai', false],
+        repetition_penalty: ['#repetition_penalty_openai', 'repetition_penalty_openai', false],
         max_context_unlocked: ['#oai_max_context_unlocked', 'max_context_unlocked', true],
         openai_model: ['#model_openai_select', 'openai_model', false],
         claude_model: ['#model_claude_select', 'claude_model', false],
@@ -3824,50 +3873,68 @@ $(document).ready(async function () {
         updateScaleForm();
     });
 
-    $(document).on('input', '#temp_openai', function () {
+    $('#temp_openai').on('input', function () {
         oai_settings.temp_openai = Number($(this).val());
         $('#temp_counter_openai').val(Number($(this).val()).toFixed(2));
         saveSettingsDebounced();
     });
 
-    $(document).on('input', '#freq_pen_openai', function () {
+    $('#freq_pen_openai').on('input', function () {
         oai_settings.freq_pen_openai = Number($(this).val());
         $('#freq_pen_counter_openai').val(Number($(this).val()).toFixed(2));
         saveSettingsDebounced();
     });
 
-    $(document).on('input', '#pres_pen_openai', function () {
+    $('#pres_pen_openai').on('input', function () {
         oai_settings.pres_pen_openai = Number($(this).val());
         $('#pres_pen_counter_openai').val(Number($(this).val()).toFixed(2));
         saveSettingsDebounced();
     });
 
-    $(document).on('input', '#count_pen', function () {
+    $('#count_pen').on('input', function () {
         oai_settings.count_pen = Number($(this).val());
         $('#count_pen_counter').val(Number($(this).val()).toFixed(2));
         saveSettingsDebounced();
     });
 
-    $(document).on('input', '#top_p_openai', function () {
+    $('#top_p_openai').on('input', function () {
         oai_settings.top_p_openai = Number($(this).val());
         $('#top_p_counter_openai').val(Number($(this).val()).toFixed(2));
         saveSettingsDebounced();
     });
 
-    $(document).on('input', '#top_k_openai', function () {
+    $('#top_k_openai').on('input', function () {
         oai_settings.top_k_openai = Number($(this).val());
         $('#top_k_counter_openai').val(Number($(this).val()).toFixed(0));
         saveSettingsDebounced();
     });
 
-    $(document).on('input', '#openai_max_context', function () {
+    $('#top_a_openai').on('input', function () {
+        oai_settings.top_a_openai = Number($(this).val());
+        $('#top_a_counter_openai').val(Number($(this).val()));
+        saveSettingsDebounced();
+    });
+
+    $('#min_p_openai').on('input', function () {
+        oai_settings.min_p_openai = Number($(this).val());
+        $('#min_p_counter_openai').val(Number($(this).val()));
+        saveSettingsDebounced();
+    });
+
+    $('#repetition_penalty_openai').on('input', function () {
+        oai_settings.repetition_penalty_openai = Number($(this).val());
+        $('#repetition_penalty_counter_openai').val(Number($(this).val()));
+        saveSettingsDebounced();
+    });
+
+    $('#openai_max_context').on('input', function () {
         oai_settings.openai_max_context = Number($(this).val());
         $('#openai_max_context_counter').val(`${$(this).val()}`);
         calculateOpenRouterCost();
         saveSettingsDebounced();
     });
 
-    $(document).on('input', '#openai_max_tokens', function () {
+    $('#openai_max_tokens').on('input', function () {
         oai_settings.openai_max_tokens = Number($(this).val());
         calculateOpenRouterCost();
         saveSettingsDebounced();
@@ -4149,6 +4216,16 @@ $(document).ready(async function () {
     $(document).on('input', '#openai_settings .autoSetHeight', function () {
         resetScrollHeight($(this));
     });
+
+    if (!isMobile()) {
+        $('#model_openrouter_select').select2({
+            placeholder: 'Select a model',
+            searchInputPlaceholder: 'Search models...',
+            searchInputCssClass: 'text_pole',
+            width: '100%',
+            templateResult: getOpenRouterModelTemplate,
+        });
+    }
 
     $('#api_button_openai').on('click', onConnectButtonClick);
     $('#openai_reverse_proxy').on('input', onReverseProxyInput);

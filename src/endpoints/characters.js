@@ -336,7 +336,7 @@ function charaFormatData(data) {
 
     if (data.world) {
         try {
-            const file = readWorldInfoFile(data.world);
+            const file = readWorldInfoFile(data.world, false);
 
             // File was imported - save it to the character book
             if (file && file.originalData) {
@@ -387,6 +387,10 @@ function convertWorldInfoToCharacterBook(name, entries) {
                 depth: entry.depth ?? 4,
                 selectiveLogic: entry.selectiveLogic ?? 0,
                 group: entry.group ?? '',
+                prevent_recursion: entry.preventRecursion ?? false,
+                scan_depth: entry.scanDepth ?? null,
+                match_whole_words: entry.matchWholeWords ?? null,
+                case_sensitive: entry.caseSensitive ?? null,
             },
         };
 
