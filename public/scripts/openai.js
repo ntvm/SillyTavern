@@ -32,6 +32,7 @@ import {
     this_chid,
 } from '../script.js';
 import { groups, selected_group } from './group-chats.js';
+import { registerSlashCommand } from './slash-commands.js';
 
 import { extension_settings} from "./extensions.js";
 
@@ -95,7 +96,7 @@ const default_wi_format = '[Details of the fictional world the RP is set in:\n{0
 const default_new_chat_prompt = '[Start a new Chat]';
 const default_new_group_chat_prompt = '[Start a new group chat. Group members: {{group}}]';
 const default_new_example_chat_prompt = '[Example Chat]';
-const default_claude_human_sysprompt_message = 'Let\'s get started. Please generate your response based on the information and instructions provided above. You must take in mind WHOLE chat context';
+const default_claude_human_sysprompt_message = 'Let\'s get started. Please generate your response based on the information and instructions provided above.';
 const default_continue_nudge_prompt = '[Continue the following message. Do not include ANY parts of the original message. Use capitalization and punctuation as if your reply is a part of the original message: {{lastChatMessage}}]';
 const default_lookaround_nudge_prompt = '[Complete these steps: 1. Paste a line break. 2. Write "```XML" and add a line break. 3. Describe in 50 words the scene Human is currently in. Describe the location, objects, and chatacers (if applicable) that Human can interact with, much like a Dungeon & Dragons GM would starting with "👁 You look around and see...". Make it 60 words total. 4. Add a line break and write "```".]';
 const default_bias = 'Default (none)';
@@ -123,7 +124,7 @@ const scale_max = 8191;
 const claude_max = 9000; // We have a proper tokenizer, so theoretically could be larger (up to 9k)
 const claude_100k_max = 99000;
 let ai21_max = 9200; //can easily fit 9k gpt tokens because j2's tokenizer is efficient af
-const unlocked_max = 100 * 1024;
+const unlocked_max = max_200k;
 const oai_max_temp = 2.0;
 const claude_max_temp = 1.0; //same as j2
 const j2_max_topk = 10.0;
@@ -221,7 +222,7 @@ const default_settings = {
     claude_model: 'claude-2.1',
     google_model: 'gemini-pro',
     ai21_model: 'j2-ultra',
-    mistralai_model: 'mistral-medium',
+    mistralai_model: 'mistral-medium-latest',
     custom_model: '',
     custom_url: '',
     custom_include_body: '',
@@ -296,7 +297,7 @@ const oai_settings = {
     claude_model: 'claude-instant-v1',
     google_model: 'gemini-pro',
     ai21_model: 'j2-ultra',
-    mistralai_model: 'mistral-medium',
+    mistralai_model: 'mistral-medium-latest',
     custom_model: '',
     custom_url: '',
     custom_include_body: '',
@@ -362,8 +363,19 @@ function validateReverseProxy() {
     }
 }
 
+/**
+ * Converts the Chat Completion object to an Instruct Mode prompt string.
+ * @param {object[]} messages Array of messages
+ * @param {string} type Generation type
+ * @returns {string} Text completion prompt
+ */
 function convertChatCompletionToInstruct(messages, type) {
-    messages = messages.filter(x => x.content !== oai_settings.new_chat_prompt && x.content !== oai_settings.new_example_chat_prompt);
+    const newChatPrompts = [
+        substituteParams(oai_settings.new_chat_prompt),
+        substituteParams(oai_settings.new_example_chat_prompt),
+        substituteParams(oai_settings.new_group_chat_prompt),
+    ];
+    messages = messages.filter(x => !newChatPrompts.includes(x.content));
 
     let chatMessagesText = '';
     let systemPromptText = '';
@@ -715,10 +727,9 @@ export function isOpenRouterWithInstruct() {
 async function populateChatHistory(messages, prompts, chatCompletion, type = null, cyclePrompt = null) {
     chatCompletion.add(new MessageCollection('chatHistory'), prompts.index('chatHistory'));
 
-    let names = (selected_group && groups.find(x => x.id === selected_group)?.members.map(member => characters.find(c => c.avatar === member)?.name).filter(Boolean).join(', ')) || '';
     // Reserve budget for new chat message
     const newChat = selected_group ? oai_settings.new_group_chat_prompt : oai_settings.new_chat_prompt;
-    const newChatMessage = new Message('system', substituteParams(newChat, null, null, null, names), 'newMainChat');
+    const newChatMessage = new Message('system', substituteParams(newChat), 'newMainChat');
     chatCompletion.reserveBudget(newChatMessage);
 
     // Reserve budget for group nudge
@@ -831,7 +842,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
 function populateDialogueExamples(prompts, chatCompletion, messageExamples) {
     chatCompletion.add(new MessageCollection('dialogueExamples'), prompts.index('dialogueExamples'));
     if (Array.isArray(messageExamples) && messageExamples.length) {
-        const newExampleChat = new Message('system', oai_settings.new_example_chat_prompt, 'newChat');
+        const newExampleChat = new Message('system', substituteParams(oai_settings.new_example_chat_prompt), 'newChat');
         [...messageExamples].forEach((dialogue, dialogueIndex) => {
             let examplesAdded = 0;
 
@@ -1766,6 +1777,11 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['logprobs'] = 5;
     }
 
+    // Add logprobs request (currently OpenAI only, max 5 on their side)
+    if (useLogprobs && (isOAI || isCustom)) {
+        generate_data['logprobs'] = 5;
+    }
+
     if (isClaude) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['exclude_assistant'] = oai_settings.exclude_assistant;
@@ -1799,13 +1815,13 @@ async function sendOpenAIRequest(type, messages, signal) {
         const nameStopString = isImpersonate ? `\n${name2}:` : `\n${name1}:`;
         const stopStringsLimit = 3; // 5 - 2 (nameStopString and new_chat_prompt)
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
-        generate_data['stop'] = [nameStopString, oai_settings.new_chat_prompt, ...getCustomStoppingStrings(stopStringsLimit)];
+        generate_data['stop'] = [nameStopString, substituteParams(oai_settings.new_chat_prompt), ...getCustomStoppingStrings(stopStringsLimit)];
     }
 
     if (isAI21) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['count_pen'] = Number(oai_settings.count_pen);
-        generate_data['stop_tokens'] = [name1 + ':', oai_settings.new_chat_prompt, oai_settings.new_group_chat_prompt];
+        generate_data['stop_tokens'] = [name1 + ':', substituteParams(oai_settings.new_chat_prompt), substituteParams(oai_settings.new_group_chat_prompt)];
     }
 
     if (isMistral) {
@@ -1836,24 +1852,17 @@ async function sendOpenAIRequest(type, messages, signal) {
         throw new Error(`Got response status ${response.status}`);
     }
     if (stream) {
-        let reader;
-        let isSSEStream = oai_settings.chat_completion_source !== chat_completion_sources.MAKERSUITE;
-        if (isSSEStream) {
-            const eventStream = new EventSourceStream();
-            response.body.pipeThrough(eventStream);
-            reader = eventStream.readable.getReader();
-        } else {
-            reader = response.body.getReader();
-        }
+        const eventStream = new EventSourceStream();
+        response.body.pipeThrough(eventStream);
+        const reader = eventStream.readable.getReader();
         return async function* streamData() {
             let text = '';
-            let utf8Decoder = new TextDecoder();
             const swipes = [];
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) return;
-                const rawData = isSSEStream ? value.data : utf8Decoder.decode(value, { stream: true });
-                if (isSSEStream && rawData === '[DONE]') return;
+                const rawData = value.data;
+                if (rawData === '[DONE]') return;
                 tryParseStreamingError(response, rawData);
                 const parsed = JSON.parse(rawData);
 
@@ -1894,7 +1903,7 @@ function getStreamingReply(data) {
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
         return data?.completion || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
-        return data?.candidates[0].content.parts[0].text || '';
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } else {
         return data.choices[0]?.delta?.content || data.choices[0]?.message?.content || data.choices[0]?.text || '';
     }
@@ -2317,8 +2326,13 @@ class ChatCompletion {
         let squashedMessages = [];
 
         for (let message of this.messages.collection) {
+            // Force exclude empty messages
+            if (message.role === 'system' && !message.content) {
+                continue;
+            }
+
             if (!excludeList.includes(message.identifier) && message.role === 'system' && !message.name) {
-                if (lastMessage && message.content && lastMessage.role === 'system') {
+                if (lastMessage && lastMessage.role === 'system') {
                     lastMessage.content += '\n' + message.content;
                     lastMessage.tokens = tokenHandler.count({ role: lastMessage.role, content: lastMessage.content });
                 }
@@ -3403,9 +3417,6 @@ function getMaxContextOpenAI(value) {
     else if (value.includes('gpt-4-turbo') || value.includes('gpt-4-1106') || value.includes('gpt-4-0125') || value.includes('gpt-4-vision')) {
         return max_128k;
     }
-    else if (value.includes('gpt-4-0125')) {
-        return max_128k;
-    }
     else if (value.includes('gpt-3.5-turbo-1106')) {
         return max_16k;
     }
@@ -3513,8 +3524,16 @@ async function onModelChange() {
     }
 
     if ($(this).is('#model_mistralai_select')) {
+        // Upgrade old mistral models to new naming scheme
+        // would have done this in loadOpenAISettings, but it wasn't updating on preset change?
+        if (value === 'mistral-medium' || value === 'mistral-small' || value === 'mistral-tiny') {
+            value = value + '-latest';
+        } else if (value === '') {
+            value = default_settings.mistralai_model;
+        }
         console.log('MistralAI model changed to', value);
         oai_settings.mistralai_model = value;
+        $('#model_mistralai_select').val(oai_settings.mistralai_model);
     }
 
     if (value && $(this).is('#model_custom_select')) {
@@ -3898,9 +3917,11 @@ async function testApiConnection() {
 }
 
 function reconnectOpenAi() {
-    setOnlineStatus('no_connection');
-    resultCheckStatus();
-    $('#api_button_openai').trigger('click');
+    if (main_api == 'openai') {
+        setOnlineStatus('no_connection');
+        resultCheckStatus();
+        $('#api_button_openai').trigger('click');
+    }
 }
 
 function onProxyPasswordShowClick() {
@@ -4090,6 +4111,28 @@ $('#delete_proxy').on('click', async function () {
         toastr.error(`Could not find proxy with name "${presetName}"`);
     }
 });
+
+function runProxyCallback(_, value) {
+    if (!value) {
+        toastr.warning('Proxy preset name is required');
+        return '';
+    }
+
+    const proxyNames = proxies.map(preset => preset.name);
+    const fuse = new Fuse(proxyNames);
+    const result = fuse.search(value);
+
+    if (result.length === 0) {
+        toastr.warning(`Proxy preset "${value}" not found`);
+        return '';
+    }
+
+    const foundName = result[0].item;
+    $('#openai_proxy_preset').val(foundName).trigger('change');
+    return foundName;
+}
+
+registerSlashCommand('proxy', runProxyCallback, [], '<span class="monospace">(name)</span> – sets a proxy preset by name');
 
 $(document).ready(async function () {
     $('#test_api_button').on('click', testApiConnection);
@@ -4350,11 +4393,7 @@ $(document).ready(async function () {
         oai_settings.chat_completion_source = String($(this).find(':selected').val());
         toggleChatCompletionForms();
         saveSettingsDebounced();
-
-        if (main_api == 'openai') {
-            reconnectOpenAi();
-        }
-
+        reconnectOpenAi();
         eventSource.emit(event_types.CHATCOMPLETION_SOURCE_CHANGED, oai_settings.chat_completion_source);
     });
 

@@ -326,7 +326,7 @@ async function rearrangeChat(chat) {
         }
 
         // Get the most relevant messages, excluding the last few
-        const queryResults = await queryCollection(chatId, queryText, settings.query);
+        const queryResults = await queryCollection(chatId, queryText, settings.insert);
         const queryHashes = queryResults.hashes.filter(onlyUnique);
         const queriedMessages = [];
         const insertedHashes = new Set();
@@ -529,10 +529,15 @@ async function queryCollection(collectionId, searchText, topK) {
     return results;
 }
 
+/**
+ * Purges the vector index for a collection.
+ * @param {string} collectionId Collection ID to purge
+ * @returns <Promise<boolean>> True if deleted, false if not
+ */
 async function purgeVectorIndex(collectionId) {
     try {
         if (!settings.enabled_chats) {
-            return;
+            return true;
         }
 
         const response = await fetch('/api/vector/purge', {
@@ -548,9 +553,10 @@ async function purgeVectorIndex(collectionId) {
         }
 
         console.log(`Vectors: Purged vector index for collection ${collectionId}`);
-
+        return true;
     } catch (error) {
         console.error('Vectors: Failed to purge', error);
+        return false;
     }
 }
 
@@ -565,8 +571,11 @@ async function onPurgeClick() {
         toastr.info('No chat selected', 'Purge aborted');
         return;
     }
-    await purgeVectorIndex(chatId);
-    toastr.success('Vector index purged', 'Purge successful');
+    if (await purgeVectorIndex(chatId)) {
+        toastr.success('Vector index purged', 'Purge successful');
+    } else {
+        toastr.error('Failed to purge vector index', 'Purge failed');
+    }
 }
 
 async function onViewStatsClick() {

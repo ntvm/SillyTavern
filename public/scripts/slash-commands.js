@@ -81,26 +81,28 @@ class SlashCommandParser {
         const excludedFromRegex = ['sendas'];
         const firstSpace = text.indexOf(' ');
         const command = firstSpace !== -1 ? text.substring(1, firstSpace) : text.substring(1);
-        const args = firstSpace !== -1 ? text.substring(firstSpace + 1) : '';
+        let args = firstSpace !== -1 ? text.substring(firstSpace + 1) : '';
         const argObj = {};
         let unnamedArg;
 
         if (args.length > 0) {
+            let match;
+
+            // Match unnamed argument
+            const unnamedArgPattern = /(?:\w+=(?:"(?:\\.|[^"\\])*"|\S+)\s*)*(.*)/s;
+            match = unnamedArgPattern.exec(args);
+            if (match !== null && match[1].length > 0) {
+                args = args.slice(0, -match[1].length);
+                unnamedArg = match[1].trim();
+            }
+
             // Match named arguments
             const namedArgPattern = /(\w+)=("(?:\\.|[^"\\])*"|\S+)/g;
-            let match;
             while ((match = namedArgPattern.exec(args)) !== null) {
                 const key = match[1];
                 const value = match[2];
                 // Remove the quotes around the value, if any
                 argObj[key] = value.replace(/(^")|("$)/g, '');
-            }
-
-            // Match unnamed argument
-            const unnamedArgPattern = /(?:\w+=(?:"(?:\\.|[^"\\])*"|\S+)\s*)*(.*)/s;
-            match = unnamedArgPattern.exec(args);
-            if (match !== null) {
-                unnamedArg = match[1].trim();
             }
 
             // Excluded commands format in their own function
@@ -139,7 +141,7 @@ const getSlashCommandsHelp = parser.getHelpString.bind(parser);
 
 parser.addCommand('?', helpCommandCallback, ['help'], ' – get help on macros, chat formatting and commands', true, true);
 parser.addCommand('name', setNameCallback, ['persona'], '<span class="monospace">(name)</span> – sets user name and persona avatar (if set)', true, true);
-parser.addCommand('sync', syncCallback, [], ' – syncs user name in user-attributed messages in the current chat', true, true);
+parser.addCommand('sync', syncCallback, [], ' – syncs the user persona in user-attributed messages in the current chat', true, true);
 parser.addCommand('lock', bindCallback, ['bind'], ' – locks/unlocks a persona (name and avatar) to the current chat', true, true);
 parser.addCommand('bg', setBackgroundCallback, ['background'], '<span class="monospace">(filename)</span> – sets a background according to filename, partial names allowed', false, true);
 parser.addCommand('sendas', sendMessageAs, [], ' – sends message as a specific character. Uses character avatar if it exists in the characters list. Example that will send "Hello, guys!" from "Chloe": <tt>/sendas name="Chloe" Hello, guys!</tt>', true, true);
@@ -149,13 +151,13 @@ parser.addCommand('comment', sendCommentMessage, [], '<span class="monospace">(t
 parser.addCommand('single', setStoryModeCallback, ['story'], ' – sets the message style to single document mode without names or avatars visible', true, true);
 parser.addCommand('bubble', setBubbleModeCallback, ['bubbles'], ' – sets the message style to bubble chat mode', true, true);
 parser.addCommand('flat', setFlatModeCallback, ['default'], ' – sets the message style to flat chat mode', true, true);
-parser.addCommand('continue', continueChatCallback, ['cont'], ' – continues the last message in the chat', true, true);
+parser.addCommand('continue', continueChatCallback, ['cont'], '<span class="monospace">[prompt]</span> – continues the last message in the chat, with an optional additional prompt', true, true);
 parser.addCommand('go', goToCharacterCallback, ['char'], '<span class="monospace">(name)</span> – opens up a chat with the character or group by its name', true, true);
 parser.addCommand('sysgen', generateSystemMessage, [], '<span class="monospace">(prompt)</span> – generates a system message using a specified prompt', true, true);
 parser.addCommand('ask', askCharacter, [], '<span class="monospace">(prompt)</span> – asks a specified character card a prompt', true, true);
 parser.addCommand('delname', deleteMessagesByNameCallback, ['cancel'], '<span class="monospace">(name)</span> – deletes all messages attributed to a specified name', true, true);
 parser.addCommand('send', sendUserMessageCallback, [], '<span class="monospace">(text)</span> – adds a user message to the chat log without triggering a generation', true, true);
-parser.addCommand('trigger', triggerGenerationCallback, [], ' – triggers a message generation. If in group, can trigger a message for the specified group member index or name.', true, true);
+parser.addCommand('trigger', triggerGenerationCallback, [], ' <span class="monospace">await=true/false</span> – triggers a message generation. If in group, can trigger a message for the specified group member index or name. If <code>await=true</code> named argument passed, the command will await for the triggered generation before continuing.', true, true);
 parser.addCommand('hide', hideMessageCallback, [], '<span class="monospace">(message index or range)</span> – hides a chat message from the prompt', true, true);
 parser.addCommand('unhide', unhideMessageCallback, [], '<span class="monospace">(message index or range)</span> – unhides a message from the prompt', true, true);
 parser.addCommand('disable', disableGroupMemberCallback, [], '<span class="monospace">(member index or name)</span> – disables a group member from being drafted for replies', true, true);
@@ -1057,8 +1059,9 @@ async function addGroupMemberCallback(_, arg) {
     return character.name;
 }
 
-async function triggerGenerationCallback(_, arg) {
-    setTimeout(async () => {
+async function triggerGenerationCallback(args, value) {
+    const shouldAwait = isTrueBoolean(args?.await);
+    const outerPromise = new Promise((outerResolve) => setTimeout(async () => {
         try {
             await waitUntilCondition(() => !is_send_press && !is_group_generating, 10000, 100);
         } catch {
@@ -1072,16 +1075,21 @@ async function triggerGenerationCallback(_, arg) {
 
         let chid = undefined;
 
-        if (selected_group && arg) {
-            chid = findGroupMemberId(arg);
+        if (selected_group && value) {
+            chid = findGroupMemberId(value);
 
             if (chid === undefined) {
-                console.warn(`WARN: No group member found for argument ${arg}`);
+                console.warn(`WARN: No group member found for argument ${value}`);
             }
         }
 
-        setTimeout(() => Generate('normal', { force_chid: chid }), 100);
-    }, 1);
+        outerResolve(new Promise(innerResolve => setTimeout(() => innerResolve(Generate('normal', { force_chid: chid })), 100)));
+    }, 1));
+
+    if (shouldAwait) {
+        const innerPromise = await outerPromise;
+        await innerPromise;
+    }
 
     return '';
 }
@@ -1141,6 +1149,12 @@ function findCharacterIndex(name) {
         (a, b) => a.includes(b),
     ];
 
+    const exactAvatarMatch = characters.findIndex(x => x.avatar === name);
+
+    if (exactAvatarMatch !== -1) {
+        return exactAvatarMatch;
+    }
+
     for (const matchType of matchTypes) {
         const index = characters.findIndex(x => matchType(x.name.toLowerCase(), name.toLowerCase()));
         if (index !== -1) {
@@ -1182,7 +1196,7 @@ async function openChat(id) {
     await reloadCurrentChat();
 }
 
-function continueChatCallback() {
+function continueChatCallback(_, prompt) {
     setTimeout(async () => {
         try {
             await waitUntilCondition(() => !is_send_press && !is_group_generating, 10000, 100);
@@ -1193,7 +1207,7 @@ function continueChatCallback() {
 
         // Prevent infinite recursion
         $('#send_textarea').val('').trigger('input');
-        $('#option_continue').trigger('click', { fromSlashCommand: true });
+        $('#option_continue').trigger('click', { fromSlashCommand: true, additionalPrompt: prompt });
     }, 1);
 
     return '';
