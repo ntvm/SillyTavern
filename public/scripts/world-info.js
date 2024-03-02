@@ -70,6 +70,139 @@ const SORT_ORDER_KEY = 'world_info_sort_order';
 const METADATA_KEY = 'world_info';
 
 const DEFAULT_DEPTH = 4;
+const MAX_SCAN_DEPTH = 1000;
+
+/**
+ * Represents a scanning buffer for one evaluation of World Info.
+ */
+class WorldInfoBuffer {
+    // Typedef area
+    /** @typedef {{scanDepth?: number, caseSensitive?: boolean, matchWholeWords?: boolean}} WIScanEntry The entry that triggered the scan */
+    // End typedef area
+
+    /**
+     * @type {string[]} Array of messages sorted by ascending depth
+     */
+    #depthBuffer = [];
+
+    /**
+     * @type {string[]} Array of strings added by recursive scanning
+     */
+    #recurseBuffer = [];
+
+    /**
+     * @type {number} The skew of the global scan depth. Used in "min activations"
+     */
+    #skew = 0;
+
+    /**
+     * Initialize the buffer with the given messages.
+     * @param {string[]} messages Array of messages to add to the buffer
+     */
+    constructor(messages) {
+        this.#initDepthBuffer(messages);
+    }
+
+    /**
+     * Populates the buffer with the given messages.
+     * @param {string[]} messages Array of messages to add to the buffer
+     * @returns {void} Hardly seen nothing down here
+     */
+    #initDepthBuffer(messages) {
+        for (let depth = 0; depth < MAX_SCAN_DEPTH; depth++) {
+            if (messages[depth]) {
+                this.#depthBuffer[depth] = messages[depth].trim();
+            }
+            // break if last message is reached
+            if (depth === messages.length - 1) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * Gets a string that respects the case sensitivity setting
+     * @param {string} str The string to transform
+     * @param {WIScanEntry} entry The entry that triggered the scan
+     * @returns {string} The transformed string
+    */
+    #transformString(str, entry) {
+        const caseSensitive = entry.caseSensitive ?? world_info_case_sensitive;
+        return caseSensitive ? str : str.toLowerCase();
+    }
+
+    /**
+     * Gets all messages up to the given depth + recursion buffer.
+     * @param {WIScanEntry} entry The entry that triggered the scan
+     * @returns {string} A slice of buffer until the given depth (inclusive)
+     */
+    get(entry) {
+        let depth = entry.scanDepth ?? (world_info_depth + this.#skew);
+
+        if (depth < 0) {
+            console.error(`Invalid WI scan depth ${depth}. Must be >= 0`);
+            return '';
+        }
+
+        if (depth > MAX_SCAN_DEPTH) {
+            console.warn(`Invalid WI scan depth ${depth}. Truncating to ${MAX_SCAN_DEPTH}`);
+            depth = MAX_SCAN_DEPTH;
+        }
+
+        let result = this.#depthBuffer.slice(0, depth).join('\n');
+
+        if (this.#recurseBuffer.length > 0) {
+            result += '\n' + this.#recurseBuffer.join('\n');
+        }
+
+        return this.#transformString(result, entry);
+    }
+
+    /**
+     * Matches the given string against the buffer.
+     * @param {string} haystack The string to search in
+     * @param {string} needle The string to search for
+     * @param {WIScanEntry} entry The entry that triggered the scan
+     * @returns {boolean} True if the string was found in the buffer
+     */
+    matchKeys(haystack, needle, entry) {
+        const transformedString = this.#transformString(needle, entry);
+        const matchWholeWords = entry.matchWholeWords ?? world_info_match_whole_words;
+
+        if (matchWholeWords) {
+            const keyWords = transformedString.split(/\s+/);
+
+            if (keyWords.length > 1) {
+                return haystack.includes(transformedString);
+            }
+            else {
+                const regex = new RegExp(`\\b${escapeRegex(transformedString)}\\b`);
+                if (regex.test(haystack)) {
+                    return true;
+                }
+            }
+        } else {
+            return haystack.includes(transformedString);
+        }
+
+        return false;
+    }
+
+    /**
+     * Adds a message to the recursion buffer.
+     * @param {string} message The message to add
+     */
+    addRecurse(message) {
+        this.#recurseBuffer.push(message);
+    }
+
+    /**
+     * Adds an increment to depth skew.
+     */
+    addSkew() {
+        this.#skew++;
+    }
+}
 
 export function getWorldInfoSettings() {
     return {
@@ -97,13 +230,26 @@ const world_info_position = {
 
 const worldInfoCache = {};
 
-async function getWorldInfoPrompt(chat2, maxContext) {
+/**
+ * Gets the world info based on chat messages.
+ * @param {string[]} chat The chat messages to scan.
+ * @param {number} maxContext The maximum context size of the generation.
+ * @param {boolean} isDryRun If true, the function will not emit any events.
+ * @typedef {{worldInfoString: string, worldInfoBefore: string, worldInfoAfter: string, worldInfoDepth: any[]}} WIPromptResult
+ * @returns {Promise<WIPromptResult>} The world info string and depth.
+ */
+async function getWorldInfoPrompt(chat, maxContext, isDryRun) {
     let worldInfoString = '', worldInfoBefore = '', worldInfoAfter = '';
 
-    const activatedWorldInfo = await checkWorldInfo(chat2, maxContext);
+    const activatedWorldInfo = await checkWorldInfo(chat, maxContext);
     worldInfoBefore = activatedWorldInfo.worldInfoBefore;
     worldInfoAfter = activatedWorldInfo.worldInfoAfter;
     worldInfoString = worldInfoBefore + worldInfoAfter;
+
+    if (!isDryRun && activatedWorldInfo.allActivatedEntries && activatedWorldInfo.allActivatedEntries.size > 0) {
+        const arg = Array.from(activatedWorldInfo.allActivatedEntries);
+        await eventSource.emit(event_types.WORLD_INFO_ACTIVATED, arg);
+    }
 
     return {
         worldInfoString,
@@ -166,6 +312,7 @@ function setWorldInfoSettings(settings, data) {
     $('#world_info_budget').val(world_info_budget);
 
     $('#world_info_recursive').prop('checked', world_info_recursive);
+    $('#world_info_tagify').prop('checked', world_info_tagify);	
     $('#world_info_overflow_alert').prop('checked', world_info_overflow_alert);
     $('#world_info_case_sensitive').prop('checked', world_info_case_sensitive);
     $('#world_info_match_whole_words').prop('checked', world_info_match_whole_words);
@@ -359,6 +506,8 @@ function registerWorldInfoSlashCommands() {
             toastr.warning('Value is required');
             return '';
         }
+
+        value = value.replace(/\\([{}|])/g, '$1');
 
         const data = await loadWorldInfoData(file);
 
@@ -556,6 +705,7 @@ function displayWorldEntries(name, data, navigation = navigation_option.none) {
         $('#world_popup_name_button').off('click').on('click', nullWorldInfo);
         $('#world_popup_export').off('click').on('click', nullWorldInfo);
         $('#world_popup_delete').off('click').on('click', nullWorldInfo);
+        $('#world_duplicate').off('click').on('click', nullWorldInfo);
         $('#world_popup_entries_list').hide();
         $('#world_info_pagination').html('');
         return;
@@ -693,6 +843,23 @@ function displayWorldEntries(name, data, navigation = navigation_option.none) {
         }
     });
 
+    $('#world_duplicate').off('click').on('click', async () => {
+        const tempName = getFreeWorldName();
+        const finalName = await callPopup('<h3>Create a new World Info?</h3>Enter a name for the new file:', 'input', tempName);
+
+        if (finalName) {
+            await saveWorldInfo(finalName, data, true);
+            await updateWorldInfoList();
+
+            const selectedIndex = world_names.indexOf(finalName);
+            if (selectedIndex !== -1) {
+                $('#world_editor_select').val(selectedIndex).trigger('change');
+            } else {
+                hideWorldEditor();
+            }
+        }
+    });
+
     $('#world_popup_delete').off('click').on('click', async () => {
         const confirmation = await callPopup(`<h3>Delete the World/Lorebook: "${name}"?</h3>This action is irreversible!`, 'confirm');
 
@@ -757,6 +924,7 @@ function displayWorldEntries(name, data, navigation = navigation_option.none) {
 const originalDataKeyMap = {
     'displayIndex': 'extensions.display_index',
     'excludeRecursion': 'extensions.exclude_recursion',
+    'preventRecursion': 'extensions.prevent_recursion',
     'selectiveLogic': 'selectiveLogic',
     'comment': 'comment',
     'constant': 'constant',
@@ -769,6 +937,10 @@ const originalDataKeyMap = {
     'key': 'keys',
     'keysecondary': 'secondary_keys',
     'selective': 'selective',
+    'matchWholeWords': 'extensions.match_whole_words',
+    'caseSensitive': 'extensions.case_sensitive',
+    'scanDepth': 'extensions.scan_depth',
+    'automationId': 'extensions.automation_id',
 };
 
 function setOriginalDataValue(data, uid, key, value) {
@@ -1115,6 +1287,7 @@ function getWorldEntry(name, data, entry) {
         saveWorldInfo(name, data);
     });
     groupInput.val(entry.group ?? '').trigger('input');
+    setTimeout(() => createEntryInputAutocomplete(groupInput, getInclusionGroupCallback(data)), 1);
 
     // probability
     if (entry.probability === undefined) {
@@ -1146,7 +1319,7 @@ function getWorldEntry(name, data, entry) {
     probabilityInput.data('uid', entry.uid);
     probabilityInput.on('input', function () {
         const uid = $(this).data('uid');
-        const value = parseInt($(this).val());
+        const value = Number($(this).val());
 
         data.entries[uid].probability = !isNaN(value) ? value : null;
 
@@ -1326,6 +1499,18 @@ function getWorldEntry(name, data, entry) {
     });
     excludeRecursionInput.prop('checked', entry.excludeRecursion).trigger('input');
 
+    // prevent recursion
+    const preventRecursionInput = template.find('input[name="prevent_recursion"]');
+    preventRecursionInput.data('uid', entry.uid);
+    preventRecursionInput.on('input', function () {
+        const uid = $(this).data('uid');
+        const value = $(this).prop('checked');
+        data.entries[uid].preventRecursion = value;
+        setOriginalDataValue(data, uid, 'extensions.prevent_recursion', data.entries[uid].preventRecursion);
+        saveWorldInfo(name, data);
+    });
+    preventRecursionInput.prop('checked', entry.preventRecursion).trigger('input');
+
     // delete button
     const deleteButton = template.find('.delete_entry_button');
     deleteButton.data('uid', entry.uid);
@@ -1336,6 +1521,73 @@ function getWorldEntry(name, data, entry) {
         saveWorldInfo(name, data);
         updateEditor(navigation_option.previous);
     });
+
+    // scan depth
+    const scanDepthInput = template.find('input[name="scanDepth"]');
+    scanDepthInput.data('uid', entry.uid);
+    scanDepthInput.on('input', function () {
+        const uid = $(this).data('uid');
+        const isEmpty = $(this).val() === '';
+        const value = Number($(this).val());
+
+        // Clamp if necessary
+        if (value < 0) {
+            $(this).val(0).trigger('input');
+            toastr.warning('Scan depth cannot be negative');
+            return;
+        }
+
+        if (value > MAX_SCAN_DEPTH) {
+            $(this).val(MAX_SCAN_DEPTH).trigger('input');
+            toastr.warning(`Scan depth cannot exceed ${MAX_SCAN_DEPTH}`);
+            return;
+        }
+
+        data.entries[uid].scanDepth = !isEmpty && !isNaN(value) && value >= 0 && value <= MAX_SCAN_DEPTH ? Math.floor(value) : null;
+        setOriginalDataValue(data, uid, 'extensions.scan_depth', data.entries[uid].scanDepth);
+        saveWorldInfo(name, data);
+    });
+    scanDepthInput.val(entry.scanDepth ?? null).trigger('input');
+
+    // case sensitive select
+    const caseSensitiveSelect = template.find('select[name="caseSensitive"]');
+    caseSensitiveSelect.data('uid', entry.uid);
+    caseSensitiveSelect.on('input', function () {
+        const uid = $(this).data('uid');
+        const value = $(this).val();
+
+        data.entries[uid].caseSensitive = value === 'null' ? null : value === 'true';
+        setOriginalDataValue(data, uid, 'extensions.case_sensitive', data.entries[uid].caseSensitive);
+        saveWorldInfo(name, data);
+    });
+    caseSensitiveSelect.val((entry.caseSensitive === null || entry.caseSensitive === undefined) ? 'null' : entry.caseSensitive ? 'true' : 'false').trigger('input');
+
+    // match whole words select
+    const matchWholeWordsSelect = template.find('select[name="matchWholeWords"]');
+    matchWholeWordsSelect.data('uid', entry.uid);
+    matchWholeWordsSelect.on('input', function () {
+        const uid = $(this).data('uid');
+        const value = $(this).val();
+
+        data.entries[uid].matchWholeWords = value === 'null' ? null : value === 'true';
+        setOriginalDataValue(data, uid, 'extensions.match_whole_words', data.entries[uid].matchWholeWords);
+        saveWorldInfo(name, data);
+    });
+    matchWholeWordsSelect.val((entry.matchWholeWords === null || entry.matchWholeWords === undefined) ? 'null' : entry.matchWholeWords ? 'true' : 'false').trigger('input');
+
+    // automation id
+    const automationIdInput = template.find('input[name="automationId"]');
+    automationIdInput.data('uid', entry.uid);
+    automationIdInput.on('input', function () {
+        const uid = $(this).data('uid');
+        const value = $(this).val();
+
+        data.entries[uid].automationId = value;
+        setOriginalDataValue(data, uid, 'extensions.automation_id', data.entries[uid].automationId);
+        saveWorldInfo(name, data);
+    });
+    automationIdInput.val(entry.automationId ?? '').trigger('input');
+    setTimeout(() => createEntryInputAutocomplete(automationIdInput, getAutomationIdCallback(data)), 1);
 
     template.find('.inline-drawer-content').css('display', 'none'); //entries start collapsed
 
@@ -1364,6 +1616,83 @@ function getWorldEntry(name, data, entry) {
     }
 
     return template;
+}
+
+/**
+ * Get the inclusion groups for the autocomplete.
+ * @param {any} data WI data
+ * @returns {(input: any, output: any) => any} Callback function for the autocomplete
+ */
+function getInclusionGroupCallback(data) {
+    return function(input, output) {
+        const groups = new Set();
+        for (const entry of Object.values(data.entries)) {
+            if (entry.group) {
+                groups.add(String(entry.group));
+            }
+        }
+
+        const haystack = Array.from(groups);
+        haystack.sort((a, b) => a.localeCompare(b));
+        const needle = input.term.toLowerCase();
+        const hasExactMatch = haystack.findIndex(x => x.toLowerCase() == needle) !== -1;
+        const result = haystack.filter(x => x.toLowerCase().includes(needle));
+
+        if (input.term && !hasExactMatch) {
+            result.unshift(input.term);
+        }
+
+        output(result);
+    };
+}
+
+function getAutomationIdCallback(data) {
+    return function(input, output) {
+        const ids = new Set();
+        for (const entry of Object.values(data.entries)) {
+            if (entry.automationId) {
+                ids.add(String(entry.automationId));
+            }
+        }
+
+        if ('quickReplyApi' in window) {
+            // @ts-ignore
+            for (const automationId of window['quickReplyApi'].listAutomationIds()) {
+                ids.add(String(automationId));
+            }
+        }
+
+        const haystack = Array.from(ids);
+        haystack.sort((a, b) => a.localeCompare(b));
+        const needle = input.term.toLowerCase();
+        const hasExactMatch = haystack.findIndex(x => x.toLowerCase() == needle) !== -1;
+        const result = haystack.filter(x => x.toLowerCase().includes(needle));
+
+        if (input.term && !hasExactMatch) {
+            result.unshift(input.term);
+        }
+
+        output(result);
+    };
+}
+
+/**
+ * Create an autocomplete for the inclusion group.
+ * @param {JQuery<HTMLElement>} input Input element to attach the autocomplete to
+ * @param {(input: any, output: any) => any} callback Source data callbacks
+ */
+function createEntryInputAutocomplete(input, callback) {
+    $(input).autocomplete({
+        minLength: 0,
+        source: callback,
+        select: function (event, ui) {
+            $(input).val(ui.item.value).trigger('input').trigger('blur');
+        },
+    });
+
+    $(input).on('focus click', function () {
+        $(input).autocomplete('search', String($(input).val()));
+    });
 }
 
 async function deleteWorldInfoEntry(data, uid) {
@@ -1395,6 +1724,10 @@ const newEntryTemplate = {
     useProbability: true,
     depth: DEFAULT_DEPTH,
     group: '',
+    scanDepth: null,
+    caseSensitive: null,
+    matchWholeWords: null,
+    automationId: '',
 };
 
 function createWorldInfoEntry(name, data, fromSlashCommand = false) {
@@ -1552,11 +1885,6 @@ async function createNewWorldInfo(worldInfoName) {
     }
 }
 
-// Gets a string that respects the case sensitivity setting
-function transformString(str) {
-    return world_info_case_sensitive ? str : str.toLowerCase();
-}
-
 async function getCharacterLore() {
     const character = characters[this_chid];
     const name = character?.name;
@@ -1676,13 +2004,19 @@ async function getSortedEntries() {
     }
 }
 
+/**
+ * Performs a scan on the chat and returns the world info activated.
+ * @param {string[]} chat The chat messages to scan.
+ * @param {number} maxContext The maximum context size of the generation.
+ * @typedef {{ worldInfoBefore: string, worldInfoAfter: string, WIDepthEntries: any[], allActivatedEntries: Set<any> }} WIActivated
+ * @returns {Promise<WIActivated>} The world info activated.
+ */
 async function checkWorldInfo(chat, maxContext) {
     const context = getContext();
-    const messagesToLookBack = world_info_depth * 2 || 1;
+    const buffer = new WorldInfoBuffer(chat);
 
     // Combine the chat
-    let textToScan = chat.slice(0, messagesToLookBack).join('');
-    let minActivationMsgIndex = messagesToLookBack; // tracks chat index to satisfy `world_info_min_activations`
+    let minActivationMsgIndex = world_info_depth; // tracks chat index to satisfy `world_info_min_activations`
 
     // Add the depth or AN if enabled
     // Put this code here since otherwise, the chat reference is modified
@@ -1690,13 +2024,10 @@ async function checkWorldInfo(chat, maxContext) {
         if (context.extensionPrompts[key]?.scan) {
             const prompt = getExtensionPromptByName(key);
             if (prompt) {
-                textToScan = `${prompt}\n${textToScan}`;
+                buffer.addRecurse(prompt);
             }
         }
     }
-
-    // Transform the resulting string
-    textToScan = transformString(textToScan);
 
     let needsToScan = true;
     let token_budget_overflowed = false;
@@ -1716,7 +2047,7 @@ async function checkWorldInfo(chat, maxContext) {
     const sortedEntries = await getSortedEntries();
 
     if (sortedEntries.length === 0) {
-        return { worldInfoBefore: '', worldInfoAfter: '' };
+        return { worldInfoBefore: '', worldInfoAfter: '', WIDepthEntries: [], allActivatedEntries: new Set() };
     }
 
     while (needsToScan) {
@@ -1776,10 +2107,11 @@ async function checkWorldInfo(chat, maxContext) {
 
                 primary: for (let key of entry.key) {
                     const substituted = substituteParams(key);
+                    const textToScan = buffer.get(entry);
 
                     console.debug(`${entry.uid}: ${substituted}`);
 
-                    if (substituted && matchKeys(textToScan, substituted.trim())) {
+                    if (substituted && buffer.matchKeys(textToScan, substituted.trim(), entry)) {
                         console.debug(`WI UID ${entry.uid} found by primary match: ${substituted}.`);
 
                         //selective logic begins
@@ -1793,7 +2125,7 @@ async function checkWorldInfo(chat, maxContext) {
                             let hasAllMatch = true;
                             secondary: for (let keysecondary of entry.keysecondary) {
                                 const secondarySubstituted = substituteParams(keysecondary);
-                                const hasSecondaryMatch = secondarySubstituted && matchKeys(textToScan, secondarySubstituted.trim());
+                                const hasSecondaryMatch = secondarySubstituted && buffer.matchKeys(textToScan, secondarySubstituted.trim(), entry);
                                 console.debug(`WI UID:${entry.uid}: Filtering for secondary keyword - "${secondarySubstituted}".`);
 
                                 if (hasSecondaryMatch) {
@@ -1883,13 +2215,18 @@ async function checkWorldInfo(chat, maxContext) {
             needsToScan = false;
         }
 
+        if (newEntries.length === 0) {
+            console.debug('No new entries activated, stopping');
+            needsToScan = false;
+        }
+
         if (needsToScan) {
             const text = newEntries
                 .filter(x => !failedProbabilityChecks.has(x))
+                .filter(x => !x.preventRecursion)
                 .map(x => x.content).join('\n');
-            const currentlyActivatedText = transformString(text);
-            textToScan = (currentlyActivatedText + '\n' + textToScan);
-            allActivatedText = (currentlyActivatedText + '\n' + allActivatedText);
+            buffer.addRecurse(text);
+            allActivatedText = (text + '\n' + allActivatedText);
         }
 
         // world_info_min_activations
@@ -1902,8 +2239,8 @@ async function checkWorldInfo(chat, maxContext) {
                 ) || (minActivationMsgIndex >= chat.length);
                 if (!over_max) {
                     needsToScan = true;
-                    textToScan = transformString(chat.slice(minActivationMsgIndex, minActivationMsgIndex + 1).join(''));
                     minActivationMsgIndex += 1;
+                    buffer.addSkew();
                 }
             }
         }
@@ -1957,7 +2294,7 @@ async function checkWorldInfo(chat, maxContext) {
         context.setExtensionPrompt(NOTE_MODULE_NAME, ANWithWI, chat_metadata[metadata_keys.position], chat_metadata[metadata_keys.depth], extension_settings.note.allowWIScan);
     }
 
-    return { worldInfoBefore, worldInfoAfter, WIDepthEntries };
+    return { worldInfoBefore, worldInfoAfter, WIDepthEntries, allActivatedEntries };
 }
 
 /**
@@ -1983,13 +2320,17 @@ function filterByInclusionGroups(newEntries, allActivatedEntries) {
     for (const [key, group] of Object.entries(grouped)) {
         console.debug(`Checking inclusion group '${key}' with ${group.length} entries`, group);
 
-        if (!Array.isArray(group) || group.length <= 1) {
-            console.debug('Skipping inclusion group check, only one entry');
+        if (Array.from(allActivatedEntries).some(x => x.group === key)) {
+            console.debug(`Skipping inclusion group check, group already activated '${key}'`);
+            // We need to forcefully deactivate all other entries in the group
+            for (const entry of group) {
+                newEntries.splice(newEntries.indexOf(entry), 1);
+            }
             continue;
         }
 
-        if (Array.from(allActivatedEntries).some(x => x.group === key)) {
-            console.debug(`Skipping inclusion group check, group already activated '${key}'`);
+        if (!Array.isArray(group) || group.length <= 1) {
+            console.debug('Skipping inclusion group check, only one entry');
             continue;
         }
 
@@ -2024,29 +2365,6 @@ function filterByInclusionGroups(newEntries, allActivatedEntries) {
             newEntries.splice(newEntries.indexOf(entry), 1);
         }
     }
-}
-
-function matchKeys(haystack, needle) {
-    const transformedString = transformString(needle);
-
-    if (world_info_match_whole_words) {
-        const keyWords = transformedString.split(/\s+/);
-
-        if (keyWords.length > 1) {
-            return haystack.includes(transformedString);
-        }
-        else {
-            const regex = new RegExp(`\\b${escapeRegex(transformedString)}\\b`);
-            if (regex.test(haystack)) {
-                return true;
-            }
-        }
-
-    } else {
-        return haystack.includes(transformedString);
-    }
-
-    return false;
 }
 
 function convertAgnaiMemoryBook(inputObj) {
@@ -2158,6 +2476,7 @@ function convertCharacterBook(characterBook) {
             order: entry.insertion_order,
             position: entry.extensions?.position ?? (entry.position === 'before_char' ? world_info_position.before : world_info_position.after),
             excludeRecursion: entry.extensions?.exclude_recursion ?? false,
+            preventRecursion: entry.extensions?.prevent_recursion ?? false,
             disable: !entry.enabled,
             addMemo: entry.comment ? true : false,
             displayIndex: entry.extensions?.display_index ?? index,
@@ -2166,6 +2485,10 @@ function convertCharacterBook(characterBook) {
             depth: entry.extensions?.depth ?? DEFAULT_DEPTH,
             selectiveLogic: entry.extensions?.selectiveLogic ?? world_info_logic.AND_ANY,
             group: entry.extensions?.group ?? '',
+            scanDepth: entry.extensions?.scan_depth ?? null,
+            caseSensitive: entry.extensions?.case_sensitive ?? null,
+            matchWholeWords: entry.extensions?.match_whole_words ?? null,
+            automationId: entry.extensions?.automation_id ?? '',
         };
     });
 
@@ -2201,7 +2524,7 @@ export function checkEmbeddedWorld(chid) {
         const checkKey = `AlertWI_${characters[chid].avatar}`;
         const worldName = characters[chid]?.data?.extensions?.world;
         if (!localStorage.getItem(checkKey) && (!worldName || !world_names.includes(worldName))) {
-            localStorage.setItem(checkKey, 1);
+            localStorage.setItem(checkKey, 'true');
 
             if (power_user.world_import_dialog) {
                 const html = `<h3>This character has an embedded World/Lorebook.</h3>
@@ -2265,24 +2588,52 @@ export async function importEmbeddedWorldInfo(skipPopup = false) {
     setWorldInfoButtonClass(chid, true);
 }
 
-function onWorldInfoChange(_, text) {
-    if (_ !== '__notSlashCommand__') { // if it's a slash command
+function onWorldInfoChange(args, text) {
+    if (args !== '__notSlashCommand__') { // if it's a slash command
+        const silent = isTrueBoolean(args.silent);
         if (text.trim() !== '') { // and args are provided
             const slashInputSplitText = text.trim().toLowerCase().split(',');
 
             slashInputSplitText.forEach((worldName) => {
                 const wiElement = getWIElement(worldName);
                 if (wiElement.length > 0) {
-                    selected_world_info.push(wiElement.text());
-                    wiElement.prop('selected', true);
-                    toastr.success(`Activated world: ${wiElement.text()}`);
+                    const name = wiElement.text();
+                    switch (args.state) {
+                        case 'off': {
+                            if (selected_world_info.includes(name)) {
+                                selected_world_info.splice(selected_world_info.indexOf(name), 1);
+                                wiElement.prop('selected', false);
+                                if (!silent) toastr.success(`Deactivated world: ${name}`);
+                            } else {
+                                if (!silent) toastr.error(`World was not active: ${name}`);
+                            }
+                            break;
+                        }
+                        case 'toggle': {
+                            if (selected_world_info.includes(name)) {
+                                selected_world_info.splice(selected_world_info.indexOf(name), 1);
+                                wiElement.prop('selected', false);
+                                if (!silent) toastr.success(`Deactivated world: ${name}`);
+                            } else {
+                                selected_world_info.push(name);
+                                wiElement.prop('selected', true);
+                                if (!silent) toastr.success(`Activated world: ${name}`);
+                            }
+                            break;
+                        }
+                        default: {
+                            selected_world_info.push(name);
+                            wiElement.prop('selected', true);
+                            if (!silent) toastr.success(`Activated world: ${name}`);
+                        }
+                    }
                 } else {
-                    toastr.error(`No world found named: ${worldName}`);
+                    if (!silent) toastr.error(`No world found named: ${worldName}`);
                 }
             });
             $('#world_info').trigger('change');
         } else { // if no args, unset all worlds
-            toastr.success('Deactivated all worlds');
+            if (!silent) toastr.success('Deactivated all worlds');
             selected_world_info = [];
             $('#world_info').val(null).trigger('change');
         }
@@ -2414,7 +2765,7 @@ function assignLorebookToChat() {
 jQuery(() => {
 
     $(document).ready(function () {
-        registerSlashCommand('world', onWorldInfoChange, [], '<span class="monospace">(optional name)</span> – sets active World, or unsets if no args provided', true, true);
+        registerSlashCommand('world', onWorldInfoChange, [], '<span class="monospace">[optional state=off|toggle] [optional silent=true] (optional name)</span> – sets active World, or unsets if no args provided, use <code>state=off</code> and <code>state=toggle</code> to deactivate or toggle a World, use <code>silent=true</code> to suppress toast messages', true, true);
     });
 
 
@@ -2490,6 +2841,11 @@ jQuery(() => {
     $('#world_info_budget').on('input', function () {
         world_info_budget = Number($(this).val());
         $('#world_info_budget_counter').val($(this).val());
+        saveSettings();
+    });
+
+    $('#world_info_tagify').on('input', function () {
+        extension_settings.Nvkun.witaggify = !!$(this).prop('checked');
         saveSettings();
     });
 
@@ -2572,4 +2928,14 @@ jQuery(() => {
             closeOnSelect: false,
         });
     }
+
+    $('#WorldInfo').on('scroll', () => {
+        $('.world_entry input[name="group"], .world_entry input[name="automationId"]').each((_, el) => {
+            const instance = $(el).autocomplete('instance');
+
+            if (instance !== undefined) {
+                $(el).autocomplete('close');
+            }
+        });
+    });
 });

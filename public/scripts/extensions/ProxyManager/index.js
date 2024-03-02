@@ -166,6 +166,10 @@ async function saveProxy() {
 async function applyProxyPreset(name) {
     const ProxyPreset = presets.find(x => x.name == name);
 
+    if (name == ''){
+        return;
+    }
+
     if (!ProxyPreset) {
         toastr.warning(`error, preset '${name}' not found. Confirm you are using proper case sensitivity!`)
         return;
@@ -255,6 +259,9 @@ jQuery(function () {
                 </div>
                 <div class="inline-drawer-content">
                         <select id="ProxyPresets" name="preset">
+                            <option value="">
+                                <span>-- Selected to change --</span>
+                            </option>
                         </select>
                     <div>
                     <label for="ProxyURL">Current proxy URL: </label>
