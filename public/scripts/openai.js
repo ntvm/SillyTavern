@@ -2321,7 +2321,6 @@ class ChatCompletion {
     squashSystemMessages() {
         const excludeList = ['newMainChat', 'newChat', 'groupNudge'];
         this.messages.collection = this.messages.flatten();
-
         let lastMessage = null;
         let squashedMessages = [];
 
@@ -2337,13 +2336,8 @@ class ChatCompletion {
                     lastMessage.tokens = tokenHandler.count({ role: lastMessage.role, content: lastMessage.content });
                 }
                 else {
-                    switch (message.content){
-                        case "":
-                            break;
-                        default:
-                            squashedMessages.push(message);
-                            lastMessage = message;
-                    }
+                    squashedMessages.push(message);
+                    lastMessage = message;
                 }
             }
             else {
@@ -2351,7 +2345,6 @@ class ChatCompletion {
                 lastMessage = message;
             }
         }
-
         this.messages.collection = squashedMessages;
     }
 
