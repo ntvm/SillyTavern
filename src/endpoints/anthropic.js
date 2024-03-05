@@ -1,15 +1,55 @@
-const { readSecret, SECRET_KEYS } = require('./secrets');
+const { readSecret, SECRET_KEYS, getBaseproxy } = require('./secrets');
 const fetch = require('node-fetch').default;
 const express = require('express');
 const { jsonParser } = require('../express-common');
 
 const router = express.Router();
 
+
+function Proxystuff(Uscase){
+    var array = readSecret(SECRET_KEYS.OAIPROXY);
+    var passw = array.pop();
+    var url = array.pop();
+    var allowProxy = array.pop();
+
+    switch (Uscase){
+        case 'useproxy':
+            if (passw == false) { allowProxy = false; return allowProxy}
+            return allowProxy;
+        case 'getkey':
+            return passw;
+        case 'getURL':
+            url = getBaseproxy(url);
+            return url;
+    }
+
+}
+
 router.post('/caption-image', jsonParser, async (request, response) => {
     try {
         const mimeType = request.body.image.split(';')[0].split(':')[1];
         const base64Data = request.body.image.split(',')[1];
-        const url = 'https://api.anthropic.com/v1/messages';
+        var rn = 'useproxy';
+        var allowProxy = Proxystuff(rn);
+
+        if (allowProxy == true) {proxy = true};
+
+        if (proxy == true) {
+            rn = 'getURL';
+            apiUrl = Proxystuff(rn);
+            apiUrl = apiUrl + '/anthropic/v1/messages';
+        } else if (request.body.reverse_proxy) {
+            apiUrl = `${request.body.reverse_proxy}/v1/messages'`;
+        } else { url = 'https://api.anthropic.com/v1/messages' };
+
+        if (proxy == true) {
+            if (proxy == true) {
+                rn = 'getkey';
+                apikey = Proxystuff(rn);
+            }} else if (request.body.reverse_proxy && request.body.proxy_password) {
+            apikey = request.body.proxy_password;
+        } else { apikey = readSecret(SECRET_KEYS.CLAUDE) };
+
         const body = {
             model: request.body.model,
             messages: [
@@ -32,13 +72,13 @@ router.post('/caption-image', jsonParser, async (request, response) => {
 
         console.log('Multimodal captioning request', body);
 
-        const result = await fetch(url, {
+        const result = await fetch(apiUrl, {
             body: JSON.stringify(body),
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'anthropic-version': '2023-06-01',
-                'x-api-key': readSecret(SECRET_KEYS.CLAUDE),
+                'x-api-key': apikey,
             },
             timeout: 0,
         });
