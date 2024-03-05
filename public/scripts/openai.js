@@ -248,6 +248,7 @@ const default_settings = {
     exclude_assistant: false,
     claude_use_sysprompt: false,
     claude_exclude_prefixes: false,
+    claude_allow_plaintext: true,
     use_alt_scale: false,
     squash_system_messages: false,
     image_inlining: false,
@@ -323,6 +324,7 @@ const oai_settings = {
     exclude_assistant: false,
     claude_use_sysprompt: false,
     claude_exclude_prefixes: false,
+	claude_allow_plaintext: false,
     use_alt_scale: false,
     squash_system_messages: false,
     image_inlining: false,
@@ -1786,6 +1788,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['exclude_assistant'] = oai_settings.exclude_assistant;
         generate_data['claude_use_sysprompt'] = oai_settings.claude_use_sysprompt;
+        generate_data['claude_allow_plaintext'] = oai_settings.claude_allow_plaintext;
         generate_data['claude_exclude_prefixes'] = oai_settings.claude_exclude_prefixes;
         generate_data['stop'] = getCustomStoppingStrings(); // Claude shouldn't have limits on stop strings.
         generate_data['human_sysprompt_message'] = substituteParams(oai_settings.human_sysprompt_message);
@@ -1900,8 +1903,10 @@ async function sendOpenAIRequest(type, messages, signal) {
 }
 
 function getStreamingReply(data) {
-    if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
-        return data?.completion || '';//return data?.delta?.text || ''; 
+    if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_plaintext == false || oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_model.includes('claude-3')) {
+        return data?.delta?.text || ''; 
+    } else if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
+        return data?.completion || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } else {
@@ -2709,6 +2714,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.continue_prefill = settings.continue_prefill ?? default_settings.continue_prefill;
 
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
+    if (settings.claude_allow_plaintext !== undefined) oai_settings.claude_allow_plaintext = !!settings.claude_allow_plaintext;
     if (settings.names_in_completion !== undefined) oai_settings.names_in_completion = !!settings.names_in_completion;
     if (settings.openai_model !== undefined) oai_settings.openai_model = settings.openai_model;
     if (settings.use_ai21_tokenizer !== undefined) { oai_settings.use_ai21_tokenizer = !!settings.use_ai21_tokenizer; oai_settings.use_ai21_tokenizer ? ai21_max = 8191 : ai21_max = 9200; }
@@ -2754,6 +2760,7 @@ function loadOpenAISettings(data, settings) {
     $('#use_ai21_tokenizer').prop('checked', oai_settings.use_ai21_tokenizer);
     $('#use_google_tokenizer').prop('checked', oai_settings.use_google_tokenizer);
     $('#exclude_assistant').prop('checked', oai_settings.exclude_assistant);
+    $('#claude_allow_plaintext').prop('checked', oai_settings.claude_allow_plaintext);
     $('#claude_use_sysprompt').prop('checked', oai_settings.claude_use_sysprompt);
     $('#claude_exclude_prefixes').prop('checked', oai_settings.claude_exclude_prefixes);
     $('#scale-alt').prop('checked', oai_settings.use_alt_scale);
@@ -2980,6 +2987,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         use_ai21_tokenizer: settings.use_ai21_tokenizer,
         use_google_tokenizer: settings.use_google_tokenizer,
         exclude_assistant: settings.exclude_assistant,
+		claude_allow_plaintext: settings.claude_allow_plaintext,
         claude_use_sysprompt: settings.claude_use_sysprompt,
         claude_exclude_prefixes: settings.claude_exclude_prefixes,
         use_alt_scale: settings.use_alt_scale,
@@ -3357,6 +3365,7 @@ function onSettingsPresetChange() {
         human_sysprompt_message: ['#claude_human_sysprompt_textarea', 'human_sysprompt_message', false],
         use_ai21_tokenizer: ['#use_ai21_tokenizer', 'use_ai21_tokenizer', true],
         use_google_tokenizer: ['#use_google_tokenizer', 'use_google_tokenizer', true],
+        claude_allow_plaintext: ['#claude_allow_plaintext', 'claude_allow_plaintext', true],
         exclude_assistant: ['#exclude_assistant', 'exclude_assistant', true],
         claude_use_sysprompt: ['#claude_use_sysprompt', 'claude_use_sysprompt', true],
         claude_exclude_prefixes: ['#claude_exclude_prefixes', 'claude_exclude_prefixes', true],
@@ -4239,6 +4248,11 @@ $(document).ready(async function () {
     $('#exclude_assistant').on('change', function () {
         oai_settings.exclude_assistant = !!$('#exclude_assistant').prop('checked');
         $('#claude_assistant_prefill_block').toggle(!oai_settings.exclude_assistant);
+        saveSettingsDebounced();
+    });
+	
+    $('#claude_allow_plaintext').on('change', function () {
+        oai_settings.claude_allow_plaintext = !!$('#claude_allow_plaintext').prop('checked');
         saveSettingsDebounced();
     });
 
