@@ -199,7 +199,7 @@ const default_settings = {
     top_a_openai: 1,
     repetition_penalty_openai: 1,
     stream_openai: false,
-    openai_max_context: max_128k,
+    openai_max_context: max_4k,
     openai_max_tokens: 300,
     wrap_in_quotes: false,
     names_in_completion: false,
@@ -2321,7 +2321,6 @@ class ChatCompletion {
     squashSystemMessages() {
         const excludeList = ['newMainChat', 'newChat', 'groupNudge'];
         this.messages.collection = this.messages.flatten();
-
         let lastMessage = null;
         let squashedMessages = [];
 
@@ -2337,13 +2336,8 @@ class ChatCompletion {
                     lastMessage.tokens = tokenHandler.count({ role: lastMessage.role, content: lastMessage.content });
                 }
                 else {
-                    switch (message.content){
-                        case "":
-                            break;
-                        default:
-                            squashedMessages.push(message);
-                            lastMessage = message;
-                    }
+                    squashedMessages.push(message);
+                    lastMessage = message;
                 }
             }
             else {
@@ -2351,7 +2345,6 @@ class ChatCompletion {
                 lastMessage = message;
             }
         }
-
         this.messages.collection = squashedMessages;
     }
 
@@ -3415,9 +3408,6 @@ function getMaxContextOpenAI(value) {
         return unlocked_max;
     }
     else if (value.includes('gpt-4-turbo') || value.includes('gpt-4-1106') || value.includes('gpt-4-0125') || value.includes('gpt-4-vision')) {
-        return max_128k;
-    }
-    else if (value.includes('gpt-4-0125')) {
         return max_128k;
     }
     else if (value.includes('gpt-3.5-turbo-1106')) {
