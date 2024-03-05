@@ -1901,7 +1901,7 @@ async function sendOpenAIRequest(type, messages, signal) {
 
 function getStreamingReply(data) {
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
-        return data?.completion || '';
+        return data?.delta?.text || ''; //return data?.completion || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } else {
@@ -3482,8 +3482,14 @@ async function onModelChange() {
     let value = String($(this).val() || '');
 
     if ($(this).is('#model_claude_select')) {
+        if (value.includes('-v')) {
+            value = value.replace('-v', '-');
+        } else if (value === '' || value === 'claude-2') {
+            value = default_settings.claude_model;
+        }
         console.log('Claude model changed to', value);
         oai_settings.claude_model = value;
+        $('#model_claude_select').val(oai_settings.claude_model);
     }
 
     if ($(this).is('#model_windowai_select')) {
@@ -3591,7 +3597,7 @@ async function onModelChange() {
         if (oai_settings.max_context_unlocked) {
             $('#openai_max_context').attr('max', max_200k);
         }
-        else if (value == 'claude-2.1' || value == 'claude-2') {
+        else if (value == 'claude-2.1' || value.startsWith('claude-3')) {
             $('#openai_max_context').attr('max', max_200k);
         }
         else if (value.endsWith('100k') || value.startsWith('claude-2') || value === 'claude-instant-1.2') {
@@ -3981,6 +3987,7 @@ export function isImageInliningSupported() {
 
     const gpt4v = 'gpt-4-vision';
     const geminiProV = 'gemini-pro-vision';
+    const claude = 'claude-3';
     const llava = 'llava';
 
     if (!oai_settings.image_inlining) {
@@ -3992,6 +3999,8 @@ export function isImageInliningSupported() {
             return oai_settings.openai_model.includes(gpt4v);
         case chat_completion_sources.MAKERSUITE:
             return oai_settings.google_model.includes(geminiProV);
+        case chat_completion_sources.CLAUDE:
+            return oai_settings.claude_model.includes(claude);
         case chat_completion_sources.OPENROUTER:
             return !oai_settings.openrouter_force_instruct && (oai_settings.openrouter_model.includes(gpt4v) || oai_settings.openrouter_model.includes(llava));
         case chat_completion_sources.CUSTOM:

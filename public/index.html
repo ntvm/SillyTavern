@@ -1666,12 +1666,12 @@
                                             </span>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="openai,openrouter,makersuite,custom">
+                                    <div class="range-block" data-source="openai,openrouter,makersuite,claude,custom">
                                         <label for="openai_image_inlining" class="checkbox_label flexWrap widthFreeExpand">
                                             <input id="openai_image_inlining" type="checkbox" />
                                             <span data-i18n="Send inline images">Send inline images</span>
                                             <div id="image_inlining_hint" class="flexBasis100p toggle-description justifyLeft">
-                                                Sends images in prompts if the model supports it (e.g. GPT-4V or Llava 13B).
+                                                Sends images in prompts if the model supports it (e.g. GPT-4V, Claude 3 or Llava 13B).
                                                 Use the <code><i class="fa-solid fa-paperclip"></i></code> action on any message or the
                                                 <code><i class="fa-solid fa-wand-magic-sparkles"></i></code> menu to attach an image file to the chat.
                                             </div>
@@ -2353,10 +2353,10 @@
                                 <select id="model_claude_select">
                                     <optgroup label="Latest">
                                         <option value="claude-2">claude-2</option>
-                                        <option value="claude-v1">claude-v1</option>
-                                        <option value="claude-v1-100k">claude-v1-100k</option>
-                                        <option value="claude-instant-v1">claude-instant-v1</option>
-                                        <option value="claude-instant-v1-100k">claude-instant-v1-100k</option>
+                                        <option value="claude-1">claude-v1</option>
+                                        <option value="claude-1-100k">claude-v1-100k</option>
+                                        <option value="claude-instant-1">claude-instant-v1</option>
+                                        <option value="claude-instant-1-100k">claude-instant-v1-100k</option>
                                     </optgroup>
                                     <optgroup label="Sub-versions">
                                         <option value="claude-2.1">claude-2.1</option>
@@ -2364,14 +2364,14 @@
                                         <option value="claude-3-opus-20240229">claude-3-Opus (smarter, biggest cost per tokens)</option>
                                         <option value="claude-3-sonnet-20240229">claude-3-Sonnet (medium intelligence, cost)</option>
                                         <option value="claude-3-haiku-20240229">claude-3-Haiku (dumber, cheaper)</option>
-                                        <option value="claude-v1.3">claude-v1.3</option>
-                                        <option value="claude-v1.3-100k">claude-v1.3-100k</option>
-                                        <option value="claude-v1.2">claude-v1.2</option>
-                                        <option value="claude-v1.0">claude-v1.0</option>
+                                        <option value="claude-1.3">claude-v1.3</option>
+                                        <option value="claude-1.3-100k">claude-v1.3-100k</option>
+                                        <option value="claude-1.2">claude-v1.2</option>
+                                        <option value="claude-1.0">claude-v1.0</option>
                                         <option value="claude-instant-1.2">claude-instant-1.2</option>
-                                        <option value="claude-instant-v1.1">claude-instant-v1.1</option>
-                                        <option value="claude-instant-v1.1-100k">claude-instant-v1.1-100k</option>
-                                        <option value="claude-instant-v1.0">claude-instant-v1.0</option>
+                                        <option value="claude-instant-1.1">claude-instant-v1.1</option>
+                                        <option value="claude-instant-1.1-100k">claude-instant-v1.1-100k</option>
+                                        <option value="claude-instant-1.0">claude-instant-v1.0</option>
                                     </optgroup>
                                 </select>
                             </div>
