@@ -10,13 +10,14 @@ var Uscase
 var apiURL
 function Proxystuff(Uscase){
     var array = readSecret(SECRET_KEYS.OAIPROXY);
+    if (array == undefined) { allowProxy = false; return allowProxy;}
     var passw = array.pop();
     var url = array.pop();
     var allowProxy = array.pop();
 
     switch (Uscase){
         case 'useproxy':
-            if (passw == false) { allowProxy = false; return allowProxy}
+            if (passw == false) { allowProxy = false; return allowProxy;}
             return allowProxy;
         case 'getkey':
             return passw;

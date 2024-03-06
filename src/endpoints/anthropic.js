@@ -8,13 +8,14 @@ const router = express.Router();
 
 function Proxystuff(Uscase){
     var array = readSecret(SECRET_KEYS.OAIPROXY);
+    if (array == undefined) { allowProxy = false; return allowProxy;}
     var passw = array.pop();
     var url = array.pop();
     var allowProxy = array.pop();
 
     switch (Uscase){
         case 'useproxy':
-            if (passw == false) { allowProxy = false; return allowProxy}
+            if (passw == false) { allowProxy = false; return allowProxy;}
             return allowProxy;
         case 'getkey':
             return passw;
@@ -32,23 +33,29 @@ router.post('/caption-image', jsonParser, async (request, response) => {
         var rn = 'useproxy';
         var allowProxy = Proxystuff(rn);
 
-        if (allowProxy == true) {proxy = true};
+        if (allowProxy == true) {
+            var proxy = true;
+        } else {
+            proxy = false;
+        }
+
+        var apiUrl;
+        var apikey;
 
         if (proxy == true) {
             rn = 'getURL';
             apiUrl = Proxystuff(rn);
             apiUrl = apiUrl + '/anthropic/v1/messages';
-        } else if (request.body.reverse_proxy) {
+            rn = 'getkey';
+            apikey = Proxystuff(rn);
+        }
+        if (proxy == false && request.body.reverse_proxy && request.body.proxy_password !== undefined) {
             apiUrl = `${request.body.reverse_proxy}/v1/messages'`;
-        } else { url = 'https://api.anthropic.com/v1/messages' };
-
-        if (proxy == true) {
-            if (proxy == true) {
-                rn = 'getkey';
-                apikey = Proxystuff(rn);
-            }} else if (request.body.reverse_proxy && request.body.proxy_password) {
             apikey = request.body.proxy_password;
-        } else { apikey = readSecret(SECRET_KEYS.CLAUDE) };
+        } else {
+            apiUrl = 'https://api.anthropic.com/v1/messages';
+            apikey = readSecret(SECRET_KEYS.CLAUDE);
+        }
 
         const body = {
             model: request.body.model,
