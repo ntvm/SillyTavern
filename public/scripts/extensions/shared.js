@@ -45,8 +45,8 @@ export async function getMultimodalCaption(base64Img, prompt) {
         && oai_settings.reverse_proxy
         && isValidUrl(oai_settings.reverse_proxy);
 
-    const proxyUrl = useReverseProxy ? oai_settings.reverse_proxy : '';
-    const proxyPassword = useReverseProxy ? oai_settings.proxy_password : '';
+    const proxyUrl = useReverseProxy && !oai_settings.reverse_proxy == '' ? oai_settings.reverse_proxy : extension_settings.ProxyManager.ProxyPrior ? extension_settings.ProxyManager.ProxyURL : '';
+    const proxyPassword = useReverseProxy && oai_settings.proxy_password == ''  ? oai_settings.proxy_password : extension_settings.ProxyManager.ProxyPrior ? extension_settings.ProxyManager.ProxyPassword : '';
 
     const requestBody = {
         image: base64Img,

@@ -380,7 +380,7 @@ jQuery(function () {
                                 <option data-type="custom" value="custom_current">[Currently selected]</option>
                             </select>
                         </div>
-                        <label data-type="openai,antropic" class="checkbox_label flexBasis100p" for="caption_allow_reverse_proxy" title="Allow using reverse proxy if defined and valid.">
+                        <label data-type="openai,anthropic" class="checkbox_label flexBasis100p" for="caption_allow_reverse_proxy" title="Allow using reverse proxy if defined and valid.">
                             <input id="caption_allow_reverse_proxy" type="checkbox" class="checkbox">
                             Allow reverse proxy
                         </label>
