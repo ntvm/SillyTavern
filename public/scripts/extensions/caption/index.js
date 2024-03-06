@@ -284,7 +284,7 @@ jQuery(function () {
                 (extension_settings.caption.source === 'multimodal' && extension_settings.caption.multimodal_api === 'openai' && (secret_state[SECRET_KEYS.OPENAI] || extension_settings.caption.allow_reverse_proxy)) ||
                 (extension_settings.caption.source === 'multimodal' && extension_settings.caption.multimodal_api === 'openrouter' && secret_state[SECRET_KEYS.OPENROUTER]) ||
                 (extension_settings.caption.source === 'multimodal' && extension_settings.caption.multimodal_api === 'google' && secret_state[SECRET_KEYS.MAKERSUITE]) ||
-                (extension_settings.caption.source === 'multimodal' && extension_settings.caption.multimodal_api === 'anthropic' && secret_state[SECRET_KEYS.CLAUDE]) ||
+                (extension_settings.caption.source === 'multimodal' && extension_settings.caption.multimodal_api === 'anthropic' && secret_state[SECRET_KEYS.CLAUDE] || extension_settings.caption.allow_reverse_proxy) ||
                 (extension_settings.caption.source === 'multimodal' && extension_settings.caption.multimodal_api === 'ollama' && textgenerationwebui_settings.server_urls[textgen_types.OLLAMA]) ||
                 (extension_settings.caption.source === 'multimodal' && extension_settings.caption.multimodal_api === 'llamacpp' && textgenerationwebui_settings.server_urls[textgen_types.LLAMACPP]) ||
                 (extension_settings.caption.source === 'multimodal' && extension_settings.caption.multimodal_api === 'ooba' && textgenerationwebui_settings.server_urls[textgen_types.OOBA]) ||
