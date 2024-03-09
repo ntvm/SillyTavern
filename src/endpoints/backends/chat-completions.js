@@ -5,7 +5,7 @@ const { Readable } = require('stream');
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
 const { forwardFetchResponse, getConfigValue, tryParse, uuidv4, mergeObjectWithYaml, excludeKeysByYaml, color } = require('../../util');
-const { convertClaudePrompt, convertGooglePrompt, convertTextCompletionPrompt } = require('../prompt-converters');
+const {convertClaudeMessages, convertClaudePrompt, convertGooglePrompt, convertTextCompletionPrompt } = require('../prompt-converters');
 
 const { readSecret, SECRET_KEYS } = require('../secrets');
 const { getTokenizerModel, getSentencepiceTokenizer, getTiktokenTokenizer, sentencepieceTokenizers, TEXT_COMPLETION_MODELS } = require('../tokenizers');
@@ -37,81 +37,116 @@ async function sendClaudeRequest(request, response) {
         request.socket.on('close', function () {
             controller.abort();
         });
-
-        const isSysPromptSupported = request.body.model === 'claude-2' || request.body.model === 'claude-2.1';
-        const requestPrompt = convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes);
+        let use_system_prompt = (request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-3')) && request.body.claude_use_sysprompt;
+        const isSysPromptSupported = request.body.model === 'claude-2' || request.body.model === 'claude-2.1' || request.body.model.startsWith('claude-3');
+        const converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? (convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes, request.body.claude_allow_plaintext)) : convertClaudeMessages(request.body.messages, request.body.assistant_prefill, use_system_prompt, request.body.human_sysprompt_message);
+        const requestRoute = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? 'plain' : 'messages';
 
         // Check Claude messages sequence and prefixes presence.
-        let sequenceError = [];
-        const sequence = requestPrompt.split('\n').filter(x => x.startsWith('Human:') || x.startsWith('Assistant:'));
-        const humanFound = sequence.some(line => line.startsWith('Human:'));
-        const assistantFound = sequence.some(line => line.startsWith('Assistant:'));
-        let humanErrorCount = 0;
-        let assistantErrorCount = 0;
+        if (request.body.claude_allow_plaintext == true && request.body.model.startsWith('claude-1') || request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-instant')) {
+            let sequenceError = [];
+            const sequence = converted_prompt.split('\n').filter(x => x.startsWith('Human:') || x.startsWith('Assistant:'));
+            const humanFound = sequence.some(line => line.startsWith('Human:'));
+            const assistantFound = sequence.some(line => line.startsWith('Assistant:'));
+            let humanErrorCount = 0;
+            let assistantErrorCount = 0;
 
-        for (let i = 0; i < sequence.length - 1; i++) {
-            if (sequence[i].startsWith(sequence[i + 1].split(':')[0])) {
-                if (sequence[i].startsWith('Human:')) {
-                    humanErrorCount++;
-                } else if (sequence[i].startsWith('Assistant:')) {
-                    assistantErrorCount++;
+            for (let i = 0; i < sequence.length - 1; i++) {
+                if (sequence[i].startsWith(sequence[i + 1].split(':')[0])) {
+                    if (sequence[i].startsWith('Human:')) {
+                        humanErrorCount++;
+                    } else if (sequence[i].startsWith('Assistant:')) {
+                        assistantErrorCount++;
+                    }
                 }
             }
-        }
 
-        if (!humanFound) {
-            sequenceError.push(`${divider}\nWarning: No 'Human:' prefix found in the prompt.\n${divider}`);
-        }
-        if (!assistantFound) {
-            sequenceError.push(`${divider}\nWarning: No 'Assistant: ' prefix found in the prompt.\n${divider}`);
-        }
-        if (sequence[0] && !sequence[0].startsWith('Human:')) {
-            sequenceError.push(`${divider}\nWarning: The messages sequence should start with 'Human:' prefix.\nMake sure you have '\\n\\nHuman:' prefix at the very beggining of the prompt, or after the system prompt.\n${divider}`);
-        }
-        if (humanErrorCount > 0 || assistantErrorCount > 0) {
-            sequenceError.push(`${divider}\nWarning: Detected incorrect Prefix sequence(s).`);
-            sequenceError.push(`Incorrect "Human:" prefix(es): ${humanErrorCount}.\nIncorrect "Assistant: " prefix(es): ${assistantErrorCount}.`);
-            sequenceError.push('Check the prompt above and fix it in the SillyTavern.');
-            sequenceError.push('\nThe correct sequence in the console should look like this:\n(System prompt msg) <-(for the sysprompt format only, else have \\n\\n above the first human\'s  message.)');
-            sequenceError.push('\\n +      <-----(Each message beginning with the "Assistant:/Human:" prefix must have \\n\\n before it.)\n\\n +\nHuman: \\n +\n\\n +\nAssistant: \\n +\n...\n\\n +\nHuman: \\n +\n\\n +\nAssistant:');
-            console.log(color.white(`\nWhile, most probably you searching for it in case, when claude send you internal error. Check, does you even changed your proxy or if it even work?\n${divider}`));
+            if (!humanFound) {
+                sequenceError.push(`${divider}\nWarning: No 'Human:' prefix found in the prompt.\n${divider}`);
+            }
+            if (!assistantFound) {
+                sequenceError.push(`${divider}\nWarning: No 'Assistant: ' prefix found in the prompt.\n${divider}`);
+            }
+            if (sequence[0] && !sequence[0].startsWith('Human:')) {
+                sequenceError.push(`${divider}\nWarning: The messages sequence should start with 'Human:' prefix.\nMake sure you have '\\n\\nHuman:' prefix at the very beggining of the prompt, or after the system prompt.\n${divider}`);
+            }
+            if (humanErrorCount > 0 || assistantErrorCount > 0) {
+                sequenceError.push(`${divider}\nWarning: Detected incorrect Prefix sequence(s).`);
+                sequenceError.push(`Incorrect "Human:" prefix(es): ${humanErrorCount}.\nIncorrect "Assistant: " prefix(es): ${assistantErrorCount}.`);
+                sequenceError.push('Check the prompt above and fix it in the SillyTavern.');
+                sequenceError.push('\nThe correct sequence in the console should look like this:\n(System prompt msg) <-(for the sysprompt format only, else have \\n\\n above the first human\'s  message.)');
+                sequenceError.push('\\n +      <-----(Each message beginning with the "Assistant:/Human:" prefix must have \\n\\n before it.)\n\\n +\nHuman: \\n +\n\\n +\nAssistant: \\n +\n...\n\\n +\nHuman: \\n +\n\\n +\nAssistant:');
+                console.log(color.white(`\nWhile, most probably you searching for it in case, when claude send you internal error. Check, does you even changed your proxy or if it even work?\n${divider}`));
+            }
         }
 
         // Add custom stop sequences
         const stopSequences = ['\n\nHuman:', '\n\nSystem:', '\n\nAssistant:'];
         if (Array.isArray(request.body.stop)) {
             stopSequences.push(...request.body.stop);
-        }
-
-        const requestBody = {
-            prompt: requestPrompt,
-            model: request.body.model,
-            max_tokens_to_sample: request.body.max_tokens,
-            stop_sequences: stopSequences,
-            temperature: request.body.temperature,
-            top_p: request.body.top_p,
-            top_k: request.body.top_k,
-            stream: request.body.stream,
         };
 
-        console.log('Claude request:', requestPrompt); //requestBody); I REALLY hate this green format
+        switch (requestRoute) {
+            case "plain":
+                var requestBody = {
+                    prompt: converted_prompt,
+                    model: request.body.model,
+                    max_tokens_to_sample: request.body.max_tokens,
+                    stop_sequences: stopSequences,
+                    temperature: request.body.temperature,
+                    top_p: request.body.top_p,
+                    top_k: request.body.top_k,
+                    stream: request.body.stream,
+                };
 
-        sequenceError.forEach(sequenceError => {
-            console.log(color.red(sequenceError));
-        });
+                console.log('Claude request:', converted_prompt); //requestBody); I REALLY hate this green format
 
-        const generateResponse = await fetch(apiUrl + '/complete', {
-            method: 'POST',
-            signal: controller.signal,
-            body: JSON.stringify(requestBody),
-            headers: {
-                'Content-Type': 'application/json',
-                'anthropic-version': '2023-06-01',
-                'x-api-key': apiKey,
-            },
-            timeout: 0,
-        });
+                sequenceError.forEach(sequenceError => {
+                    console.log(color.red(sequenceError));
+                });
 
+                var generateResponse = await fetch(apiUrl + '/complete', {
+                    method: 'POST',
+                    signal: controller.signal,
+                    body: JSON.stringify(requestBody),
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'anthropic-version': '2023-06-01',
+                        'x-api-key': apiKey,
+                    },
+                    timeout: 0,
+                });
+                break;
+            case "messages":
+                var requestBody = {
+                    messages: converted_prompt.messages,
+                    model: request.body.model,
+                    max_tokens: request.body.max_tokens,
+                    stop_sequences: stopSequences,
+                    temperature: request.body.temperature,
+                    top_p: request.body.top_p,
+                    top_k: request.body.top_k,
+                    stream: request.body.stream,
+                };
+                if (use_system_prompt) {
+                    const SysL = 'Claude request: ' + converted_prompt.systemPrompt;
+                    console.log(SysL, requestBody);
+                    requestBody.system = converted_prompt.systemPrompt;
+                } else console.log('Claude request: ', requestBody);
+
+                var generateResponse = await fetch(apiUrl + '/messages', {
+                    method: 'POST',
+                    signal: controller.signal,
+                    body: JSON.stringify(requestBody),
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'anthropic-version': '2023-06-01',
+                        'x-api-key': apiKey,
+                    },
+                    timeout: 0,
+                });
+                break;
+        }
         if (request.body.stream) {
             // Pipe remote SSE stream to Express response
             forwardFetchResponse(generateResponse, response);
@@ -120,9 +155,8 @@ async function sendClaudeRequest(request, response) {
                 console.log(color.red(`Claude API returned error: ${generateResponse.status} ${generateResponse.statusText}\n${await generateResponse.text()}\n${divider}`));
                 return response.status(generateResponse.status).send({ error: true });
             }
-
             const generateResponseJson = await generateResponse.json();
-            const responseText = generateResponseJson.completion;
+            const responseText = (request.body.claude_allow_plaintext == true && request.body.model.startsWith('claude-1') || request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-instant')) ? generateResponseJson.completion : generateResponseJson.content[0].text;
             console.log('Claude response:', generateResponseJson);
 
             // Wrap it back to OAI format
@@ -151,8 +185,8 @@ async function sendScaleRequest(request, response) {
         return response.status(400).send({ error: true });
     }
 
-    const requestPrompt = convertTextCompletionPrompt(request.body.messages);
-    console.log('Scale request:', requestPrompt);
+    const converted_prompt = convertTextCompletionPrompt(request.body.messages);
+    console.log('Scale request:', converted_prompt);
 
     try {
         const controller = new AbortController();
@@ -163,7 +197,7 @@ async function sendScaleRequest(request, response) {
 
         const generateResponse = await fetch(apiUrl, {
             method: 'POST',
-            body: JSON.stringify({ input: { input: requestPrompt } }),
+            body: JSON.stringify({ input: { input: converted_prompt } }),
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Basic ${apiKey}`,
