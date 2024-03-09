@@ -33,29 +33,24 @@ router.post('/caption-image', jsonParser, async (request, response) => {
         var rn = 'useproxy';
         var allowProxy = Proxystuff(rn);
 
-        if (allowProxy == true) {
-            var proxy = true;
-        } else {
-            proxy = false;
-        }
-
         var apiUrl;
         var apikey;
 
-        if (proxy == true) {
+        if (allowProxy == false && request.body.reverse_proxy && request.body.proxy_password !== undefined) {
+            apiUrl = `${request.body.reverse_proxy}/v1/messages`;
+            apikey = request.body.proxy_password;
+        } else {
+            apiUrl = 'https://api.anthropic.com/v1/messages';
+            apikey = readSecret(SECRET_KEYS.CLAUDE);
+        }
+        if (allowProxy == true) {
             rn = 'getURL';
             apiUrl = Proxystuff(rn);
             apiUrl = apiUrl + '/anthropic/v1/messages';
             rn = 'getkey';
             apikey = Proxystuff(rn);
         }
-        if (proxy == false && request.body.reverse_proxy && request.body.proxy_password !== undefined) {
-            apiUrl = `${request.body.reverse_proxy}/v1/messages'`;
-            apikey = request.body.proxy_password;
-        } else {
-            apiUrl = 'https://api.anthropic.com/v1/messages';
-            apikey = readSecret(SECRET_KEYS.CLAUDE);
-        }
+
 
         const body = {
             model: request.body.model,
