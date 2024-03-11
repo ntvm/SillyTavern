@@ -43,9 +43,15 @@ async function sendClaudeRequest(request, response) {
         const requestRoute = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? 'plain' : 'messages';
 
         // Check Claude messages sequence and prefixes presence.
-        if (request.body.claude_allow_plaintext == true && request.body.model.startsWith('claude-1') || request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-instant')) {
+        if (request.body.claude_allow_plaintext == true && (request.body.model.startsWith('claude-1') || request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-instant'))) {
             let sequenceError = [];
-            const sequence = converted_prompt.split('\n').filter(x => x.startsWith('Human:') || x.startsWith('Assistant:'));
+            let sequence;
+            if (typeof converted_prompt === 'string') {
+                sequence = converted_prompt.split('\n').filter(x => x.startsWith('Human:') || x.startsWith('Assistant:'));
+            } else {
+                sequence = converted_prompt.messages.map(msg => msg.content);
+            }
+
             const humanFound = sequence.some(line => line.startsWith('Human:'));
             const assistantFound = sequence.some(line => line.startsWith('Assistant:'));
             let humanErrorCount = 0;
