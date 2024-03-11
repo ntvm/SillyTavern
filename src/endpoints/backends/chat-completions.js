@@ -78,6 +78,12 @@ async function sendClaudeRequest(request, response) {
                 sequenceError.push('\\n +      <-----(Each message beginning with the "Assistant:/Human:" prefix must have \\n\\n before it.)\n\\n +\nHuman: \\n +\n\\n +\nAssistant: \\n +\n...\n\\n +\nHuman: \\n +\n\\n +\nAssistant:');
                 console.log(color.white(`\nWhile, most probably you searching for it in case, when claude send you internal error. Check, does you even changed your proxy or if it even work?\n${divider}`));
             }
+            console.log('Claude request:', converted_prompt); //requestBody); I REALLY hate this green format
+
+            sequenceError.forEach(sequenceError => {
+                console.log(color.red(sequenceError));
+            });
+
         }
 
         // Add custom stop sequences
@@ -98,12 +104,6 @@ async function sendClaudeRequest(request, response) {
                     top_k: request.body.top_k,
                     stream: request.body.stream,
                 };
-
-                console.log('Claude request:', converted_prompt); //requestBody); I REALLY hate this green format
-
-                sequenceError.forEach(sequenceError => {
-                    console.log(color.red(sequenceError));
-                });
 
                 var generateResponse = await fetch(apiUrl + '/complete', {
                     method: 'POST',
