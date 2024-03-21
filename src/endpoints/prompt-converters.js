@@ -279,7 +279,7 @@ function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAss
     if (withSysPromptSupport && useSystemPrompt == true) {
         var combinedMessage = '';
         while (messages.length > 0 && messages[0].role === 'system') {
-            combinedMessage += messages[0].content + '-----\n\n';;
+            combinedMessage += messages[0].content + '\n-----\n\n';;
             messages.shift();
         }
 
@@ -288,7 +288,7 @@ function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAss
     } else {requestPrompt = '\n\nHuman:';}
 
     requestPrompt = requestPrompt + messages.map((v) => {
-        return v.content + '-----\n\n';
+        return v.content + '\n-----\n\n';
     }).join('');
 
     if (!addAssistantPrefill) {
