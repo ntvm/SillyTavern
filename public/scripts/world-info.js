@@ -2050,6 +2050,9 @@ async function checkWorldInfo(chat, maxContext) {
         return { worldInfoBefore: '', worldInfoAfter: '', WIDepthEntries: [], allActivatedEntries: new Set() };
     }
 
+    let checkcustommarkup = (extension_settings.Nvkun.witaggify == undefined) ? false: extension_settings.Nvkun.witaggify == false ? false : true;
+    let custommarkup = checkcustommarkup;
+    
     while (needsToScan) {
         // Track how many times the loop has run
         count++;
@@ -2097,6 +2100,7 @@ async function checkWorldInfo(chat, maxContext) {
 
             if (entry.constant) {
                 entry.content = substituteParams(entry.content);
+                if ( custommarkup == true ) {entry.content = entry.content + "------\n"};
                 activatedNow.add(entry);
                 continue;
             }
@@ -2145,6 +2149,7 @@ async function checkWorldInfo(chat, maxContext) {
                                     } else {
                                         console.debug(`(NOT ALL Check) Activating WI Entry ${entry.uid}. Found match for word "${substituted}" without secondary keyword: ${secondarySubstituted}`);
                                     }
+                                    if ( custommarkup == true ) { entry.content = entry.content + "\n------"};
                                     activatedNow.add(entry);
                                     break secondary;
                                 }
@@ -2152,6 +2157,7 @@ async function checkWorldInfo(chat, maxContext) {
 
                             // Handle NOT ANY logic
                             if (selectiveLogic === world_info_logic.NOT_ANY && !hasAnyMatch) {
+                                if ( custommarkup == true ) { entry.content = entry.content + "\n------"};
                                 console.debug(`(NOT ANY Check) Activating WI Entry ${entry.uid}, no secondary keywords found.`);
                                 activatedNow.add(entry);
                             }
@@ -2159,11 +2165,13 @@ async function checkWorldInfo(chat, maxContext) {
                             // Handle AND ALL logic
                             if (selectiveLogic === world_info_logic.AND_ALL && hasAllMatch) {
                                 console.debug(`(AND ALL Check) Activating WI Entry ${entry.uid}, all secondary keywords found.`);
+                                if ( custommarkup == true ) { entry.content = entry.content + "\n------"};
                                 activatedNow.add(entry);
                             }
                         } else {
                             // Handle cases where secondary is empty
                             console.debug(`WI UID ${entry.uid}: Activated without filter logic.`);
+                            if ( custommarkup == true ) { entry.content = entry.content + "\n------"};
                             activatedNow.add(entry);
                             break primary;
                         }
@@ -2205,6 +2213,8 @@ async function checkWorldInfo(chat, maxContext) {
             }
 
             allActivatedEntries.add(entry);
+
+    
             console.debug('WI entry activated:', entry);
         }
 
@@ -2278,6 +2288,7 @@ async function checkWorldInfo(chat, maxContext) {
                         entries: [entry.content],
                     });
                 }
+                
                 break;
             }
             default:

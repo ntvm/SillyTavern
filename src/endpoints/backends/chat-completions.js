@@ -5,7 +5,7 @@ const { Readable } = require('stream');
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
 const { forwardFetchResponse, getConfigValue, tryParse, uuidv4, mergeObjectWithYaml, excludeKeysByYaml, color } = require('../../util');
-const {convertClaudeMessages, convertClaudePrompt, convertGooglePrompt, convertTextCompletionPrompt } = require('../prompt-converters');
+const {convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMessages, convertGooglePrompt, convertTextCompletionPrompt } = require('../prompt-converters');
 
 const { readSecret, SECRET_KEYS } = require('../secrets');
 const { getTokenizerModel, getSentencepiceTokenizer, getTiktokenTokenizer, sentencepieceTokenizers, TEXT_COMPLETION_MODELS } = require('../tokenizers');
@@ -39,8 +39,17 @@ async function sendClaudeRequest(request, response) {
         });
         let use_system_prompt = (request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-3')) && request.body.claude_use_sysprompt;
         const isSysPromptSupported = request.body.model === 'claude-2' || request.body.model === 'claude-2.1' || request.body.model.startsWith('claude-3');
-        const converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? (convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes, request.body.claude_allow_plaintext)) : convertClaudeMessages(request.body.messages, request.body.assistant_prefill, use_system_prompt, request.body.human_sysprompt_message);
         const requestRoute = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? 'plain' : 'messages';
+        let converted_prompt;
+        let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes == true)
+        switch (IsExperemental){
+            default:
+                converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? (convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes)) : convertClaudeMessages(request.body.messages, request.body.assistant_prefill, use_system_prompt, request.body.human_sysprompt_message);
+                break;
+            case true:
+                converted_prompt = convertClaudeExperementalMessages(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes);
+                break;
+        }
 
         // Check Claude messages sequence and prefixes presence.
         if (request.body.claude_allow_plaintext == true && (request.body.model.startsWith('claude-1') || request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-instant'))) {
@@ -96,11 +105,14 @@ async function sendClaudeRequest(request, response) {
         const stopSequences = ['\n\nHuman:', '\n\nSystem:', '\n\nAssistant:'];
         if (Array.isArray(request.body.stop)) {
             stopSequences.push(...request.body.stop);
-        };
-
+        }
+        let bufferresposne;
+        var requestjson;
+        var requestBody;
+        var generateResponse;
         switch (requestRoute) {
             case "plain":
-                var requestBody = {
+                requestBody = {
                     prompt: converted_prompt,
                     model: request.body.model,
                     max_tokens_to_sample: request.body.max_tokens,
@@ -111,7 +123,7 @@ async function sendClaudeRequest(request, response) {
                     stream: request.body.stream,
                 };
 
-                var generateResponse = await fetch(apiUrl + '/complete', {
+                requestjson = {
                     method: 'POST',
                     signal: controller.signal,
                     body: JSON.stringify(requestBody),
@@ -121,10 +133,12 @@ async function sendClaudeRequest(request, response) {
                         'x-api-key': apiKey,
                     },
                     timeout: 0,
-                });
+                };
+
+                generateResponse = await fetch(apiUrl + '/complete', requestjson);
                 break;
             case "messages":
-                var requestBody = {
+                requestBody = {
                     messages: converted_prompt.messages,
                     model: request.body.model,
                     max_tokens: request.body.max_tokens,
@@ -134,13 +148,13 @@ async function sendClaudeRequest(request, response) {
                     top_k: request.body.top_k,
                     stream: request.body.stream,
                 };
-                if (use_system_prompt) {
+                if (use_system_prompt || IsExperemental) {
                     const SysL = 'Claude request: ' + converted_prompt.systemPrompt;
                     console.log(SysL, requestBody);
                     requestBody.system = converted_prompt.systemPrompt;
                 } else console.log('Claude request: ', requestBody);
 
-                var generateResponse = await fetch(apiUrl + '/messages', {
+                requestjson = {
                     method: 'POST',
                     signal: controller.signal,
                     body: JSON.stringify(requestBody),
@@ -150,14 +164,38 @@ async function sendClaudeRequest(request, response) {
                         'x-api-key': apiKey,
                     },
                     timeout: 0,
-                });
+                };
+
+                generateResponse = await fetch(apiUrl + '/messages', requestjson );
                 break;
         }
+        let Attempts = 0;
+        while (generateResponse.ok !== true && Attempts < 6) {
+            switch (requestRoute){
+                case "plain":
+                    generateResponse = await fetch(apiUrl + '/complete', requestjson);
+                    break;
+                case "messages":
+                    generateResponse = await fetch(apiUrl + '/messages', requestjson);
+                    break;
+            }
+            let statusCode = generateResponse.status;
+            let statusText = generateResponse.statusText;
+            if (generateResponse.ok == false && Attempts < 3) {
+                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 4 seconds...`);
+                await new Promise(r => setTimeout(r, 4000));
+            } else if (generateResponse.ok == false && Attempts < 5) {
+                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 8 seconds...`);
+                await new Promise(r => setTimeout(r, 8000));
+            }
+            Attempts++;
+        }
+
         if (request.body.stream) {
             // Pipe remote SSE stream to Express response
             forwardFetchResponse(generateResponse, response);
         } else {
-            if (!generateResponse.ok) {
+            if (!generateResponse.ok ) {
                 console.log(color.red(`Claude API returned error: ${generateResponse.status} ${generateResponse.statusText}\n${await generateResponse.text()}\n${divider}`));
                 return response.status(generateResponse.status).send({ error: true });
             }
