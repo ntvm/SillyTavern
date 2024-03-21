@@ -288,7 +288,7 @@ function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAss
     } else {requestPrompt = '\n\nHuman:';}
 
     requestPrompt = requestPrompt + messages.map((v) => {
-        return v.content + '\n\n';
+        return v.content + '-----\n\n';
     }).join('');
 
     if (!addAssistantPrefill) {
