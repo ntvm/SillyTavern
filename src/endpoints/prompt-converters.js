@@ -279,7 +279,7 @@ function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAss
     if (withSysPromptSupport && useSystemPrompt == true) {
         var combinedMessage = '';
         while (messages.length > 0 && messages[0].role === 'system') {
-            combinedMessage += messages[0].content;
+            combinedMessage += messages[0].content + '-----\n\n';;
             messages.shift();
         }
 
