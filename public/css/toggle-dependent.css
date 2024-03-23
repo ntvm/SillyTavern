@@ -410,6 +410,10 @@ body.movingUI #floatingPrompt {
     resize: both;
 }
 
+.mesAvatarWrapper{
+    padding-left: 5px;
+}
+
 #expression-image.default,
 #expression-holder:has(.default) {
     height: 120px;
