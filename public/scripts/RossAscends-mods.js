@@ -948,9 +948,13 @@ export function initRossMods() {
     }
 
     $(document).on('keydown', function (event) {
-        processHotkeysDebounced(event.originalEvent);
+        processHotkeys(event.originalEvent);
     });
-    const processHotkeysDebounced = debounce(processHotkeys);
+
+    const hotkeyTargets = {
+        'send_textarea': sendTextArea,
+        'dialogue_popup_input': document.querySelector('#dialogue_popup_input'),
+    };
 
     //Additional hotkeys CTRL+ENTER and CTRL+UPARROW
     /**
@@ -958,17 +962,19 @@ export function initRossMods() {
      */
     function processHotkeys(event) {
         //Enter to send when send_textarea in focus
-        if ($(':focus').attr('id') === 'send_textarea') {
+        if (document.activeElement == hotkeyTargets['send_textarea']) {
             const sendOnEnter = shouldSendOnEnter();
             if (!event.shiftKey && !event.ctrlKey && !event.altKey && event.key == 'Enter' && sendOnEnter) {
                 event.preventDefault();
                 sendTextareaMessage();
+                return;
             }
         }
-        if ($(':focus').attr('id') === 'dialogue_popup_input' && !isMobile()) {
+        if (document.activeElement == hotkeyTargets['dialogue_popup_input'] && !isMobile()) {
             if (!event.shiftKey && !event.ctrlKey && event.key == 'Enter') {
                 event.preventDefault();
                 $('#dialogue_popup_ok').trigger('click');
+                return;
             }
         }
         //ctrl+shift+up to scroll to context line
@@ -980,6 +986,7 @@ export function initRossMods() {
                     scrollTop: contextLine.offset().top - $('#chat').offset().top + $('#chat').scrollTop(),
                 }, 300);
             } else { toastr.warning('Context line not found, send a message first!'); }
+            return;
         }
         //ctrl+shift+down to scroll to bottom of chat
         if (event.shiftKey && event.ctrlKey && event.key == 'ArrowDown') {
@@ -987,6 +994,7 @@ export function initRossMods() {
             $('#chat').animate({
                 scrollTop: $('#chat').prop('scrollHeight'),
             }, 300);
+            return;
         }
 
         // Alt+Enter or AltGr+Enter to Continue
@@ -994,6 +1002,7 @@ export function initRossMods() {
             if (is_send_press == false) {
                 console.debug('Continuing with Alt+Enter');
                 $('#option_continue').trigger('click');
+                return;
             }
         }
 
@@ -1003,6 +1012,7 @@ export function initRossMods() {
             if (editMesDone.length > 0) {
                 console.debug('Accepting edits with Ctrl+Enter');
                 editMesDone.trigger('click');
+                return;
             } else if (is_send_press == false) {
                 const skipConfirmKey = 'RegenerateWithCtrlEnter';
                 const skipConfirm = LoadLocalBool(skipConfirmKey);
@@ -1029,6 +1039,7 @@ export function initRossMods() {
                         doRegenerate();
                     });
                 }
+                return;
             } else {
                 console.debug('Ctrl+Enter ignored');
             }
@@ -1037,7 +1048,7 @@ export function initRossMods() {
         // Helper function to check if nanogallery2's lightbox is active
         function isNanogallery2LightboxActive() {
             // Check if the body has the 'nGY2On' class, adjust this based on actual behavior
-            return $('body').hasClass('nGY2_body_scrollbar');
+            return document.body.classList.contains('nGY2_body_scrollbar');
         }
 
         if (event.key == 'ArrowLeft') {        //swipes left
@@ -1050,6 +1061,7 @@ export function initRossMods() {
                 !isInputElementInFocus()
             ) {
                 $('.swipe_left:last').click();
+                return;
             }
         }
         if (event.key == 'ArrowRight') { //swipes right
@@ -1062,13 +1074,14 @@ export function initRossMods() {
                 !isInputElementInFocus()
             ) {
                 $('.swipe_right:last').click();
+                return;
             }
         }
 
 
         if (event.ctrlKey && event.key == 'ArrowUp') { //edits last USER message if chatbar is empty and focused
             if (
-                $('#send_textarea').val() === '' &&
+                hotkeyTargets['send_textarea'].value === '' &&
                 chatbarInFocus === true &&
                 ($('.swipe_right:last').css('display') === 'flex' || $('.last_mes').attr('is_system') === 'true') &&
                 $('#character_popup').css('display') === 'none' &&
@@ -1079,6 +1092,7 @@ export function initRossMods() {
                 const editMes = lastIsUserMes.querySelector('.mes_block .mes_edit');
                 if (editMes !== null) {
                     $(editMes).trigger('click');
+                    return;
                 }
             }
         }
@@ -1086,7 +1100,7 @@ export function initRossMods() {
         if (event.key == 'ArrowUp') { //edits last message if chatbar is empty and focused
             console.log('got uparrow input');
             if (
-                $('#send_textarea').val() === '' &&
+                hotkeyTargets['send_textarea'].value === '' &&
                 chatbarInFocus === true &&
                 //$('.swipe_right:last').css('display') === 'flex' &&
                 $('.last_mes .mes_buttons').is(':visible') &&
@@ -1097,6 +1111,7 @@ export function initRossMods() {
                 const editMes = lastMes.querySelector('.mes_block .mes_edit');
                 if (editMes !== null) {
                     $(editMes).click();
+                    return;
                 }
             }
         }
