@@ -3072,7 +3072,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
     let mesExamplesRaw;
     // Parse example messages
-    if (mesExamples !== undefined){    
+    if (mesExamples !== undefined ){
         if (!mesExamples.startsWith('<START>')) {
             mesExamples = '<START>\n' + mesExamples.trim();
         }
@@ -3083,8 +3083,9 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         if (mesExamples && isInstruct) {
             mesExamples = formatInstructModeExamples(mesExamples, name1, name2);
         }
-    } else {mesExamplesRaw = ''; mesExamples = ''};
-    
+    } else if (mesExamples == undefined) {
+        mesExamplesRaw = ''; mesExamples = '';
+    }
     /**
      * Adds a block heading to the examples string.
      * @param {string} examplesStr

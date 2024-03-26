@@ -41,7 +41,7 @@ async function sendClaudeRequest(request, response) {
         const isSysPromptSupported = request.body.model === 'claude-2' || request.body.model === 'claude-2.1' || request.body.model.startsWith('claude-3');
         const requestRoute = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? 'plain' : 'messages';
         let converted_prompt;
-        let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes == true)
+        let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes == true);
         switch (IsExperemental){
             default:
                 converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? (convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes)) : convertClaudeMessages(request.body.messages, request.body.assistant_prefill, use_system_prompt, request.body.human_sysprompt_message);

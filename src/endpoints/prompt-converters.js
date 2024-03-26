@@ -234,58 +234,9 @@ function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAss
         } else {
             messages[0].role = 'system';
         }
-        //Add the assistant's message to the end of messages.
-        if (addAssistantPostfix) {
-            messages.push({
-                role: 'assistant',
-                content: addAssistantPrefill || '',
-            });
-        }
-        // Find the index of the first message with an assistant role and check for a "'user' role/Human:" before it.
-        let hasUser = false;
-        const firstAssistantIndex = messages.findIndex((message, i) => {
-            if (i >= 0 && (message.role === 'user' || message.content.includes('\n\nHuman: '))) {
-                hasUser = true;
-            }
-            return message.role === 'assistant' && i > 0;
-        });
-        // When 2.1+ and 'Use system prompt' checked, switches to the system prompt format by setting the first message's role to the 'system'.
-        // Inserts the human's message before the first the assistant one, if there are no such message or prefix found.
-        /*
-        if (withSysPromptSupport && useSystemPrompt) {
-            messages[0].role = 'system';
-            if (firstAssistantIndex > 0 && addSysHumanMsg && !hasUser) {
-                messages.splice(firstAssistantIndex, 0, {
-                    role: 'user',
-                    content: addSysHumanMsg,
-                });
-            }
-        } else {
-            // Otherwise, use the default message format by setting the first message's role to 'user'(compatible with all claude models including 2.1.)
-            messages[0].role = 'user';
-            // Fix messages order for default message format when(messages > Context Size) by merging two messages with "\n\nHuman: " prefixes into one, before the first Assistant's message.
-            if (firstAssistantIndex > 0 && !excludePrefixes) {
-                messages[firstAssistantIndex - 1].role = firstAssistantIndex - 1 !== 0 && messages[firstAssistantIndex - 1].role === 'user' ? 'FixHumMsg' : messages[firstAssistantIndex - 1].role;
-            }
-        }
-        */
     }
 
-    // Convert messages to the prompt.
-
     let requestPrompt = '';
-    messages.pop();
-
-    if (withSysPromptSupport && useSystemPrompt == true) {
-        var combinedMessage = '';
-        while (messages.length > 0 && messages[0].role === 'system') {
-            combinedMessage += messages[0].content;
-            messages.shift();
-        }
-
-        requestPrompt = requestPrompt + combinedMessage + '\n\nHuman: ' + addSysHumanMsg;
-
-    } else {requestPrompt = '\n\nHuman:';}
 
     requestPrompt = requestPrompt + messages.map((v) => {
         return v.content + '\n-----\n\n';

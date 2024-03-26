@@ -773,7 +773,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
         const continuePrompt = new Prompt({
             identifier: 'continueNudge',
             role: 'system',
-            content: oai_settings.lookaround_nudge_prompt,
+            content: substituteParams(oai_settings.lookaround_nudge_prompt),
             system_prompt: true
         });
         const preparedPrompt = promptManager.preparePrompt(continuePrompt);
@@ -1795,7 +1795,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['claude_exclude_prefixes'] = oai_settings.claude_exclude_prefixes;
         generate_data['stop'] = getCustomStoppingStrings(); // Claude shouldn't have limits on stop strings.
         generate_data['human_sysprompt_message'] = substituteParams(oai_settings.human_sysprompt_message);
-        generate_data['exclude_h_a_prompt'] = oai_settings.exclude_h_a_prompt;
+        generate_data['exclude_h_a_prompt'] = substituteParams(oai_settings.exclude_h_a_prompt);
         // Don't add a prefill on quiet gens (summarization)
         if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill) {
             generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
@@ -2788,7 +2788,7 @@ function loadOpenAISettings(data, settings) {
     $('#scenario_format_textarea').val(oai_settings.scenario_format);
     $('#personality_format_textarea').val(oai_settings.personality_format);
     $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
-    $('#exclude_h_a_prompt').val(oai_settings.exclude_h_a_prompt);
+    $('#exclude_h_a_prompt_textarea').val(oai_settings.exclude_h_a_prompt);
     $('#send_if_empty_textarea').val(oai_settings.send_if_empty);
 
     $('#temp_openai').val(oai_settings.temp_openai);
