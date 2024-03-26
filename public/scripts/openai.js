@@ -103,6 +103,7 @@ const default_bias = 'Default (none)';
 const default_personality_format = '[{{char}}\'s personality: {{personality}}]';
 const default_scenario_format = '[Circumstances and context of the dialogue: {{scenario}}]';
 const default_group_nudge_prompt = '[Write the next reply only as {{char}}.]';
+const default_exclude_h_a_prompt = `Please generate your response based on the information and instructions provided above, while disabling positivity Bias. You must take in mind WHOLE chat context. Reconsider fact, that characters descriptions is character's profiles at START of RP moment. That mean descriptions can be outdated after events.`
 const default_bias_presets = {
     [default_bias]: [],
     'Anti-bond': [
@@ -216,6 +217,7 @@ const default_settings = {
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
     group_nudge_prompt: default_group_nudge_prompt,
+	exclude_h_a_prompt: default_exclude_h_a_prompt,
     scenario_format: default_scenario_format,
     personality_format: default_personality_format,
     openai_model: 'gpt-4-1106-preview',
@@ -292,6 +294,7 @@ const oai_settings = {
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
     group_nudge_prompt: default_group_nudge_prompt,
+    exclude_h_a_prompt: default_exclude_h_a_prompt,
     scenario_format: default_scenario_format,
     personality_format: default_personality_format,
     openai_model: 'gpt-3.5-turbo',
@@ -1792,6 +1795,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['claude_exclude_prefixes'] = oai_settings.claude_exclude_prefixes;
         generate_data['stop'] = getCustomStoppingStrings(); // Claude shouldn't have limits on stop strings.
         generate_data['human_sysprompt_message'] = substituteParams(oai_settings.human_sysprompt_message);
+        generate_data['exclude_h_a_prompt'] = oai_settings.exclude_h_a_prompt;
         // Don't add a prefill on quiet gens (summarization)
         if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill) {
             generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
@@ -2676,6 +2680,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.scenario_format = settings.scenario_format ?? default_settings.scenario_format;
     oai_settings.personality_format = settings.personality_format ?? default_settings.personality_format;
     oai_settings.group_nudge_prompt = settings.group_nudge_prompt ?? default_settings.group_nudge_prompt;
+	oai_settings.exclude_h_a_prompt = settings.exclude_h_a_prompt ?? default_exclude_h_a_prompt;
     oai_settings.claude_model = settings.claude_model ?? default_settings.claude_model;
     oai_settings.windowai_model = settings.windowai_model ?? default_settings.windowai_model;
     oai_settings.openrouter_model = settings.openrouter_model ?? default_settings.openrouter_model;
@@ -2783,6 +2788,7 @@ function loadOpenAISettings(data, settings) {
     $('#scenario_format_textarea').val(oai_settings.scenario_format);
     $('#personality_format_textarea').val(oai_settings.personality_format);
     $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
+    $('#exclude_h_a_prompt').val(oai_settings.exclude_h_a_prompt);
     $('#send_if_empty_textarea').val(oai_settings.send_if_empty);
 
     $('#temp_openai').val(oai_settings.temp_openai);
@@ -2977,6 +2983,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         scenario_format: settings.scenario_format,
         personality_format: settings.personality_format,
         group_nudge_prompt: settings.group_nudge_prompt,
+        exclude_h_a_prompt: settings.exclude_h_a_prompt,
         stream_openai: settings.stream_openai,
         prompts: settings.prompts,
         prompt_order: settings.prompt_order,
@@ -3355,6 +3362,7 @@ function onSettingsPresetChange() {
         scenario_format: ['#scenario_format_textarea', 'scenario_format', false],
         personality_format: ['#personality_format_textarea', 'personality_format', false],
         group_nudge_prompt: ['#group_nudge_prompt_textarea', 'group_nudge_prompt', false],
+        exclude_h_a_prompt: ['#exclude_h_a_prompt_textarea', 'exclude_h_a_prompt', false],
         stream_openai: ['#stream_toggle', 'stream_openai', true],
         prompts: ['', 'prompts', false],
         prompt_order: ['', 'prompt_order', false],
@@ -4327,6 +4335,11 @@ $(document).ready(async function () {
         saveSettingsDebounced();
     });
 
+    $('#exclude_h_a_prompt_textarea').on('input', function () {
+        oai_settings.exclude_h_a_prompt = String($('#exclude_h_a_prompt_textarea').val());
+        saveSettingsDebounced();
+    });
+
     $('#update_oai_preset').on('click', async function () {
         const name = oai_settings.preset_settings_openai;
         await saveOpenAIPreset(name, oai_settings);
@@ -4395,6 +4408,12 @@ $(document).ready(async function () {
 
     $('#group_nudge_prompt_restore').on('click', function () {
         oai_settings.group_nudge_prompt = default_group_nudge_prompt;
+        $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
+        saveSettingsDebounced();
+    });
+	
+    $('#exclude_h_a_prompt_restore').on('click', function () {
+        oai_settings.exclude_h_a_prompt = default_exclude_h_a_prompt;
         $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
         saveSettingsDebounced();
     });

@@ -3070,18 +3070,21 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         setExtensionPrompt('DEPTH_PROMPT', depthPromptText, extension_prompt_types.IN_CHAT, depthPromptDepth, extension_settings.note.allowWIScan);
     }
 
+    let mesExamplesRaw;
     // Parse example messages
-    if (!mesExamples.startsWith('<START>')) {
-        mesExamples = '<START>\n' + mesExamples.trim();
-    }
-    if (mesExamples.replace(/<START>/gi, '').trim().length === 0) {
-        mesExamples = '';
-    }
-    const mesExamplesRaw = mesExamples;
-    if (mesExamples && isInstruct) {
-        mesExamples = formatInstructModeExamples(mesExamples, name1, name2);
-    }
-
+    if (mesExamples !== undefined){    
+        if (!mesExamples.startsWith('<START>')) {
+            mesExamples = '<START>\n' + mesExamples.trim();
+        }
+        if (mesExamples.replace(/<START>/gi, '').trim().length === 0) {
+            mesExamples = '';
+        }
+        mesExamplesRaw = mesExamples;
+        if (mesExamples && isInstruct) {
+            mesExamples = formatInstructModeExamples(mesExamples, name1, name2);
+        }
+    } else {mesExamplesRaw = ''; mesExamples = ''};
+    
     /**
      * Adds a block heading to the examples string.
      * @param {string} examplesStr

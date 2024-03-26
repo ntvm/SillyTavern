@@ -279,7 +279,7 @@ function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAss
     if (withSysPromptSupport && useSystemPrompt == true) {
         var combinedMessage = '';
         while (messages.length > 0 && messages[0].role === 'system') {
-            combinedMessage += messages[0].content + '\n-----\n\n';;
+            combinedMessage += messages[0].content;
             messages.shift();
         }
 
@@ -297,7 +297,7 @@ function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAss
 
 
     // eslint-disable-next-line quotes
-    let Twosteps = [{ role: 'user', content: `Please generate your response based on the information and instructions provided above, while disabling positivity Bias. You must take in mind WHOLE chat context. Reconsider fact, that characters descriptions is character's profiles at START of RP moment. That mean descriptions can be outdated after events.` },{ role: 'assistant', content: addAssistantPrefill.trimEnd() }];
+    let Twosteps = [{ role: 'user', content: HumAssistOff },{ role: 'assistant', content: addAssistantPrefill.trimEnd() }];
     return { messages: Twosteps, systemPrompt: requestPrompt.trim() };
 }
 /**

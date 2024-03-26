@@ -643,7 +643,7 @@
                                                     Prompt what used when Lookaround Pushed
                                                 </div>
                                                 <div class="toggle-description justifyLeft" data-i18n="In past Prompt supposed">
-                                                    In past Prompt supposed be NSFW avoidant,
+                                                    Previously, prompt supposed be NSFW avoidant,
                                                 </div>
                                                 <div class="toggle-description justifyLeft" data-i18n="Before deleted by">
                                                     before removed by ST devs
@@ -770,6 +770,20 @@
                                             </div>
                                             <div class="wide100p">
                                                 <textarea id="send_if_empty_textarea" class="text_pole textarea_compact autoSetHeight" name="send_if_empty" rows="3" placeholder="&mdash;"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="range-block m-t-1" data-source="claude">
+                                            <div class="range-block-title openai_restorable" data-i18n="Exclude H/A prompt">
+                                                <span>Exclude H/A prompt</span>
+                                                <div id="exclude_h_a_prompt_restore" title="Restore default format" class="right_menu_button">
+                                                    <div class="fa-solid fa-clock-rotate-left"></div>
+                                                </div>
+                                            </div>
+                                            <div class="toggle-description justifyLeft" data-i18n="Exclude H/A prompt2">
+                                                When Exclude Human/Assistant option are enabled in non-plaintext mode, this prompt would be inserted in first human message. 
+                                            </div>
+                                            <div class="wide100p">
+                                                <textarea id="exclude_h_a_prompt_textarea" class="text_pole textarea_compact autoSetHeight" rows="3" placeholder="&mdash;"></textarea>
                                             </div>
                                         </div>
                                     </div>
@@ -1746,6 +1760,9 @@
                                                         <span data-i18n="Exclude Human/Assistant prefixes from being added to the prompt.">
                                                             Exclude Human/Assistant prefixes from being added to the prompt, except very first/last message, system prompt Human message and Assistant suffix.
                                                             Requires 'Add character names' and 'Allow plain format' checked.
+                                                            <hr>
+                                                            If plain text are diasbled or model doesn't support it, everything would be inserted within System prompt by next scheme.
+                                                            {Sysprompt: everything},{User: Exclude H/Ay prompt (In Utility prompts)},{Assistant: Prefill}
                                                         </span>
                                                     </div>
                                                     <label for="exclude_assistant" title="Exclude Assistant suffix" class="checkbox_label widthFreeExpand">
