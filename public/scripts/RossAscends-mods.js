@@ -907,7 +907,7 @@ export function initRossMods() {
         saveSettingsDebounced();
     });
 
-    sendTextArea.addEventListener('input', ()=>{
+    $(sendTextArea).on('input', ()=>{
         if (sendTextArea.scrollHeight > sendTextArea.offsetHeight) {
             autoFitSendTextArea();
         } else {
