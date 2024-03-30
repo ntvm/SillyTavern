@@ -1784,6 +1784,7 @@ function getMessageFromTemplate({
     tokenCount,
     extra,
 } = {}) {
+    let is_favorite;
     const mes = $('#message_template .mes').clone();
     mes.attr({
         'mesid': mesId,
@@ -1793,6 +1794,7 @@ function getMessageFromTemplate({
         'bookmark_link': bookmarkLink,
         'force_avatar': !!forceAvatar,
         'timestamp': timestamp,
+        'is_favorite': extra.is_favorite ?? 'false',
     });
     mes.find('.avatar img').attr('src', avatarImg);
     mes.find('.ch_name .name_text').text(characterName);
@@ -2037,6 +2039,9 @@ function addOneMessage(mes, { type = 'normal', insertAfter = null, scroll = true
         const swipeMessage = $('#chat').find(`[mesid="${chat.length - 1}"]`);
         swipeMessage.find('.mes_text').html('');
         swipeMessage.find('.mes_text').append(messageText);
+        let swipecounter = mes.swipe_id;
+        let checkFavorite = (mes.swipe_info[mes.swipe_id]?.extra?.is_favorite) ?? "false";
+        swipeMessage.find('.last_mes').attr('is_favorite', (checkFavorite ?? 'false'));
         appendMediaToMessage(mes, swipeMessage);
         swipeMessage.attr('title', title);
         swipeMessage.find('.timestamp').text(timestamp).attr('title', `${params.extra.api} - ${params.extra.model}`);
@@ -4733,6 +4738,7 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
             chat[chat.length - 1]['send_date'] = getMessageTimeStamp();
             chat[chat.length - 1]['extra']['api'] = getGeneratingApi();
             chat[chat.length - 1]['extra']['model'] = getGeneratingModel();
+            chat[chat.length - 1]['extra']['is_favorite'] = 'false';
             if (power_user.message_token_count_enabled) {
                 chat[chat.length - 1]['extra']['token_count'] = getTokenCount(chat[chat.length - 1]['mes'], 0);
             }
@@ -7340,6 +7346,7 @@ function swipe_left() {      // when we swipe left..but no generation.
             easing: animation_easing,
             queue: false,
             complete: function () {
+                favoriteSwipeDealer();
                 const is_animation_scroll = ($('#chat').scrollTop() >= ($('#chat').prop('scrollHeight') - $('#chat').outerHeight()) - 10);
                 //console.log('on left swipe click calling addOneMessage');
                 addOneMessage(chat[chat.length - 1], { type: 'swipe' });
@@ -7440,6 +7447,16 @@ async function branchChat(mesId) {
     return fileName;
 }
 
+function favoriteSwipeDealer(usageCase,isEnabled){
+    if (usageCase == true) {document.querySelector('.last_mes').setAttribute("is_favorite",'false'); return;}
+    const chatId = getCurrentChatId();
+    if (!chatId) {return;}
+    const mes = chat[chat.length - 1];
+    let checkswipeFavorism = (mes.swipe_info[mes.swipe_id].extra.is_favorite) ?? "false";
+    document.querySelector('.last_mes').setAttribute("is_favorite", checkswipeFavorism);
+    return;
+}
+
 // when we click swipe right button
 const swipe_right = () => {
     if (chat.length - 1 === Number(this_edit_mes_id)) {
@@ -7516,6 +7533,7 @@ const swipe_right = () => {
             easing: animation_easing,
             queue: false,
             complete: function () {
+                favoriteSwipeDealer(run_generate);
                 /*if (!selected_group) {
                     var typingIndicator = $("#typing_indicator_template .typing_indicator").clone();
                     typingIndicator.find(".typing_indicator_name").text(characters[this_chid].name);

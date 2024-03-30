@@ -335,8 +335,10 @@ table.responsiveTable {
 .mes_translate,
 .sd_message_gen,
 .mes_ghost,
-.mes_narrate {
-    display: none;
+.mes_narrate,
+.mes_favorite,
+.mes_unfavorite { 
+ display: none;
 }
 
 .mes[is_system="true"] .mes_hide {
@@ -348,6 +350,20 @@ table.responsiveTable {
 }
 
 .mes[is_system="true"] .mes_ghost {
+    display: flex;
+}
+
+
+.last_mes[is_favorite="true"]{
+    border: dashed #FCFF5E;
+}
+
+.last_mes[is_favorite="true"] .mes_unfavorite {
+    display: flex;
+    color: #FCFF5E;
+}
+
+.last_mes[is_favorite="false"] .mes_favorite {
     display: flex;
 }
 
