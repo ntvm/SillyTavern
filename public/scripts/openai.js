@@ -30,6 +30,7 @@ import {
     substituteParams,
     system_message_types,
     this_chid,
+    extension_prompt_roles,
 } from '../script.js';
 import { groups, selected_group } from './group-chats.js';
 import { registerSlashCommand } from './slash-commands.js';
@@ -218,7 +219,7 @@ const default_settings = {
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
     group_nudge_prompt: default_group_nudge_prompt,
-	exclude_h_a_prompt: default_exclude_h_a_prompt,
+    exclude_h_a_prompt: default_exclude_h_a_prompt,
     scenario_format: default_scenario_format,
     personality_format: default_personality_format,
     openai_model: 'gpt-4-1106-preview',
@@ -291,7 +292,7 @@ const oai_settings = {
     new_group_chat_prompt: default_new_group_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
-    lookaround_nudge_prompt: default_lookaround_nudge_prompt,						
+    lookaround_nudge_prompt: default_lookaround_nudge_prompt,
     bias_preset_selected: default_bias,
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
@@ -488,17 +489,17 @@ function setOpenAIMessages(chat) {
         if (chat[j].extra?.type === system_message_types.NARRATOR) {
             role = 'system';
         }
-    switch (extension_settings.Nvkun.AlwaysCharnames) {
-        case undefined:
-            var AlwaysCharnames = extension_settings.Nvkun.AlwaysCharnames;
-            break
-        case "true": 
-            AlwaysCharnames = true;
-            break
-        default:
-            AlwaysCharnames = false;
-            break
-    }
+        switch (extension_settings.Nvkun.AlwaysCharnames) {
+            case undefined:
+                var AlwaysCharnames = extension_settings.Nvkun.AlwaysCharnames;
+                break;
+            case 'true':
+                AlwaysCharnames = true;
+                break;
+            default:
+                AlwaysCharnames = false;
+                break;
+        }
         // Check the value of AlwaysCharnames
         switch (AlwaysCharnames) {
             // If it turned on, use Anons code
@@ -770,7 +771,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
         chatCompletion.reserveBudget(continueMessage);
     }
 
-	// Reserve budget for lookaround in continue(why not?) nudge
+// Reserve budget for lookaround in continue(why not?) nudge
     let lookaroundMessage = null;
     if (type === 'lookaround') {
         const continuePrompt = new Prompt({
@@ -782,7 +783,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
         const preparedPrompt = promptManager.preparePrompt(continuePrompt);
         continueMessage = Message.fromPrompt(preparedPrompt);
         chatCompletion.reserveBudget(continueMessage);
-	}
+    }
 
     const lastChatPrompt = messages[messages.length - 1];
     const message = new Message('user', oai_settings.send_if_empty, 'emptyUserMessageReplacement');
@@ -1004,14 +1005,14 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
             case "end":
                 chatCompletion.insert(Message.fromPrompt(summary), 'scenario');
                 break
-			
+
             case "start":
                 chatCompletion.insert(Message.fromPrompt(summary), 'main');
                 break
 
             case "false":
                 break
-		
+
     }
 	}
 
@@ -1040,14 +1041,14 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
             case "end":
                 chatCompletion.insert(Message.fromPrompt(vectorsMemory), 'scenario');
                 break
-			
+
             case "start":
                 chatCompletion.insert(Message.fromPrompt(vectorsMemory), 'main');
                 break
-				
+
             case false:
                 break
-		
+
     }
 	}
 
@@ -1130,18 +1131,18 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
     //(Yep, XML prompt)
     const inject1 = extensionPrompts['Nvkun'];
     switch (inject1){
-	
+
 	case undefined:
 	    if (extension_settings.Nvkun.Inputer_frozen == true && extension_settings.Nvkun.Inputer_prompt !== '') systemPrompts.push({
             role: 'system',
             content: extension_settings.Nvkun.Inputer_prompt,
             identifier: 'XMLpromptPush',
             position: ''
-        });			
+        });
 	    break
-	
-	
-	
+
+
+
 	default:
         if (inject1 && inject1.value && extension_settings.Nvkun.Inputer_frozen == true) systemPrompts.push({
             role: 'system',
@@ -1150,7 +1151,7 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
             position: ''
         });
         break
-	
+
 	}
     // Authors Note
     const authorsNote = extensionPrompts['2_floating_prompt'];
@@ -1787,7 +1788,7 @@ async function sendOpenAIRequest(type, messages, signal) {
                     generate_data['proxy_password'] = oai_settings.proxy_password;
                 }
                 break;
-        
+
             case true:
                 if ([chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI].includes(oai_settings.chat_completion_source)) {
                     if (!extension_settings.ProxyManager.ProxyURL && !extension_settings.ProxyManager.ProxyPassword) {
@@ -1942,7 +1943,7 @@ async function sendOpenAIRequest(type, messages, signal) {
 
 function getStreamingReply(data) {
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_plaintext == false || oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_model.includes('claude-3')) {
-        return data?.delta?.text || ''; 
+        return data?.delta?.text || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
         return data?.completion || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
@@ -4340,7 +4341,7 @@ $(document).ready(async function () {
         $('#claude_assistant_prefill_block').toggle(!oai_settings.exclude_assistant);
         saveSettingsDebounced();
     });
-	
+
     $('#claude_allow_plaintext').on('change', function () {
         oai_settings.claude_allow_plaintext = !!$('#claude_allow_plaintext').prop('checked');
         saveSettingsDebounced();
@@ -4493,13 +4494,13 @@ $(document).ready(async function () {
         $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
         saveSettingsDebounced();
     });
-	
+
     $('#exclude_h_a_prompt_restore').on('click', function () {
         oai_settings.exclude_h_a_prompt = default_exclude_h_a_prompt;
-        $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
+        $('#exclude_h_a_prompt_textarea').val(oai_settings.exclude_h_a_prompt);
         saveSettingsDebounced();
     });
-
+	
     $('#openai_bypass_status_check').on('input', function () {
         oai_settings.bypass_status_check = !!$(this).prop('checked');
         getStatusOpen();
