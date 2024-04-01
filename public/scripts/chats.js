@@ -454,11 +454,15 @@ jQuery(function () {
     });
 
     $(document).on('click', '.mes_favorite', async function () {
-        await favoriteswipe('true');
+        const messageBlock = $(this).closest('.mes');
+        const messageId = Number(messageBlock.attr('mesid'));
+        if (messageId > 1) {await favoriteswipe('true');}
     });
 
     $(document).on('click', '.mes_unfavorite', async function () {
-        await favoriteswipe('false');
+        const messageBlock = $(this).closest('.mes');
+        const messageId = Number(messageBlock.attr('mesid'));
+        if (messageId > 1) {await favoriteswipe('false');}
     });
 
     $(document).on('click', '.mes_file_delete', async function () {

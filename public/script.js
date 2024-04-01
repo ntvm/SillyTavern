@@ -7452,8 +7452,10 @@ function favoriteSwipeDealer(usageCase,isEnabled){
     const chatId = getCurrentChatId();
     if (!chatId) {return;}
     const mes = chat[chat.length - 1];
-    let checkswipeFavorism = (mes.swipe_info[mes.swipe_id].extra.is_favorite) ?? "false";
-    document.querySelector('.last_mes').setAttribute("is_favorite", checkswipeFavorism);
+    if (chat.length > 1) {
+        let checkswipeFavorism = (mes.swipe_info[mes.swipe_id].extra.is_favorite) ?? "false";
+        document.querySelector('.last_mes').setAttribute("is_favorite", checkswipeFavorism);
+    }
     return;
 }
 
