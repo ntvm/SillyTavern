@@ -24,7 +24,7 @@ function getDefaultPresets() {
         const presets = [];
 
         for (const contentItem of contentIndex) {
-            if (contentItem.type.endsWith('_preset')) {
+            if (contentItem.type.endsWith('_preset') || contentItem.type === 'instruct' || contentItem.type === 'context') {
                 contentItem.name = path.parse(contentItem.filename).name;
                 contentItem.folder = getTargetByType(contentItem.type);
                 presets.push(contentItem);
@@ -165,6 +165,10 @@ function getTargetByType(type) {
             return DIRECTORIES.ProxyManager;
         case 'quickReplyPresets':
             return DIRECTORIES.quickreplies;
+        case 'instruct':
+            return DIRECTORIES.instruct;
+        case 'context':
+            return DIRECTORIES.context;
         default:
             return null;
     }

@@ -30,6 +30,7 @@ const fetch = require('node-fetch').default;
 // Unrestrict console logs display limit
 util.inspect.defaultOptions.maxArrayLength = null;
 util.inspect.defaultOptions.maxStringLength = null;
+util.inspect.defaultOptions.depth = 4;
 
 // local library imports
 const basicAuthMiddleware = require('./src/middleware/basicAuth');
@@ -55,15 +56,29 @@ if (process.versions && process.versions.node && process.versions.node.match(/20
 // Set default DNS resolution order to IPv4 first
 dns.setDefaultResultOrder('ipv4first');
 
+const DEFAULT_PORT = 8000;
+const DEFAULT_AUTORUN = false;
+const DEFAULT_LISTEN = false;
+const DEFAULT_CORS_PROXY = false;
+
 const cliArguments = yargs(hideBin(process.argv))
-    .option('autorun', {
+    .usage('Usage: <your-start-script> <command> [options]')
+    .option('port', {
+        type: 'number',
+        default: null,
+        describe: `Sets the port under which SillyTavern will run.\nIf not provided falls back to yaml config 'port'.\n[config default: ${DEFAULT_PORT}]`,
+    }).option('autorun', {
         type: 'boolean',
-        default: false,
-        describe: 'Automatically launch SillyTavern in the browser.',
+        default: null,
+        describe: `Automatically launch SillyTavern in the browser.\nAutorun is automatically disabled if --ssl is set to true.\nIf not provided falls back to yaml config 'autorun'.\n[config default: ${DEFAULT_AUTORUN}]`,
+    }).option('listen', {
+        type: 'boolean',
+        default: null,
+        describe: `SillyTavern is listening on all network interfaces (Wi-Fi, LAN, localhost). If false, will limit it only to internal localhost (127.0.0.1).\nIf not provided falls back to yaml config 'listen'.\n[config default: ${DEFAULT_LISTEN}]`,
     }).option('corsProxy', {
         type: 'boolean',
-        default: false,
-        describe: 'Enables CORS proxy',
+        default: null,
+        describe: `Enables CORS proxy\nIf not provided falls back to yaml config 'enableCorsProxy'.\n[config default: ${DEFAULT_CORS_PROXY}]`,
     }).option('disableCsrf', {
         type: 'boolean',
         default: false,
@@ -100,10 +115,12 @@ const app = express();
 app.use(compression());
 app.use(responseTime());
 
-const server_port = process.env.SILLY_TAVERN_PORT || getConfigValue('port', 8000);
+const server_port = cliArguments.port ?? process.env.SILLY_TAVERN_PORT ?? getConfigValue('port', DEFAULT_PORT);
+const autorun = (cliArguments.autorun ?? getConfigValue('autorun', DEFAULT_AUTORUN)) && !cliArguments.ssl;
+const listen = cliArguments.listen ?? getConfigValue('listen', DEFAULT_LISTEN);
+const enableCorsProxy = cliArguments.corsProxy ?? getConfigValue('enableCorsProxy', DEFAULT_CORS_PROXY);
+const basicAuthMode = getConfigValue('basicAuthMode', false);
 
-const autorun = (getConfigValue('autorun', false) || cliArguments.autorun) && !cliArguments.ssl;
-const listen = getConfigValue('listen', false);
 const HumAssistOff = getConfigValue('HumAssistOff', false);
 const SystemFul = getConfigValue('SystemFul', true);
 
@@ -117,9 +134,9 @@ const CORS = cors({
 
 app.use(CORS);
 
-if (listen && getConfigValue('basicAuthMode', false)) app.use(basicAuthMiddleware);
+if (listen && basicAuthMode) app.use(basicAuthMiddleware);
 
-app.use(whitelistMiddleware);
+app.use(whitelistMiddleware(listen));
 
 // CSRF Protection //
 if (!cliArguments.disableCsrf) {
@@ -155,7 +172,7 @@ if (!cliArguments.disableCsrf) {
     });
 }
 
-if (getConfigValue('enableCorsProxy', false) || cliArguments.corsProxy) {
+if (enableCorsProxy) {
     const bodyParser = require('body-parser');
     app.use(bodyParser.json({
         limit: '200mb',
@@ -474,7 +491,15 @@ const autorunUrl = new URL(
 const setupTasks = async function () {
     const version = await getVersion();
 
-    console.log(`SillyTavern ${version.pkgVersion}` + (version.gitBranch ? ` '${version.gitBranch}' (${version.gitRevision})` : ''));
+    // Print formatted header
+    console.log();
+    console.log(`SillyTavern ${version.pkgVersion}`);
+    console.log(version.gitBranch ? `Running '${version.gitBranch}' (${version.gitRevision}) - ${version.commitDate}` : '');
+    if (version.gitBranch && !version.isLatest && ['staging', 'release'].includes(version.gitBranch)) {
+        console.log('INFO: Currently not on the latest commit.');
+        console.log('      Run \'git pull\' to update. If you have any merge conflicts, run \'git reset --hard\' and \'git pull\' to reset your branch.');
+    }
+    console.log();
 
     // TODO: do endpoint init functions depend on certain directories existing or not existing? They should be callable
     // in any order for encapsulation reasons, but right now it's unknown if that would break anything.
@@ -515,6 +540,14 @@ const setupTasks = async function () {
     if (listen) {
         console.log('\n0.0.0.0 means SillyTavern is listening on all network interfaces (Wi-Fi, LAN, localhost). If you want to limit it only to internal localhost (127.0.0.1), change the setting in config.yaml to "listen: false". Check "access.log" file in the SillyTavern directory if you want to inspect incoming connections.\n');
     }
+
+    if (basicAuthMode) {
+        const basicAuthUser = getConfigValue('basicAuthUser', {});
+        if (!basicAuthUser?.username || !basicAuthUser?.password) {
+            console.warn(color.yellow('Basic Authentication is enabled, but username or password is not set or empty!'));
+        }
+    }
+
 };
 
 /**
@@ -529,11 +562,11 @@ async function loadPlugins() {
         return cleanupPlugins;
     } catch {
         console.log('Plugin loading failed.');
-        return () => {};
+        return () => { };
     }
 }
 
-if (listen && !getConfigValue('whitelistMode', true) && !getConfigValue('basicAuthMode', false)) {
+if (listen && !getConfigValue('whitelistMode', true) && !basicAuthMode) {
     if (getConfigValue('securityOverride', false)) {
         console.warn(color.red('Security has been overridden. If it\'s not a trusted network, change the settings.'));
     }

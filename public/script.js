@@ -208,7 +208,7 @@ import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_set
 import { hideLoader, showLoader } from './scripts/loader.js';
 import { BulkEditOverlay, CharacterContextMenu } from './scripts/BulkEditOverlay.js';
 import { loadMancerModels, loadOllamaModels, loadTogetherAIModels, loadInfermaticAIModels, loadOpenRouterModels, loadAphroditeModels, loadDreamGenModels } from './scripts/textgen-models.js';
-import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags } from './scripts/chats.js';
+import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, getCurrentEntityId } from './scripts/chats.js';
 import { initPresetManager } from './scripts/preset-manager.js';
 import { evaluateMacros } from './scripts/macros.js';
 
@@ -279,7 +279,9 @@ export {
     talkativeness_default,
     default_ch_mes,
     mesForShowdownParse,
+    characterGroupOverlay,
     printCharacters,
+    printCharactersDebounced,
     isOdd,
     countOccurrences,
 };
@@ -321,9 +323,12 @@ DOMPurify.addHook('uponSanitizeElement', (node, _, config) => {
         return;
     }
 
-    if (!power_user.forbid_external_images) {
+    const isMediaAllowed = isExternalMediaAllowed();
+    if (isMediaAllowed) {
         return;
     }
+
+    let mediaBlocked = false;
 
     switch (node.tagName) {
         case 'AUDIO':
@@ -347,6 +352,7 @@ DOMPurify.addHook('uponSanitizeElement', (node, _, config) => {
                     if (isExternalUrl(url)) {
                         console.warn('External media blocked', url);
                         node.remove();
+                        mediaBlocked = true;
                         break;
                     }
                 }
@@ -354,15 +360,36 @@ DOMPurify.addHook('uponSanitizeElement', (node, _, config) => {
 
             if (src && isExternalUrl(src)) {
                 console.warn('External media blocked', src);
+                mediaBlocked = true;
                 node.remove();
             }
 
             if (data && isExternalUrl(data)) {
                 console.warn('External media blocked', data);
+                mediaBlocked = true;
                 node.remove();
             }
         }
             break;
+    }
+
+    if (mediaBlocked) {
+        const entityId = getCurrentEntityId();
+        const warningShownKey = `mediaWarningShown:${entityId}`;
+
+        if (localStorage.getItem(warningShownKey) === null) {
+            const warningToast = toastr.warning(
+                'Use the "Ext. Media" button to allow it. Click on this message to dismiss.',
+                'External media has been blocked',
+                {
+                    timeOut: 0,
+                    preventDuplicates: true,
+                    onclick: () => toastr.clear(warningToast),
+                },
+            );
+
+            localStorage.setItem(warningShownKey, 'true');
+        }
     }
 });
 
@@ -413,6 +440,7 @@ export const event_types = {
     // TODO: Naming convention is inconsistent with other events
     CHARACTER_DELETED: 'characterDeleted',
     CHARACTER_DUPLICATED: 'character_duplicated',
+    SMOOTH_STREAM_TOKEN_RECEIVED: 'smooth_stream_token_received',
 };
 
 export const eventSource = new EventEmitter();
@@ -495,6 +523,14 @@ export let abortStatusCheck = new AbortController();
 const durationSaveEdit = 1000;
 const saveSettingsDebounced = debounce(() => saveSettings(), durationSaveEdit);
 export const saveCharacterDebounced = debounce(() => $('#create_button').trigger('click'), durationSaveEdit);
+
+/**
+ * Prints the character list in a debounced fashion without blocking, with a delay of 100 milliseconds.
+ * Use this function instead of a direct `printCharacters()` whenever the reprinting of the character list is not the primary focus.
+ *
+ * The printing will also always reprint all filter options of the global list, to keep them up to date.
+ */
+const printCharactersDebounced = debounce(() => { printCharacters(false); }, 100);
 
 /**
  * @enum {string} System message types
@@ -740,7 +776,6 @@ function reloadMarkdownProcessor(render_formulas = false) {
 }
 
 function getCurrentChatId() {
-    console.debug(`selectedGroup:${selected_group}, this_chid:${this_chid}`);
     if (selected_group) {
         return groups.find(x => x.id == selected_group)?.chat_id;
     }
@@ -836,7 +871,7 @@ export let active_character = '';
 /** The tag of the active group. (Coincidentally also the id) */
 export let active_group = '';
 
-export const entitiesFilter = new FilterHelper(debounce(printCharacters, 100));
+export const entitiesFilter = new FilterHelper(printCharactersDebounced);
 export const personasFilter = new FilterHelper(debounce(getUserAvatars, 100));
 
 export function getRequestHeaders() {
@@ -1275,6 +1310,14 @@ function getCharacterBlock(item, id) {
     return template;
 }
 
+/**
+ * Prints the global character list, optionally doing a full refresh of the list
+ * Use this function whenever the reprinting of the character list is the primary focus, otherwise using `printCharactersDebounced` is preferred for a cleaner, non-blocking experience.
+ *
+ * The printing will also always reprint all filter options of the global list, to keep them up to date.
+ *
+ * @param {boolean} fullRefresh - If true, the list is fully refreshed and the navigation is being reset
+ */
 async function printCharacters(fullRefresh = false) {
     if (fullRefresh) {
         saveCharactersPage = 0;
@@ -1287,6 +1330,18 @@ async function printCharacters(fullRefresh = false) {
     const storageKey = 'Characters_PerPage';
     const listId = '#rm_print_characters_block';
     const entities = getEntitiesList({ doFilter: true });
+
+    let currentScrollTop = $(listId).scrollTop();
+
+    if (fullRefresh) {
+        saveCharactersPage = 0;
+        currentScrollTop = 0;
+        await delay(1);
+    }
+
+    // We are actually always reprinting filters, as it "doesn't hurt", and this way they are always up to date
+    printTagFilters(tag_filter_types.character);
+    printTagFilters(tag_filter_types.group_member);
 
     $('#rm_print_characters_pagination').pagination({
         dataSource: entities,
@@ -1303,7 +1358,7 @@ async function printCharacters(fullRefresh = false) {
         showNavigator: true,
         callback: function (data) {
             $(listId).empty();
-            if (isBogusFolderOpen()) {
+            if (power_user.bogus_folders && isBogusFolderOpen()) {
                 $(listId).append(getBackBlock());
             }
             if (!data.length) {
@@ -1340,26 +1395,64 @@ async function printCharacters(fullRefresh = false) {
             saveCharactersPage = e;
         },
         afterRender: function () {
-            $(listId).scrollTop(0);
+            $(listId).scrollTop(currentScrollTop);
         },
     });
 
     favsToHotswap();
 }
 
+/**
+ * @typedef {object} Entity - Object representing a display entity
+ * @property {Character|Group|import('./scripts/tags.js').Tag|*} item - The item
+ * @property {string|number} id - The id
+ * @property {string} type - The type of this entity (character, group, tag)
+ * @property {Entity[]} [entities] - An optional list of entities relevant for this item
+ * @property {number} [hidden] - An optional number representing how many hidden entities this entity contains
+ */
+
+/**
+ * Converts the given character to its entity representation
+ *
+ * @param {Character} character - The character
+ * @param {string|number} id - The id of this character
+ * @returns {Entity} The entity for this character
+ */
+export function characterToEntity(character, id) {
+    return { item: character, id, type: 'character' };
+}
+
+/**
+ * Converts the given group to its entity representation
+ *
+ * @param {Group} group - The group
+ * @returns {Entity} The entity for this group
+ */
+export function groupToEntity(group) {
+    return { item: group, id: group.id, type: 'group' };
+}
+
+/**
+ * Converts the given tag to its entity representation
+ *
+ * @param {import('./scripts/tags.js').Tag} tag - The tag
+ * @returns {Entity} The entity for this tag
+ */
+export function tagToEntity(tag) {
+    return { item: structuredClone(tag), id: tag.id, type: 'tag', entities: [] };
+}
+
+/**
+ * Builds the full list of all entities available
+ *
+ * They will be correctly marked and filtered.
+ *
+ * @param {object} param0 - Optional parameters
+ * @param {boolean} [param0.doFilter] - Whether this entity list should already be filtered based on the global filters
+ * @param {boolean} [param0.doSort] - Whether the entity list should be sorted when returned
+ * @returns {Entity[]} All entities
+ */
 export function getEntitiesList({ doFilter = false, doSort = true } = {}) {
-    function characterToEntity(character, id) {
-        return { item: character, id, type: 'character' };
-    }
-
-    function groupToEntity(group) {
-        return { item: group, id: group.id, type: 'group' };
-    }
-
-    function tagToEntity(tag) {
-        return { item: structuredClone(tag), id: tag.id, type: 'tag', entities: [] };
-    }
-
     let entities = [
         ...characters.map((item, index) => characterToEntity(item, index)),
         ...groups.map(item => groupToEntity(item)),
@@ -1628,7 +1721,7 @@ export async function reloadCurrentChat() {
     chat.length = 0;
 
     if (selected_group) {
-        await getGroupChat(selected_group);
+        await getGroupChat(selected_group, true);
     }
     else if (this_chid) {
         await getChat();
@@ -2313,21 +2406,31 @@ function getStoppingStrings(isImpersonate, isContinue) {
  * @param {boolean} skipWIAN whether to skip addition of World Info and Author's Note into the prompt
  * @param {string} quietImage Image to use for the quiet prompt
  * @param {string} quietName Name to use for the quiet prompt (defaults to "System:")
+ * @param {number} [responseLength] Maximum response length. If unset, the global default value is used.
  * @returns
  */
-export async function generateQuietPrompt(quiet_prompt, quietToLoud, skipWIAN, quietImage = null, quietName = null) {
+export async function generateQuietPrompt(quiet_prompt, quietToLoud, skipWIAN, quietImage = null, quietName = null, responseLength = null) {
     console.log('got into genQuietPrompt');
-    /** @type {GenerateOptions} */
-    const options = {
-        quiet_prompt,
-        quietToLoud,
-        skipWIAN: skipWIAN,
-        force_name2: true,
-        quietImage: quietImage,
-        quietName: quietName,
-    };
-    const generateFinished = await Generate('quiet', options);
-    return generateFinished;
+    const responseLengthCustomized = typeof responseLength === 'number' && responseLength > 0;
+    let originalResponseLength = -1;
+    try {
+        /** @type {GenerateOptions} */
+        const options = {
+            quiet_prompt,
+            quietToLoud,
+            skipWIAN: skipWIAN,
+            force_name2: true,
+            quietImage: quietImage,
+            quietName: quietName,
+        };
+        originalResponseLength = responseLengthCustomized ? saveResponseLength(main_api, responseLength) : -1;
+        const generateFinished = await Generate('quiet', options);
+        return generateFinished;
+    } finally {
+        if (responseLengthCustomized) {
+            restoreResponseLength(main_api, originalResponseLength);
+        }
+    }
 }
 
 /**
@@ -2739,10 +2842,7 @@ class StreamingProcessor {
         const continueMsg = this.type === 'continue' ? this.messageAlreadyGenerated : undefined;
         saveLogprobsForActiveMessage(this.messageLogprobs.filter(Boolean), continueMsg);
         await saveChatConditional();
-        saveLogprobsForActiveMessage(this.messageLogprobs.filter(Boolean), continueMsg);
-        activateSendButtons();
-        showSwipeButtons();
-        setGenerationProgress(0);
+        unblockGeneration();
         generatedPromptCache = '';
 
         //console.log("Generated text size:", text.length, text)
@@ -2785,11 +2885,8 @@ class StreamingProcessor {
         this.isStopped = true;
 
         this.hideMessageButtons(this.messageId);
-        $('#send_textarea').removeAttr('disabled');
-        is_send_press = false;
-        activateSendButtons();
-        setGenerationProgress(0);
-        showSwipeButtons();
+        generatedPromptCache = '';
+        unblockGeneration();
     }
 
     setFirstSwipe(messageId) {
@@ -2858,81 +2955,136 @@ class StreamingProcessor {
  * @param {string} prompt Prompt to generate a message from
  * @param {string} api API to use. Main API is used if not specified.
  * @param {boolean} instructOverride true to override instruct mode, false to use the default value
+ * @param {boolean} quietToLoud true to generate a message in system mode, false to generate a message in character mode
+ * @param {string} [systemPrompt] System prompt to use. Only Instruct mode or OpenAI.
+ * @param {number} [responseLength] Maximum response length. If unset, the global default value is used.
  * @returns {Promise<string>} Generated message
  */
-export async function generateRaw(prompt, api, instructOverride) {
+export async function generateRaw(prompt, api, instructOverride, quietToLoud, systemPrompt, responseLength) {
     if (!api) {
         api = main_api;
     }
 
     const abortController = new AbortController();
-    const isInstruct = power_user.instruct.enabled && main_api !== 'openai' && main_api !== 'novel' && !instructOverride;
+    const responseLengthCustomized = typeof responseLength === 'number' && responseLength > 0;
+    let originalResponseLength = -1;
+    const isInstruct = power_user.instruct.enabled && api !== 'openai' && api !== 'novel' && !instructOverride;
+    const isQuiet = true;
+
+    if (systemPrompt) {
+        systemPrompt = substituteParams(systemPrompt);
+        systemPrompt = isInstruct ? formatInstructModeSystemPrompt(systemPrompt) : systemPrompt;
+        prompt = api === 'openai' ? prompt : `${systemPrompt}\n${prompt}`;
+    }
 
     prompt = substituteParams(prompt);
     prompt = api == 'novel' ? adjustNovelInstructionPrompt(prompt) : prompt;
     prompt = isInstruct ? formatInstructModeChat(name1, prompt, false, true, '', name1, name2, false) : prompt;
-    prompt = isInstruct ? (prompt + formatInstructModePrompt(name2, false, '', name1, name2)) : (prompt + '\n');
+    prompt = isInstruct ? (prompt + formatInstructModePrompt(name2, false, '', name1, name2, isQuiet, quietToLoud)) : (prompt + '\n');
 
-    let generateData = {};
+    try {
+        originalResponseLength = responseLengthCustomized ? saveResponseLength(api, responseLength) : -1;
+        let generateData = {};
 
-    switch (api) {
-        case 'kobold':
-        case 'koboldhorde':
-            if (preset_settings === 'gui') {
-                generateData = { prompt: prompt, gui_settings: true, max_length: amount_gen, max_context_length: max_context, api_server };
-            } else {
-                const isHorde = api === 'koboldhorde';
-                const koboldSettings = koboldai_settings[koboldai_setting_names[preset_settings]];
-                generateData = getKoboldGenerationData(prompt, koboldSettings, amount_gen, max_context, isHorde, 'quiet');
+        switch (api) {
+            case 'kobold':
+            case 'koboldhorde':
+                if (preset_settings === 'gui') {
+                    generateData = { prompt: prompt, gui_settings: true, max_length: amount_gen, max_context_length: max_context, api_server };
+                } else {
+                    const isHorde = api === 'koboldhorde';
+                    const koboldSettings = koboldai_settings[koboldai_setting_names[preset_settings]];
+                    generateData = getKoboldGenerationData(prompt, koboldSettings, amount_gen, max_context, isHorde, 'quiet');
+                }
+                break;
+            case 'novel': {
+                const novelSettings = novelai_settings[novelai_setting_names[nai_settings.preset_settings_novel]];
+                generateData = getNovelGenerationData(prompt, novelSettings, amount_gen, false, false, null, 'quiet');
+                break;
             }
-            break;
-        case 'novel': {
-            const novelSettings = novelai_settings[novelai_setting_names[nai_settings.preset_settings_novel]];
-            generateData = getNovelGenerationData(prompt, novelSettings, amount_gen, false, false, null, 'quiet');
-            break;
+            case 'textgenerationwebui':
+                generateData = getTextGenGenerationData(prompt, amount_gen, false, false, null, 'quiet');
+                break;
+            case 'openai': {
+                generateData = [{ role: 'user', content: prompt.trim() }];
+                if (systemPrompt) {
+                    generateData.unshift({ role: 'system', content: systemPrompt.trim() });
+                }
+            } break;
         }
-        case 'textgenerationwebui':
-            generateData = getTextGenGenerationData(prompt, amount_gen, false, false, null, 'quiet');
-            break;
-        case 'openai':
-            generateData = [{ role: 'user', content: prompt.trim() }];
+
+        let data = {};
+
+        if (api == 'koboldhorde') {
+            data = await generateHorde(prompt, generateData, abortController.signal, false);
+        } else if (api == 'openai') {
+            data = await sendOpenAIRequest('quiet', generateData, abortController.signal);
+        } else {
+            const generateUrl = getGenerateUrl(api);
+            const response = await fetch(generateUrl, {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                cache: 'no-cache',
+                body: JSON.stringify(generateData),
+                signal: abortController.signal,
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw error;
+            }
+
+            data = await response.json();
+        }
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        const message = cleanUpMessage(extractMessageFromData(data), false, false, true);
+
+        if (!message) {
+            throw new Error('No message generated');
+        }
+
+        return message;
+    } finally {
+        if (responseLengthCustomized) {
+            restoreResponseLength(api, originalResponseLength);
+        }
     }
+}
 
-    let data = {};
-
-    if (api == 'koboldhorde') {
-        data = await generateHorde(prompt, generateData, abortController.signal, false);
-    } else if (api == 'openai') {
-        data = await sendOpenAIRequest('quiet', generateData, abortController.signal);
+/**
+ * Temporarily change the response length for the specified API.
+ * @param {string} api API to use.
+ * @param {number} responseLength Target response length.
+ * @returns {number} The original response length.
+ */
+function saveResponseLength(api, responseLength) {
+    let oldValue = -1;
+    if (api === 'openai') {
+        oldValue = oai_settings.openai_max_tokens;
+        oai_settings.openai_max_tokens = responseLength;
     } else {
-        const generateUrl = getGenerateUrl(api);
-        const response = await fetch(generateUrl, {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            cache: 'no-cache',
-            body: JSON.stringify(generateData),
-            signal: abortController.signal,
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw error;
-        }
-
-        data = await response.json();
+        oldValue = amount_gen;
+        amount_gen = responseLength;
     }
+    return oldValue;
+}
 
-    if (data.error) {
-        throw new Error(data.error);
+/**
+ * Restore the original response length for the specified API.
+ * @param {string} api API to use.
+ * @param {number} responseLength Target response length.
+ * @returns {void}
+ */
+function restoreResponseLength(api, responseLength) {
+    if (api === 'openai') {
+        oai_settings.openai_max_tokens = responseLength;
+    } else {
+        amount_gen = responseLength;
     }
-
-    const message = cleanUpMessage(extractMessageFromData(data), false, false, true);
-
-    if (!message) {
-        throw new Error('No message generated');
-    }
-
-    return message;
 }
 
 /**
@@ -3152,6 +3304,10 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     } else if (mesExamples == undefined) {
         mesExamplesRaw = ''; mesExamples = '';
     }
+    if (mesExamples.replace(/<START>/gi, '').trim().length === 0) {
+        mesExamples = '';
+    }
+    const mesExamplesRaw = mesExamples;
     /**
      * Adds a block heading to the examples string.
      * @param {string} examplesStr
@@ -3159,12 +3315,16 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
      */
     function addBlockHeading(examplesStr) {
         const exampleSeparator = power_user.context.example_separator ? `${substituteParams(power_user.context.example_separator)}\n` : '';
-        const blockHeading = main_api === 'openai' ? '<START>\n' : exampleSeparator;
+        const blockHeading = main_api === 'openai' ? '<START>\n' : (exampleSeparator || (isInstruct ? '<START>\n' : ''));
         return examplesStr.split(/<START>/gi).slice(1).map(block => `${blockHeading}${block.trim()}\n`);
     }
 
     let mesExamplesArray = addBlockHeading(mesExamples);
     let mesExamplesRawArray = addBlockHeading(mesExamplesRaw);
+
+    if (mesExamplesArray && isInstruct) {
+        mesExamplesArray = formatInstructModeExamples(mesExamplesArray, name1, name2);
+    }
 
     // First message in fresh 1-on-1 chat reacts to user/character settings changes
     if (chat.length) {
@@ -3279,6 +3439,8 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
     let chat2 = [];
     let continue_mag = '';
+    const userMessageIndices = [];
+
     for (let i = coreChat.length - 1, j = 0; i >= 0; i--, j++) {
         if (main_api == 'openai') {
             chat2[i] = coreChat[j].mes;
@@ -3306,6 +3468,22 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             chat2[i] = chat2[i].slice(0, chat2[i].lastIndexOf(coreChat[j].mes) + coreChat[j].mes.length);
             continue_mag = coreChat[j].mes;
         }
+
+        if (coreChat[j].is_user) {
+            userMessageIndices.push(i);
+        }
+    }
+
+    let addUserAlignment = isInstruct && power_user.instruct.user_alignment_message;
+    let userAlignmentMessage = '';
+
+    if (addUserAlignment) {
+        const alignmentMessage = {
+            name: name1,
+            mes: power_user.instruct.user_alignment_message,
+            is_user: true,
+        };
+        userAlignmentMessage = formatMessageHistoryItem(alignmentMessage, isInstruct, false);
     }
 
     // Add persona description to prompt
@@ -3364,6 +3542,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             allAnchors,
             quiet_prompt,
             cyclePrompt,
+            userAlignmentMessage,
         ].join('').replace(/\r/gm, '');
         return getTokenCount(encodeString, power_user.token_padding);
     }
@@ -3380,18 +3559,24 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     }
 
     // Collect enough messages to fill the context
-    let arrMes = [];
+    let arrMes = new Array(chat2.length);
     let tokenCount = getMessagesTokenCount();
-    for (let item of chat2) {
-        // not needed for OAI prompting
-        if (main_api == 'openai') {
-            break;
+    let lastAddedIndex = -1;
+
+    // Pre-allocate all injections first.
+    // If it doesn't fit - user shot himself in the foot
+    for (const index of injectedIndices) {
+        const item = chat2[index];
+
+        if (typeof item !== 'string') {
+            continue;
         }
 
         tokenCount += getTokenCount(item.replace(/\r/gm, ''));
         chatString = item + chatString;
         if (tokenCount < this_max_context) {
-            arrMes[arrMes.length] = item;
+            arrMes[index] = item;
+            lastAddedIndex = Math.max(lastAddedIndex, index);
         } else {
             break;
         }
@@ -3400,8 +3585,62 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         await delay(1);
     }
 
+    for (let i = 0; i < chat2.length; i++) {
+        // not needed for OAI prompting
+        if (main_api == 'openai') {
+            break;
+        }
+
+        // Skip already injected messages
+        if (arrMes[i] !== undefined) {
+            continue;
+        }
+
+        const item = chat2[i];
+
+        if (typeof item !== 'string') {
+            continue;
+        }
+
+        tokenCount += getTokenCount(item.replace(/\r/gm, ''));
+        chatString = item + chatString;
+        if (tokenCount < this_max_context) {
+            arrMes[i] = item;
+            lastAddedIndex = Math.max(lastAddedIndex, i);
+        } else {
+            break;
+        }
+
+        // Prevent UI thread lock on tokenization
+        await delay(1);
+    }
+
+    // Add user alignment message if last message is not a user message
+    const stoppedAtUser = userMessageIndices.includes(lastAddedIndex);
+    if (addUserAlignment && !stoppedAtUser) {
+        tokenCount += getTokenCount(userAlignmentMessage.replace(/\r/gm, ''));
+        chatString = userAlignmentMessage + chatString;
+        arrMes.push(userAlignmentMessage);
+        injectedIndices.push(arrMes.length - 1);
+    }
+
+    // Unsparse the array. Adjust injected indices
+    const newArrMes = [];
+    const newInjectedIndices = [];
+    for (let i = 0; i < arrMes.length; i++) {
+        if (arrMes[i] !== undefined) {
+            newArrMes.push(arrMes[i]);
+            if (injectedIndices.includes(i)) {
+                newInjectedIndices.push(newArrMes.length - 1);
+            }
+        }
+    }
+
+    arrMes = newArrMes;
+    injectedIndices = newInjectedIndices;
+
     if (main_api !== 'openai') {
-        setInContextMessages(arrMes.length, type);
+        setInContextMessages(arrMes.length - injectedIndices.length, type);
     }
 
     // Estimate how many unpinned example messages fit in the context
@@ -3444,15 +3683,19 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         console.debug('generating prompt');
         chatString = '';
         arrMes = arrMes.reverse();
-        arrMes.forEach(function (item, i, arr) {// For added anchors and others
+        arrMes.forEach(function (item, i, arr) {
             // OAI doesn't need all of this
             if (main_api === 'openai') {
                 return;
             }
 
-            // Cohee: I'm not even sure what this is for anymore
+            // Cohee: This removes a newline from the end of the last message in the context
+            // Last prompt line will add a newline if it's not a continuation
+            // In instruct mode it only removes it if wrap is enabled and it's not a quiet generation
             if (i === arrMes.length - 1 && type !== 'continue') {
-                item = item.replace(/\n?$/, '');
+                if (!isInstruct || (power_user.instruct.wrap && type !== 'quiet')) {
+                    item = item.replace(/\n?$/, '');
+                }
             }
 
             mesSend[mesSend.length] = { message: item, extensionPrompts: [] };
@@ -3491,7 +3734,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             //TODO: respect output_sequence vs last_output_sequence settings
             //TODO: decide how to prompt this to clarify who is talking 'Narrator', 'System', etc.
             if (isInstruct) {
-                lastMesString += '\n' + quietAppend; // + power_user.instruct.output_sequence + '\n';
+                lastMesString += quietAppend; // + power_user.instruct.output_sequence + '\n';
             } else {
                 lastMesString += quietAppend;
             }
@@ -3512,7 +3755,8 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         // Get instruct mode line
         if (isInstruct && !isContinue) {
             const name = (quiet_prompt && !quietToLoud) ? (quietName ?? 'System') : (isImpersonate ? name1 : name2);
-            lastMesString += formatInstructModePrompt(name, isImpersonate, promptBias, name1, name2);
+            const isQuiet = quiet_prompt && type == 'quiet';
+            lastMesString += formatInstructModePrompt(name, isImpersonate, promptBias, name1, name2, isQuiet, quietToLoud);
         }
 
         // Get non-instruct impersonation line
@@ -3679,7 +3923,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         };
 
         finalMesSend.forEach((item, i) => {
-            item.injected = Array.isArray(injectedIndices) && injectedIndices.includes(i);
+            item.injected = injectedIndices.includes(finalMesSend.length - i - 1);
         });
 
         let data = {
@@ -3862,6 +4106,10 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
                 await streamingProcessor.onFinishStreaming(streamingProcessor.messageId, getMessage);
                 streamingProcessor = null;
                 triggerAutoContinue(messageChunk, isImpersonate);
+                return Object.defineProperties(new String(getMessage), {
+                    'messageChunk': { value: messageChunk },
+                    'fromStream': { value: true },
+                });
             }
         } else {
             return await sendGenerationRequest(type, generate_data);
@@ -3872,6 +4120,11 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
     async function onSuccess(data) {
         if (!data) return;
+
+        if (data?.fromStream) {
+            return data;
+        }
+
         let messageChunk = '';
 
         if (data.error) {
@@ -3981,12 +4234,17 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         if (type !== 'quiet') {
             triggerAutoContinue(messageChunk, isImpersonate);
         }
+
+        // Don't break the API chain that expects a single string in return
+        return Object.defineProperty(new String(getMessage), 'messageChunk', { value: messageChunk });
     }
 
     function onError(exception) {
         if (typeof exception?.error?.message === 'string') {
             toastr.error(exception.error.message, 'Error', { timeOut: 10000, extendedTimeOut: 20000 });
         }
+
+        generatedPromptCache = '';
 
         unblockGeneration();
         console.log(exception);
@@ -4045,10 +4303,6 @@ function doChatInject(messages, isContinue) {
         }
     }
 
-    for (let i = 0; i < injectedIndices.length; i++) {
-        injectedIndices[i] = messages.length - injectedIndices[i] - 1;
-    }
-
     messages.reverse();
     return injectedIndices;
 }
@@ -4077,57 +4331,81 @@ export function getNextMessageId(type) {
 }
 
 /**
- *
- * @param {string} messageChunk
- * @param {boolean} isImpersonate
- * @returns {void}
+ * Determines if the message should be auto-continued.
+ * @param {string} messageChunk Current message chunk
+ * @param {boolean} isImpersonate Is the user impersonation
+ * @returns {boolean} Whether the message should be auto-continued
+ */
+export function shouldAutoContinue(messageChunk, isImpersonate) {
+    if (!power_user.auto_continue.enabled) {
+        console.debug('Auto-continue is disabled by user.');
+        return false;
+    }
+
+    if (typeof messageChunk !== 'string') {
+        console.debug('Not triggering auto-continue because message chunk is not a string');
+        return false;
+    }
+
+    if (isImpersonate) {
+        console.log('Continue for impersonation is not implemented yet');
+        return false;
+    }
+
+    if (is_send_press) {
+        console.debug('Auto-continue is disabled because a message is currently being sent.');
+        return false;
+    }
+
+    if (power_user.auto_continue.target_length <= 0) {
+        console.log('Auto-continue target length is 0, not triggering auto-continue');
+        return false;
+    }
+
+    if (main_api === 'openai' && !power_user.auto_continue.allow_chat_completions) {
+        console.log('Auto-continue for OpenAI is disabled by user.');
+        return false;
+    }
+
+    const textareaText = String($('#send_textarea').val());
+    const USABLE_LENGTH = 5;
+
+    if (textareaText.length > 0) {
+        console.log('Not triggering auto-continue because user input is not empty');
+        return false;
+    }
+
+    if (messageChunk.trim().length > USABLE_LENGTH && chat.length) {
+        const lastMessage = chat[chat.length - 1];
+        const messageLength = getTokenCount(lastMessage.mes);
+        const shouldAutoContinue = messageLength < power_user.auto_continue.target_length;
+
+        if (shouldAutoContinue) {
+            console.log(`Triggering auto-continue. Message tokens: ${messageLength}. Target tokens: ${power_user.auto_continue.target_length}. Message chunk: ${messageChunk}`);
+            return true;
+        } else {
+            console.log(`Not triggering auto-continue. Message tokens: ${messageLength}. Target tokens: ${power_user.auto_continue.target_length}`);
+            return false;
+        }
+    } else {
+        console.log('Last generated chunk was empty, not triggering auto-continue');
+        return false;
+    }
+}
+
+/**
+ * Triggers auto-continue if the message meets the criteria.
+ * @param {string} messageChunk Current message chunk
+ * @param {boolean} isImpersonate Is the user impersonation
  */
 export function triggerAutoContinue(messageChunk, isImpersonate) {
     if (selected_group) {
-        console.log('Auto-continue is disabled for group chat');
+        console.debug('Auto-continue is disabled for group chat');
         return;
     }
 
-    if (power_user.auto_continue.enabled && !is_send_press) {
-        if (power_user.auto_continue.target_length <= 0) {
-            console.log('Auto-continue target length is 0, not triggering auto-continue');
-            return;
-        }
-
-        if (main_api === 'openai' && !power_user.auto_continue.allow_chat_completions) {
-            console.log('Auto-continue for OpenAI is disabled by user.');
-            return;
-        }
-
-        if (isImpersonate) {
-            console.log('Continue for impersonation is not implemented yet');
-            return;
-        }
-
-        const textareaText = String($('#send_textarea').val());
-        const USABLE_LENGTH = 5;
-
-        if (textareaText.length > 0) {
-            console.log('Not triggering auto-continue because user input is not empty');
-            return;
-        }
-
-        if (messageChunk.trim().length > USABLE_LENGTH && chat.length) {
-            const lastMessage = chat[chat.length - 1];
-            const messageLength = getTokenCount(lastMessage.mes);
-            const shouldAutoContinue = messageLength < power_user.auto_continue.target_length;
-
-            if (shouldAutoContinue) {
-                console.log(`Triggering auto-continue. Message tokens: ${messageLength}. Target tokens: ${power_user.auto_continue.target_length}. Message chunk: ${messageChunk}`);
-                $('#option_continue').trigger('click');
-            } else {
-                console.log(`Not triggering auto-continue. Message tokens: ${messageLength}. Target tokens: ${power_user.auto_continue.target_length}`);
-                return;
-            }
-        } else {
-            console.log('Last generated chunk was empty, not triggering auto-continue');
-            return;
-        }
+    if (shouldAutoContinue(messageChunk, isImpersonate)) {
+        $('#option_continue').trigger('click');
     }
 }
 
@@ -4248,10 +4526,19 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
     }
 }
 
-export function getMaxContextSize() {
+/**
+ * Gets the maximum usable context size for the current API.
+ * @param {number|null} overrideResponseLength Optional override for the response length.
+ * @returns {number} Maximum usable context size.
+ */
+export function getMaxContextSize(overrideResponseLength = null) {
+    if (typeof overrideResponseLength !== 'number' || overrideResponseLength <= 0 || isNaN(overrideResponseLength)) {
+        overrideResponseLength = null;
+    }
+
     let this_max_context = 1487;
     if (main_api == 'kobold' || main_api == 'koboldhorde' || main_api == 'textgenerationwebui') {
-        this_max_context = (max_context - amount_gen);
+        this_max_context = (max_context - (overrideResponseLength || amount_gen));
     }
     if (main_api == 'novel') {
         this_max_context = Number(max_context);
@@ -4268,10 +4555,10 @@ export function getMaxContextSize() {
             }
         }
 
-        this_max_context = this_max_context - amount_gen;
+        this_max_context = this_max_context - (overrideResponseLength || amount_gen);
     }
     if (main_api == 'openai') {
-        this_max_context = oai_settings.openai_max_context - oai_settings.openai_max_tokens;
+        this_max_context = oai_settings.openai_max_context - (overrideResponseLength || oai_settings.openai_max_tokens);
     }
     return this_max_context;
 }
@@ -4633,7 +4920,7 @@ function extractMessageFromData(data) {
         case 'novel':
             return data.output;
         case 'openai':
-            return data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.text ?? '';
+            return data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.text ?? data?.text ?? '';
         default:
             return '';
     }
@@ -5375,7 +5662,7 @@ function buildAvatarList(block, entities, { templateId = 'inline_avatar_template
         avatarTemplate.attr('data-type', entity.type);
         avatarTemplate.attr({ 'chid': id, 'id': `CharID${id}` });
         avatarTemplate.find('img').attr('src', this_avatar).attr('alt', entity.item.name);
-        avatarTemplate.attr('title', `[Character] ${entity.item.name}`);
+        avatarTemplate.attr('title', `[Character] ${entity.item.name}\nFile: ${entity.item.avatar}`);
         if (highlightFavs) {
             avatarTemplate.toggleClass('is_fav', entity.item.fav || entity.item.fav == 'true');
             avatarTemplate.find('.ch_fav').val(entity.item.fav);
@@ -6662,6 +6949,12 @@ export function select_selected_character(chid) {
 
     $('#form_create').attr('actiontype', 'editcharacter');
     $('.form_create_bottom_buttons_block .chat_lorebook_button').show();
+
+    const externalMediaState = isExternalMediaAllowed();
+    $('#character_open_media_overrides').toggle(!selected_group);
+    $('#character_media_allowed_icon').toggle(externalMediaState);
+    $('#character_media_forbidden_icon').toggle(!externalMediaState);
+
     saveSettingsDebounced();
 }
 
@@ -6722,6 +7015,7 @@ function select_rm_create() {
 
     $('#form_create').attr('actiontype', 'createcharacter');
     $('.form_create_bottom_buttons_block .chat_lorebook_button').hide();
+    $('#character_open_media_overrides').hide();
 }
 
 function select_rm_characters() {
@@ -6834,18 +7128,19 @@ function onScenarioOverrideRemoveClick() {
  * @param {string} type
  * @param {string} inputValue - Value to set the input to.
  * @param {PopupOptions} options - Options for the popup.
- * @typedef {{okButton?: string, rows?: number, wide?: boolean, large?: boolean }} PopupOptions - Options for the popup.
+ * @typedef {{okButton?: string, rows?: number, wide?: boolean, large?: boolean, allowHorizontalScrolling?: boolean, allowVerticalScrolling?: boolean }} PopupOptions - Options for the popup.
  * @returns
  */
-function callPopup(text, type, inputValue = '', { okButton, rows, wide, large } = {}) {
+function callPopup(text, type, inputValue = '', { okButton, rows, wide, large, allowHorizontalScrolling, allowVerticalScrolling } = {}) {
     dialogueCloseStop = true;
     if (type) {
         popup_type = type;
     }
 
     $('#dialogue_popup').toggleClass('wide_dialogue_popup', !!wide);
-
     $('#dialogue_popup').toggleClass('large_dialogue_popup', !!large);
+    $('#dialogue_popup').toggleClass('horizontal_scrolling_dialogue_popup', !!allowHorizontalScrolling);
+    $('#dialogue_popup').toggleClass('vertical_scrolling_dialogue_popup', !!allowVerticalScrolling);
 
     $('#dialogue_popup_cancel').css('display', 'inline-block');
     switch (popup_type) {
@@ -8023,8 +8318,7 @@ const CONNECT_API_MAP = {
 
 async function selectContextCallback(_, name) {
     if (!name) {
-        toastr.warning('Context preset name is required');
-        return '';
+        return power_user.context.preset;
     }
 
     const contextNames = context_presets.map(preset => preset.name);
@@ -8043,8 +8337,7 @@ async function selectContextCallback(_, name) {
 
 async function selectInstructCallback(_, name) {
     if (!name) {
-        toastr.warning('Instruct preset name is required');
-        return '';
+        return power_user.instruct.preset;
     }
 
     const instructNames = instruct_presets.map(preset => preset.name);
@@ -8352,7 +8645,7 @@ function addDebugFunctions() {
     registerDebugFunction('generationTest', 'Send a generation request', 'Generates text using the currently selected API.', async () => {
         const text = prompt('Input text:', 'Hello');
         toastr.info('Working on it...');
-        const message = await generateRaw(text, null, '');
+        const message = await generateRaw(text, null, false, false);
         alert(message);
     });
 
@@ -8393,10 +8686,10 @@ jQuery(async function () {
     registerSlashCommand('closechat', doCloseChat, [], '– closes the current chat', true, true);
     registerSlashCommand('panels', doTogglePanels, ['togglepanels'], '– toggle UI panels on/off', true, true);
     registerSlashCommand('forcesave', doForceSave, [], '– forces a save of the current chat and settings', true, true);
-    registerSlashCommand('instruct', selectInstructCallback, [], '<span class="monospace">(name)</span> – selects instruct mode preset by name', true, true);
+    registerSlashCommand('instruct', selectInstructCallback, [], '<span class="monospace">(name)</span> – selects instruct mode preset by name. Gets the current instruct if no name is provided', true, true);
     registerSlashCommand('instruct-on', enableInstructCallback, [], '– enables instruct mode', true, true);
     registerSlashCommand('instruct-off', disableInstructCallback, [], '– disables instruct mode', true, true);
-    registerSlashCommand('context', selectContextCallback, [], '<span class="monospace">(name)</span> – selects context template by name', true, true);
+    registerSlashCommand('context', selectContextCallback, [], '<span class="monospace">(name)</span> – selects context template by name. Gets the current template if no name is provided', true, true);
     registerSlashCommand('chat-manager', () => $('#option_select_chat').trigger('click'), ['chat-history', 'manage-chats'], '– opens the chat manager for the current character/group', true, true);
 
     setTimeout(function () {
@@ -8404,7 +8697,7 @@ jQuery(async function () {
         $('#groupCurrentMemberListToggle .inline-drawer-icon').trigger('click');
     }, 200);
 
-    $('#chat').on('mousewheel touchstart', () => {
+    $('#chat').on('wheel touchstart', () => {
         scrollLock = true;
     });
 
@@ -8948,6 +9241,7 @@ jQuery(async function () {
             { id: 'api_key_dreamgen', secret: SECRET_KEYS.DREAMGEN },
             { id: 'api_key_openrouter-tg', secret: SECRET_KEYS.OPENROUTER },
             { id: 'api_key_koboldcpp', secret: SECRET_KEYS.KOBOLDCPP },
+            { id: 'api_key_llamacpp', secret: SECRET_KEYS.LLAMACPP },
         ];
 
         for (const key of keys) {
@@ -9695,14 +9989,14 @@ jQuery(async function () {
         $('#character_import_file').click();
     });
 
-    $('#character_import_file').on('change', function (e) {
+    $('#character_import_file').on('change', async function (e) {
         $('#rm_info_avatar').html('');
         if (!e.target.files.length) {
             return;
         }
 
         for (const file of e.target.files) {
-            importCharacter(file);
+            await importCharacter(file);
         }
     });
 

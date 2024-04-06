@@ -1,25 +1,24 @@
-import { getStringHash, debounce, waitUntilCondition, extractAllWords } from '../../utils.js';
-import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules } from '../../extensions.js';
+import { getStringHash, debounce, waitUntilCondition, extractAllWords, delay } from '../../utils.js';
+import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules, renderExtensionTemplate } from '../../extensions.js';
 import { animation_duration, eventSource, event_types, extension_prompt_roles, extension_prompt_types, generateQuietPrompt, is_send_press, saveSettingsDebounced, saveSettings, substituteParams } from '../../../script.js';
-import { is_group_generating, selected_group } from '../../group-chats.js';
-import { registerSlashCommand } from '../../slash-commands.js';
-import { loadMovingUIState } from '../../power-user.js';
-import { dragElement } from '../../RossAscends-mods.js';
-import { getTextTokens, tokenizers } from '../../tokenizers.js';
-export { MODULE_NAME };
-
-const MODULE_NAME = '1_memory';
-
-let lastCharacterId = null;
-let lastGroupId = null;
-let lastChatId = null;
-let lastMessageHash = null;
-let lastMessageId = null;
-let inApiCall = false;
+import {
+    activateSendButtons,
+    deactivateSendButtons,
+    animation_duration,
+    eventSource,
+    event_types,
+    extension_prompt_roles,
+    extension_prompt_types,
+    generateQuietPrompt,
+    is_send_press,
+    saveSettingsDebounced,
+    substituteParams,
+    generateRaw,
+    getMaxContextSize,
+} from '../../../script.js';
 
 
 //В каком режиме будет работать расширение. Вариант XML Hints ("XML_hints"), Вариант Summarize - (false)
-
 var Extensionmode
 
 
@@ -34,8 +33,14 @@ const summary_sources = {
 };
 
 
-
 const defaultPrompt = '[Pause your roleplay. Summarize the most important facts and events that have happened in the chat so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.]';
+
+const prompt_builders = {
+    DEFAULT: 0,
+    RAW_BLOCKING: 1,
+    RAW_NON_BLOCKING: 2,
+};
+
 const defaultTemplate = '[Summary: {{summary}}]';
 
 
@@ -54,13 +59,22 @@ const defaultSettings = {
     promptWordsStep: 25,
     promptInterval: 10,
     promptMinInterval: 0,
-    promptMaxInterval: 100,
+    promptMaxInterval: 250,
     promptIntervalStep: 1,
     promptForceWords: 0,
     promptForceWordsStep: 100,
     promptMinForceWords: 0,
     promptMaxForceWords: 10000,
     Extensionmode: false,
+    overrideResponseLength: 0,
+    overrideResponseLengthMin: 0,
+    overrideResponseLengthMax: 4096,
+    overrideResponseLengthStep: 16,
+    maxMessagesPerRequest: 0,
+    maxMessagesPerRequestMin: 0,
+    maxMessagesPerRequestMax: 250,
+    maxMessagesPerRequestStep: 1,
+    prompt_builder: prompt_builders.DEFAULT,
 };
 
 /*
@@ -115,6 +129,9 @@ function loadSettings() {
     $('#memory_role').val(extension_settings.memory.role).trigger('input');
     $(`input[name="memory_position"][value="${extension_settings.memory.position}"]`).prop('checked', true).trigger('input');
     $('#memory_prompt_words_force').val(extension_settings.memory.promptForceWords).trigger('input');
+    $(`input[name="memory_prompt_builder"][value="${extension_settings.memory.prompt_builder}"]`).prop('checked', true).trigger('input');
+    $('#memory_override_response_length').val(extension_settings.memory.overrideResponseLength).trigger('input');
+    $('#memory_max_messages_per_request').val(extension_settings.memory.maxMessagesPerRequest).trigger('input');
     switchSourceControls(extension_settings.memory.source);
 }
 
@@ -142,6 +159,81 @@ switch (extension_settings.memory.Extensionmode) {
 
 
 
+async function onPromptForceWordsAutoClick() {
+    const context = getContext();
+    const maxPromptLength = getMaxContextSize(extension_settings.memory.overrideResponseLength);
+    const chat = context.chat;
+    const allMessages = chat.filter(m => !m.is_system && m.mes).map(m => m.mes);
+    const messagesWordCount = allMessages.map(m => extractAllWords(m)).flat().length;
+    const averageMessageWordCount = messagesWordCount / allMessages.length;
+    const tokensPerWord = getTokenCount(allMessages.join('\n')) / messagesWordCount;
+    const wordsPerToken = 1 / tokensPerWord;
+    const maxPromptLengthWords = Math.round(maxPromptLength * wordsPerToken);
+    // How many words should pass so that messages will start be dropped out of context;
+    const wordsPerPrompt = Math.floor(maxPromptLength / tokensPerWord);
+    // How many words will be needed to fit the allowance buffer
+    const summaryPromptWords = extractAllWords(extension_settings.memory.prompt).length;
+    const promptAllowanceWords = maxPromptLengthWords - extension_settings.memory.promptWords - summaryPromptWords;
+    const averageMessagesPerPrompt = Math.floor(promptAllowanceWords / averageMessageWordCount);
+    const maxMessagesPerSummary = extension_settings.memory.maxMessagesPerRequest || 0;
+    const targetMessagesInPrompt = maxMessagesPerSummary > 0 ? maxMessagesPerSummary : Math.max(0, averageMessagesPerPrompt);
+    const targetSummaryWords = (targetMessagesInPrompt * averageMessageWordCount) + (promptAllowanceWords / 4);
+
+    console.table({
+        maxPromptLength,
+        maxPromptLengthWords,
+        promptAllowanceWords,
+        averageMessagesPerPrompt,
+        targetMessagesInPrompt,
+        targetSummaryWords,
+        wordsPerPrompt,
+        wordsPerToken,
+        tokensPerWord,
+        messagesWordCount,
+    });
+
+    const ROUNDING = 100;
+    extension_settings.memory.promptForceWords = Math.max(1, Math.floor(targetSummaryWords / ROUNDING) * ROUNDING);
+    $('#memory_prompt_words_force').val(extension_settings.memory.promptForceWords).trigger('input');
+}
+
+async function onPromptIntervalAutoClick() {
+    const context = getContext();
+    const maxPromptLength = getMaxContextSize(extension_settings.memory.overrideResponseLength);
+    const chat = context.chat;
+    const allMessages = chat.filter(m => !m.is_system && m.mes).map(m => m.mes);
+    const messagesWordCount = allMessages.map(m => extractAllWords(m)).flat().length;
+    const messagesTokenCount = getTokenCount(allMessages.join('\n'));
+    const tokensPerWord = messagesTokenCount / messagesWordCount;
+    const averageMessageTokenCount = messagesTokenCount / allMessages.length;
+    const targetSummaryTokens = Math.round(extension_settings.memory.promptWords * tokensPerWord);
+    const promptTokens = getTokenCount(extension_settings.memory.prompt);
+    const promptAllowance = maxPromptLength - promptTokens - targetSummaryTokens;
+    const maxMessagesPerSummary = extension_settings.memory.maxMessagesPerRequest || 0;
+    const averageMessagesPerPrompt = Math.floor(promptAllowance / averageMessageTokenCount);
+    const targetMessagesInPrompt = maxMessagesPerSummary > 0 ? maxMessagesPerSummary : Math.max(0, averageMessagesPerPrompt);
+    const adjustedAverageMessagesPerPrompt = targetMessagesInPrompt + (averageMessagesPerPrompt - targetMessagesInPrompt) / 4;
+
+    console.table({
+        maxPromptLength,
+        promptAllowance,
+        targetSummaryTokens,
+        promptTokens,
+        messagesWordCount,
+        messagesTokenCount,
+        tokensPerWord,
+        averageMessageTokenCount,
+        averageMessagesPerPrompt,
+        targetMessagesInPrompt,
+        adjustedAverageMessagesPerPrompt,
+        maxMessagesPerSummary,
+    });
+
+    const ROUNDING = 5;
+    extension_settings.memory.promptInterval = Math.max(1, Math.floor(adjustedAverageMessagesPerPrompt / ROUNDING) * ROUNDING);
+
+    $('#memory_prompt_interval').val(extension_settings.memory.promptInterval).trigger('input');
+}
 
 function onSummarySourceChange(event) {
     const value = event.target.value;
@@ -151,8 +243,8 @@ function onSummarySourceChange(event) {
 }
 
 function switchSourceControls(value) {
-    $('#memory_settings [data-source]').each((_, element) => {
-        const source = $(element).data('source');
+    $('#memory_settings [data-summary-source]').each((_, element) => {
+        const source = $(element).data('summary-source');
         $(element).toggle(source === value);
     });
     saveSettingsDebounced ();
@@ -240,6 +332,10 @@ function onMemoryPromptIntervalInput() {
     saveSettingsDebounced();
 }
 
+function onMemoryPromptRestoreClick() {
+    $('#memory_prompt').val(defaultPrompt).trigger('input');
+}
+
 function onMemoryPromptInput() {
     const value = $(this).val();
     extension_settings.memory.prompt = value;
@@ -281,6 +377,20 @@ function onMemoryPromptWordsForceInput() {
     saveSettingsDebounced();
 }
 
+function onOverrideResponseLengthInput() {
+    const value = $(this).val();
+    extension_settings.memory.overrideResponseLength = Number(value);
+    $('#memory_override_response_length_value').text(extension_settings.memory.overrideResponseLength);
+    saveSettingsDebounced();
+}
+
+function onMaxMessagesPerRequestInput() {
+    const value = $(this).val();
+    extension_settings.memory.maxMessagesPerRequest = Number(value);
+    $('#memory_max_messages_per_request_value').text(extension_settings.memory.maxMessagesPerRequest);
+    saveSettingsDebounced();
+}
+
 function saveLastValues() {
     const context = getContext();
     lastGroupId = context.groupId;
@@ -304,6 +414,22 @@ function getLatestMemoryFromChat(chat) {
     }
 
     return '';
+}
+
+function getIndexOfLatestChatSummary(chat) {
+    if (!Array.isArray(chat) || !chat.length) {
+        return -1;
+    }
+
+    const reversedChat = chat.slice().reverse();
+    reversedChat.shift();
+    for (let mes of reversedChat) {
+        if (mes.extra && mes.extra.memory) {
+            return chat.indexOf(mes);
+        }
+    }
+
+    return -1;
 }
 
 async function onChatEvent() {
@@ -480,8 +606,41 @@ async function summarizeChatMain(context, force, skipWIAN) {
         console.debug('Summarization prompt is empty. Skipping summarization.');
         return;
     }
+
     console.log('sending summary prompt');
-    const summary = await generateQuietPrompt(prompt, false, skipWIAN);
+    let summary = '';
+    let index = null;
+
+    if (prompt_builders.DEFAULT === extension_settings.memory.prompt_builder) {
+        summary = await generateQuietPrompt(prompt, false, skipWIAN, '', '', extension_settings.memory.overrideResponseLength);
+    }
+
+    if ([prompt_builders.RAW_BLOCKING, prompt_builders.RAW_NON_BLOCKING].includes(extension_settings.memory.prompt_builder)) {
+        const lock = extension_settings.memory.prompt_builder === prompt_builders.RAW_BLOCKING;
+        try {
+            if (lock) {
+                deactivateSendButtons();
+            }
+
+            const { rawPrompt, lastUsedIndex } = await getRawSummaryPrompt(context, prompt);
+
+            if (lastUsedIndex === null || lastUsedIndex === -1) {
+                if (force) {
+                    toastr.info('To try again, remove the latest summary.', 'No messages found to summarize');
+                }
+
+                return null;
+            }
+
+            summary = await generateRaw(rawPrompt, '', false, false, prompt, extension_settings.memory.overrideResponseLength);
+            index = lastUsedIndex;
+        } finally {
+            if (lock) {
+                activateSendButtons();
+            }
+        }
+    }
+
     const newContext = getContext();
 
     // something changed during summarization request
@@ -492,8 +651,81 @@ async function summarizeChatMain(context, force, skipWIAN) {
         return;
     }
 
-    setMemoryContext(summary, true);
+    setMemoryContext(summary, true, index);
     return summary;
+}
+
+/**
+ * Get the raw summarization prompt from the chat context.
+ * @param {object} context ST context
+ * @param {string} prompt Summarization system prompt
+ * @returns {Promise<{rawPrompt: string, lastUsedIndex: number}>} Raw summarization prompt
+ */
+async function getRawSummaryPrompt(context, prompt) {
+    /**
+     * Get the memory string from the chat buffer.
+     * @param {boolean} includeSystem Include prompt into the memory string
+     * @returns {string} Memory string
+     */
+    function getMemoryString(includeSystem) {
+        const delimiter = '\n\n';
+        const stringBuilder = [];
+        const bufferString = chatBuffer.slice().join(delimiter);
+
+        if (includeSystem) {
+            stringBuilder.push(prompt);
+        }
+
+        if (latestSummary) {
+            stringBuilder.push(latestSummary);
+        }
+
+        stringBuilder.push(bufferString);
+
+        return stringBuilder.join(delimiter).trim();
+    }
+
+    const chat = context.chat.slice();
+    const latestSummary = getLatestMemoryFromChat(chat);
+    const latestSummaryIndex = getIndexOfLatestChatSummary(chat);
+    chat.pop(); // We always exclude the last message from the buffer
+    const chatBuffer = [];
+    const PADDING = 64;
+    const PROMPT_SIZE = getMaxContextSize(extension_settings.memory.overrideResponseLength);
+    let latestUsedMessage = null;
+
+    for (let index = latestSummaryIndex + 1; index < chat.length; index++) {
+        const message = chat[index];
+
+        if (!message) {
+            break;
+        }
+
+        if (message.is_system || !message.mes) {
+            continue;
+        }
+
+        const entry = `${message.name}:\n${message.mes}`;
+        chatBuffer.push(entry);
+
+        const tokens = getTokenCount(getMemoryString(true), PADDING);
+        await delay(1);
+
+        if (tokens > PROMPT_SIZE) {
+            chatBuffer.pop();
+            break;
+        }
+
+        latestUsedMessage = message;
+
+        if (extension_settings.memory.maxMessagesPerRequest > 0 && chatBuffer.length >= extension_settings.memory.maxMessagesPerRequest) {
+            break;
+        }
+    }
+
+    const lastUsedIndex = context.chat.indexOf(latestUsedMessage);
+    const rawPrompt = getMemoryString(false);
+    return { rawPrompt, lastUsedIndex };
 }
 
 async function summarizeChatExtras(context) {
@@ -603,12 +835,18 @@ function onMemoryContentInput() {
     setMemoryContext(value, true);
 }
 
+function onMemoryPromptBuilderInput(e) {
+    const value = Number(e.target.value);
+    extension_settings.memory.prompt_builder = value;
+    saveSettingsDebounced();
+}
+
 function reinsertMemory() {
-    const existingValue = $('#memory_contents').val();
+    const existingValue = String($('#memory_contents').val());
     setMemoryContext(existingValue, false);
 }
 
-function setMemoryContext(value, saveToMessage) {
+function setMemoryContext(value, saveToMessage, index = null) {
     switch (extension_settings.memory.Extensionmode) {
 	case "XML_hints":
 		var context = getContext();
@@ -726,6 +964,15 @@ function setupListeners() {
     $('#memory_prompt_words_force').off('click').on('input', onMemoryPromptWordsForceInput);
     $('#Extensionmode').val(extension_settings.memory.Extensionmode).trigger('change');
 	$("#summarySettingsBlockToggle").off('click').on('click', function () {
+    $('#memory_prompt_builder_default').off('click').on('input', onMemoryPromptBuilderInput);
+    $('#memory_prompt_builder_raw_blocking').off('click').on('input', onMemoryPromptBuilderInput);
+    $('#memory_prompt_builder_raw_non_blocking').off('click').on('input', onMemoryPromptBuilderInput);
+    $('#memory_prompt_restore').off('click').on('click', onMemoryPromptRestoreClick);
+    $('#memory_prompt_interval_auto').off('click').on('click', onPromptIntervalAutoClick);
+    $('#memory_prompt_words_auto').off('click').on('click', onPromptForceWordsAutoClick);
+    $('#memory_override_response_length').off('click').on('input', onOverrideResponseLengthInput);
+    $('#memory_max_messages_per_request').off('click').on('input', onMaxMessagesPerRequestInput);
+    $('#summarySettingsBlockToggle').off('click').on('click', function () {
         console.log('saw settings button click');
         $("#summarySettingsBlock").slideToggle(200, "swing"); //toggleClass("hidden");
     });
@@ -733,96 +980,7 @@ function setupListeners() {
 
 jQuery(function () {
     function addExtensionControls() {
-        const settingsHtml = `
-        <div id="memory_settings">
-            <div class="inline-drawer">
-                <div class="inline-drawer-toggle inline-drawer-header">
-                    <div class="flex-container alignitemscenter margin0"><b>Summarize</b><i id="summaryExtensionPopoutButton" class="fa-solid fa-window-restore menu_button margin0"></i></div>
-                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                </div>
-                <div class="inline-drawer-content">
-                    <div id="summaryExtensionDrawerContents">
-                        <label for="summary_source">Summarize with:</label>
-                        <select id="summary_source">
-                            <option value="main">Main API</option>
-                            <option value="extras">Extras API</option>
-                        </select><br>
-                        <label for="Extensionmode">Extension mode:</label>
-                            <select id="Extensionmode">
-                            <option value="XML_hints">XML hints override</option>
-                            <option value="false">Original Summarize</option>
-				    	</select>
-
-                        <div class="flex-container justifyspacebetween alignitemscenter">
-                            <span class="flex1">Current summary:</span>
-                            <div id="memory_restore" class="menu_button flex1 margin0"><span>Restore Previous</span></div>
-                        </div>
-
-                        <textarea id="memory_contents" class="text_pole textarea_compact" rows="6" placeholder="Summary will be generated here..."></textarea>
-                        <div class="memory_contents_controls">
-                            <div id="memory_force_summarize" data-source="main" class="menu_button menu_button_icon" title="Trigger a summary update right now." data-i18n="Trigger a summary update right now.">
-                                <i class="fa-solid fa-database"></i>
-                                <span>Summarize now</span>
-                            </div>
-                            <label for="memory_frozen" title="Disable automatic summary updates. While paused, the summary remains as-is. You can still force an update by pressing the Summarize now button (which is only available with the Main API)." data-i18n="[title]Disable automatic summary updates. While paused, the summary remains as-is. You can still force an update by pressing the Summarize now button (which is only available with the Main API)."><input id="memory_frozen" type="checkbox" />Pause</label>
-                            <label for="memory_skipWIAN" title="Omit World Info and Author's Note from text to be summarized. Only has an effect when using the Main API. The Extras API always omits WI/AN." data-i18n="[title]Omit World Info and Author's Note from text to be summarized. Only has an effect when using the Main API. The Extras API always omits WI/AN."><input id="memory_skipWIAN" type="checkbox" />No WI/AN</label>
-                        </div>
-                        <div class="memory_contents_controls">
-                            <div id="summarySettingsBlockToggle" class="menu_button menu_button_icon" title="Edit summarization prompt, insertion position, etc.">
-                                <i class="fa-solid fa-cog"></i>
-                                <span>Summary Settings</span>
-                            </div>
-                        </div>
-                        <div id="summarySettingsBlock" style="display:none;">
-                            <div class="memory_template">
-                                <label for="memory_template">Insertion Template</label>
-                                <textarea id="memory_template" class="text_pole textarea_compact" rows="2" placeholder="{{summary}} will resolve to the current summary contents."></textarea>
-                            </div>
-                            <label for="memory_position">Injection Position</label>
-                            <div class="radio_group">
-                                <label>
-                                    <input type="radio" name="memory_position" value="2" />
-                                    Before Main Prompt / Story String
-                                </label>
-                                <label>
-                                    <input type="radio" name="memory_position" value="0" />
-                                    After Main Prompt / Story String
-                                </label>
-                                <label class="flex-container alignItemsCenter" title="How many messages before the current end of the chat." data-i18n="[title]How many messages before the current end of the chat.">
-                                    <input type="radio" name="memory_position" value="1" />
-                                    In-chat @ Depth <input id="memory_depth" class="text_pole widthUnset" type="number" min="0" max="999" />
-                                    as
-                                    <select id="memory_role" class="text_pole widthNatural">
-                                        <option value="0">System</option>
-                                        <option value="1">User</option>
-                                        <option value="2">Assistant</option>
-                                    </select>
-                                </label>
-                            </div>
-                            <div data-source="main" class="memory_contents_controls">
-                            </div>
-                            <div data-source="main">
-                                <label for="memory_prompt" class="title_restorable">
-                                    Summary Prompt
-
-                                </label>
-                                <textarea id="memory_prompt" class="text_pole textarea_compact" rows="6" placeholder="This prompt will be sent to AI to request the summary generation. {{words}} will resolve to the 'Number of words' parameter."></textarea>
-                                <label for="memory_prompt_words">Summary length (<span id="memory_prompt_words_value"></span> words)</label>
-                                <input id="memory_prompt_words" type="range" value="${defaultSettings.promptWords}" min="${defaultSettings.promptMinWords}" max="${defaultSettings.promptMaxWords}" step="${defaultSettings.promptWordsStep}" />
-                                <label for="memory_prompt_interval">Update every <span id="memory_prompt_interval_value"></span> messages</label>
-                                <small>0 = disable</small>
-                                <input id="memory_prompt_interval" type="range" value="${defaultSettings.promptInterval}" min="${defaultSettings.promptMinInterval}" max="${defaultSettings.promptMaxInterval}" step="${defaultSettings.promptIntervalStep}" />
-                                <label for="memory_prompt_words_force">Update every <span id="memory_prompt_words_force_value"></span> words</label>
-                                <small>0 = disable</small>
-                                <input id="memory_prompt_words_force" type="range" value="${defaultSettings.promptForceWords}" min="${defaultSettings.promptMinForceWords}" max="${defaultSettings.promptMaxForceWords}" step="${defaultSettings.promptForceWordsStep}" />
-                                <small>If both sliders are non-zero, then both will trigger summary updates a their respective intervals.</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        `;
+        const settingsHtml = renderExtensionTemplate('memory', 'settings', { defaultSettings });
         $('#extensions_settings2').append(settingsHtml);
         setupListeners();
         $('#summaryExtensionPopoutButton').off('click').on('click', function (e) {

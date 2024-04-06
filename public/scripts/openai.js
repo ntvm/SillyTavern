@@ -49,7 +49,7 @@ import {
 import { getCustomStoppingStrings, persona_description_positions, power_user } from './power-user.js';
 import { SECRET_KEYS, secret_state, writeSecret } from './secrets.js';
 
-import EventSourceStream from './sse-stream.js';
+import { getEventSourceStream } from './sse-stream.js';
 import {
     delay,
     download,
@@ -470,8 +470,10 @@ function convertChatCompletionToInstruct(messages, type) {
 
     const isImpersonate = type === 'impersonate';
     const isContinue = type === 'continue';
+    const isQuiet = type === 'quiet';
+    const isQuietToLoud = false; // Quiet to loud not implemented for Chat Completion
     const promptName = isImpersonate ? name1 : name2;
-    const promptLine = isContinue ? '' : formatInstructModePrompt(promptName, isImpersonate, '', name1, name2).trimStart();
+    const promptLine = isContinue ? '' : formatInstructModePrompt(promptName, isImpersonate, '', name1, name2, isQuiet, isQuietToLoud).trimStart();
 
     let prompt = [systemPromptText, examplesText, chatMessagesText, promptLine]
         .filter(x => x)
@@ -570,7 +572,7 @@ function setOpenAIMessageExamples(mesExamplesArray) {
     for (let item of mesExamplesArray) {
         // remove <START> {Example Dialogue:} and replace \r\n with just \n
         let replaced = item.replace(/<START>/i, '{Example Dialogue:}').replace(/\r/gm, '');
-        let parsed = parseExampleIntoIndividual(replaced);
+        let parsed = parseExampleIntoIndividual(replaced, true);
         // add to the example message blocks array
         examples.push(parsed);
     }
@@ -631,7 +633,13 @@ function setupChatCompletionPromptManager(openAiSettings) {
     return promptManager;
 }
 
-function parseExampleIntoIndividual(messageExampleString) {
+/**
+ * Parses the example messages into individual messages.
+ * @param {string} messageExampleString - The string containing the example messages
+ * @param {boolean} appendNamesForGroup - Whether to append the character name for group chats
+ * @returns {Message[]} Array of message objects
+ */
+export function parseExampleIntoIndividual(messageExampleString, appendNamesForGroup = true) {
     let result = []; // array of msgs
     let tmp = messageExampleString.split('\n');
     let cur_msg_lines = [];
@@ -644,7 +652,7 @@ function parseExampleIntoIndividual(messageExampleString) {
         // strip to remove extra spaces
         let parsed_msg = cur_msg_lines.join('\n').replace(name + ':', '').trim();
 
-        if (selected_group && ['example_user', 'example_assistant'].includes(system_name)) {
+        if (appendNamesForGroup && selected_group && ['example_user', 'example_assistant'].includes(system_name)) {
             parsed_msg = `${name}: ${parsed_msg}`;
         }
 
@@ -721,8 +729,6 @@ function populationInjectionPrompts(prompts, messages) {
         // Order of priority (most important go lower)
 
         const roleMessages = [];
-        const separator = '\n';
-        const wrap = false;
 
         for (const role of roles) {
             // Get prompts for current role
@@ -877,18 +883,20 @@ function populateDialogueExamples(prompts, chatCompletion, messageExamples) {
 
             if (chatCompletion.canAfford(newExampleChat)) chatCompletion.insert(newExampleChat, 'dialogueExamples');
 
-            dialogue.forEach((prompt, promptIndex) => {
+            for (let promptIndex = 0; promptIndex < dialogue.length; promptIndex++) {
+                const prompt = dialogue[promptIndex];
                 const role = 'system';
                 const content = prompt.content || '';
                 const identifier = `dialogueExamples ${dialogueIndex}-${promptIndex}`;
 
                 const chatMessage = new Message(role, content, identifier);
                 chatMessage.setName(prompt.name);
-                if (chatCompletion.canAfford(chatMessage)) {
-                    chatCompletion.insert(chatMessage, 'dialogueExamples');
-                    examplesAdded++;
+                if (!chatCompletion.canAfford(chatMessage)) {
+                    break;
                 }
-            });
+                chatCompletion.insert(chatMessage, 'dialogueExamples');
+                examplesAdded++;
+            }
 
             if (0 === examplesAdded) {
                 chatCompletion.removeLastFrom('dialogueExamples');
@@ -1818,10 +1826,6 @@ async function sendOpenAIRequest(type, messages, signal) {
                 }
                 break;
         }
-
-    // Add logprobs request (currently OpenAI only, max 5 on their side)
-    if (useLogprobs && (isOAI || isCustom)) {
-        generate_data['logprobs'] = 5;
     }
 
     // Add logprobs request (currently OpenAI only, max 5 on their side)
@@ -1917,7 +1921,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         throw new Error(`Got response status ${response.status}`);
     }
     if (stream) {
-        const eventStream = new EventSourceStream();
+        const eventStream = getEventSourceStream();
         response.body.pipeThrough(eventStream);
         const reader = eventStream.readable.getReader();
         return async function* streamData() {
@@ -2397,8 +2401,12 @@ export class ChatCompletion {
                 continue;
             }
 
-            if (!excludeList.includes(message.identifier) && message.role === 'system' && !message.name) {
-                if (lastMessage && lastMessage.role === 'system') {
+            const shouldSquash = (message) => {
+                return !excludeList.includes(message.identifier) && message.role === 'system' && !message.name;
+            }
+
+            if (shouldSquash(message)) {
+                if (lastMessage && shouldSquash(lastMessage)) {
                     lastMessage.content += '\n' + message.content;
                     lastMessage.tokens = tokenHandler.count({ role: lastMessage.role, content: lastMessage.content });
                 }
@@ -2933,6 +2941,8 @@ function setNamesBehaviorControls() {
             $('#character_names_content').prop('checked', true);
             break;
     }
+
+
     const checkedItemText = $('input[name="character_names"]:checked ~ span').text().trim();
     $('#character_names_display').text(checkedItemText);
 }
@@ -3819,7 +3829,7 @@ async function onModelChange() {
         else if (['command-light-nightly', 'command-nightly'].includes(oai_settings.cohere_model)) {
             $('#openai_max_context').attr('max', max_8k);
         }
-        else if (['command-r'].includes(oai_settings.cohere_model)) {
+        else if (['command-r', 'command-r-plus'].includes(oai_settings.cohere_model)) {
             $('#openai_max_context').attr('max', max_128k);
         }
         else {
@@ -4721,7 +4731,7 @@ $(document).ready(async function () {
     });
 
     $('#continue_postfix_newline').on('input', function () {
-        oai_settings.continue_postfix = continue_postfix_types.NEWLINE
+        oai_settings.continue_postfix = continue_postfix_types.NEWLINE;
         setContinuePostfixControls();
         saveSettingsDebounced();
     });

@@ -1,6 +1,6 @@
 const express = require('express');
 const fetch = require('node-fetch').default;
-const { Readable } = require('stream').Readable;
+const Readable = require('stream').Readable;
 
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
@@ -36,7 +36,13 @@ async function parseCohereStream(jsonStream, request, response) {
                 } catch (e) {
                     break;
                 }
-                if (json.event_type === 'text-generation') {
+                if (json.message) {
+                    const message = json.message || 'Unknown error';
+                    const chunk = { error: { message: message } };
+                    response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                    partialData = '';
+                    break;
+                } else if (json.event_type === 'text-generation') {
                     const text = json.text || '';
                     const chunk = { choices: [{ text }] };
                     response.write(`data: ${JSON.stringify(chunk)}\n\n`);

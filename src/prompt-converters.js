@@ -1,4 +1,4 @@
-require('./endpoints/polyfill.js');
+require('./polyfill.js');
 
 /**
  * Convert a prompt from the ChatML objects to the format used by Claude.
@@ -139,11 +139,16 @@ function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFi
             if (messages[i].role !== 'system') {
                 break;
             }
+            // Append example names if not already done by the frontend (e.g. for group chats).
             if (userName && messages[i].name === 'example_user') {
-                messages[i].content = `${userName}: ${messages[i].content}`;
+                if (!messages[i].content.startsWith(`${userName}: `)) {
+                    messages[i].content = `${userName}: ${messages[i].content}`;
+                }
             }
             if (charName && messages[i].name === 'example_assistant') {
-                messages[i].content = `${charName}: ${messages[i].content}`;
+                if (!messages[i].content.startsWith(`${charName}: `)) {
+                    messages[i].content = `${charName}: ${messages[i].content}`;
+                }
             }
             systemPrompt += `${messages[i].content}\n\n`;
         }
