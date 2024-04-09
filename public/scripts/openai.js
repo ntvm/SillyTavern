@@ -324,7 +324,7 @@ const oai_settings = {
     exclude_assistant: false,
     claude_use_sysprompt: false,
     claude_exclude_prefixes: false,
-	claude_allow_plaintext: false,
+    claude_allow_plaintext: false,
     use_alt_scale: false,
     squash_system_messages: false,
     image_inlining: false,
