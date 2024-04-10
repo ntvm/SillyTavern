@@ -2996,6 +2996,8 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         exclude_assistant: settings.exclude_assistant,
 		claude_allow_plaintext: settings.claude_allow_plaintext,
         claude_use_sysprompt: settings.claude_use_sysprompt,
+        claude_allow_plaintext: true,
+        exclude_h_a_prompt: default_exclude_h_a_prompt,
         claude_exclude_prefixes: settings.claude_exclude_prefixes,
         use_alt_scale: settings.use_alt_scale,
         squash_system_messages: settings.squash_system_messages,
