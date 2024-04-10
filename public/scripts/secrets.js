@@ -20,6 +20,7 @@ export const SECRET_KEYS = {
     INFERMATICAI: 'api_key_infermaticai',
     CUSTOM: 'api_key_custom',
     OOBA: 'api_key_ooba',
+    COHERE: 'api_key_cohere',
 };
 
 const INPUT_MAP = {
@@ -41,6 +42,7 @@ const INPUT_MAP = {
     [SECRET_KEYS.TOGETHERAI]: '#api_key_togetherai',
     [SECRET_KEYS.OOBA]: '#api_key_ooba',
     [SECRET_KEYS.INFERMATICAI]: '#api_key_infermaticai',
+    [SECRET_KEYS.COHERE]: '#api_key_cohere',
 };
 
 async function clearSecret() {
