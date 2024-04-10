@@ -174,6 +174,7 @@ export const chat_completion_sources = {
     MAKERSUITE: 'makersuite',
     MISTRALAI: 'mistralai',
     CUSTOM: 'custom',
+    COHERE: 'cohere',
 };
 
 const prefixMap = selected_group ? {
@@ -223,6 +224,7 @@ const default_settings = {
     google_model: 'gemini-pro',
     ai21_model: 'j2-ultra',
     mistralai_model: 'mistral-medium-latest',
+    cohere_model: 'command-r',
     custom_model: '',
     custom_url: '',
     custom_include_body: '',
@@ -299,6 +301,7 @@ const oai_settings = {
     google_model: 'gemini-pro',
     ai21_model: 'j2-ultra',
     mistralai_model: 'mistral-medium-latest',
+    cohere_model: 'command-r',
     custom_model: '',
     custom_url: '',
     custom_include_body: '',
@@ -1464,6 +1467,8 @@ function getChatCompletionModel() {
             return oai_settings.mistralai_model;
         case chat_completion_sources.CUSTOM:
             return oai_settings.custom_model;
+        case chat_completion_sources.COHERE:
+            return oai_settings.cohere_model;
         default:
             throw new Error(`Unknown chat completion source: ${oai_settings.chat_completion_source}`);
     }
@@ -1683,6 +1688,7 @@ async function sendOpenAIRequest(type, messages, signal) {
     const isOAI = oai_settings.chat_completion_source == chat_completion_sources.OPENAI;
     const isMistral = oai_settings.chat_completion_source == chat_completion_sources.MISTRALAI;
     const isCustom = oai_settings.chat_completion_source == chat_completion_sources.CUSTOM;
+    const isCohere = oai_settings.chat_completion_source == chat_completion_sources.COHERE;
     const isTextCompletion = (isOAI && textCompletionModels.includes(oai_settings.openai_model)) || (isOpenRouter && oai_settings.openrouter_force_instruct && power_user.instruct.enabled);
     const isQuiet = type === 'quiet';
     const isImpersonate = type === 'impersonate';
@@ -1838,7 +1844,17 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['custom_include_headers'] = oai_settings.custom_include_headers;
     }
 
-    if ((isOAI || isOpenRouter || isMistral || isCustom) && oai_settings.seed >= 0) {
+    if (isCohere) {
+        // Clamp to 0.01 -> 0.99
+        generate_data['top_p'] = Math.min(Math.max(Number(oai_settings.top_p_openai), 0.01), 0.99);
+        generate_data['top_k'] = Number(oai_settings.top_k_openai);
+        // Clamp to 0 -> 1
+        generate_data['frequency_penalty'] = Math.min(Math.max(Number(oai_settings.freq_pen_openai), 0), 1);
+        generate_data['presence_penalty'] = Math.min(Math.max(Number(oai_settings.pres_pen_openai), 0), 1);
+        generate_data['stop'] = getCustomStoppingStrings(5);
+    }
+
+    if ((isOAI || isOpenRouter || isMistral || isCustom || isCohere) && oai_settings.seed >= 0) {
         generate_data['seed'] = oai_settings.seed;
     }
 
@@ -2685,6 +2701,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.openrouter_force_instruct = settings.openrouter_force_instruct ?? default_settings.openrouter_force_instruct;
     oai_settings.ai21_model = settings.ai21_model ?? default_settings.ai21_model;
     oai_settings.mistralai_model = settings.mistralai_model ?? default_settings.mistralai_model;
+    oai_settings.cohere_model = settings.cohere_model ?? default_settings.cohere_model;
     oai_settings.custom_model = settings.custom_model ?? default_settings.custom_model;
     oai_settings.custom_url = settings.custom_url ?? default_settings.custom_url;
     oai_settings.custom_include_body = settings.custom_include_body ?? default_settings.custom_include_body;
@@ -2743,6 +2760,8 @@ function loadOpenAISettings(data, settings) {
     $(`#model_ai21_select option[value="${oai_settings.ai21_model}"`).attr('selected', true);
     $('#model_mistralai_select').val(oai_settings.mistralai_model);
     $(`#model_mistralai_select option[value="${oai_settings.mistralai_model}"`).attr('selected', true);
+    $('#model_cohere_select').val(oai_settings.cohere_model);
+    $(`#model_cohere_select option[value="${oai_settings.cohere_model}"`).attr('selected', true);
     $('#custom_model_id').val(oai_settings.custom_model);
     $('#custom_api_url_text').val(oai_settings.custom_url);
     $('#openai_max_context').val(oai_settings.openai_max_context);
@@ -2941,6 +2960,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         openrouter_sort_models: settings.openrouter_sort_models,
         ai21_model: settings.ai21_model,
         mistralai_model: settings.mistralai_model,
+        cohere_model: settings.cohere_model,
         custom_model: settings.custom_model,
         custom_url: settings.custom_url,
         custom_include_body: settings.custom_include_body,
@@ -2989,6 +3009,8 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         exclude_assistant: settings.exclude_assistant,
 		claude_allow_plaintext: settings.claude_allow_plaintext,
         claude_use_sysprompt: settings.claude_use_sysprompt,
+        claude_allow_plaintext: settings.claude_allow_plaintext,
+        exclude_h_a_prompt: settings.exclude_h_a_prompt,
         claude_exclude_prefixes: settings.claude_exclude_prefixes,
         use_alt_scale: settings.use_alt_scale,
         squash_system_messages: settings.squash_system_messages,
@@ -3332,6 +3354,7 @@ function onSettingsPresetChange() {
         openrouter_sort_models: ['#openrouter_sort_models', 'openrouter_sort_models', false],
         ai21_model: ['#model_ai21_select', 'ai21_model', false],
         mistralai_model: ['#model_mistralai_select', 'mistralai_model', false],
+        cohere_model: ['#model_cohere_select', 'cohere_model', false],
         custom_model: ['#custom_model_id', 'custom_model', false],
         custom_url: ['#custom_api_url_text', 'custom_url', false],
         custom_include_body: ['#custom_include_body', 'custom_include_body', false],
@@ -3544,6 +3567,11 @@ async function onModelChange() {
         $('#model_mistralai_select').val(oai_settings.mistralai_model);
     }
 
+    if ($(this).is('#model_cohere_select')) {
+        console.log('Cohere model changed to', value);
+        oai_settings.cohere_model = value;
+    }
+
     if (value && $(this).is('#model_custom_select')) {
         console.log('Custom model changed to', value);
         oai_settings.custom_model = value;
@@ -3663,6 +3691,26 @@ async function onModelChange() {
         //mistral also caps temp at 1.0
         oai_settings.temp_openai = Math.min(claude_max_temp, oai_settings.temp_openai);
         $('#temp_openai').attr('max', claude_max_temp).val(oai_settings.temp_openai).trigger('input');
+    }
+
+    if (oai_settings.chat_completion_source === chat_completion_sources.COHERE) {
+        if (oai_settings.max_context_unlocked) {
+            $('#openai_max_context').attr('max', unlocked_max);
+        }
+        else if (['command-light', 'command'].includes(oai_settings.cohere_model)) {
+            $('#openai_max_context').attr('max', max_4k);
+        }
+        else if (['command-light-nightly', 'command-nightly'].includes(oai_settings.cohere_model)) {
+            $('#openai_max_context').attr('max', max_8k);
+        }
+        else if (['command-r'].includes(oai_settings.cohere_model)) {
+            $('#openai_max_context').attr('max', max_128k);
+        }
+        else {
+            $('#openai_max_context').attr('max', max_4k);
+        }
+        oai_settings.openai_max_context = Math.min(Number($('#openai_max_context').attr('max')), oai_settings.openai_max_context);
+        $('#openai_max_context').val(oai_settings.openai_max_context).trigger('input');
     }
 
     if (oai_settings.chat_completion_source == chat_completion_sources.AI21) {
@@ -3858,6 +3906,19 @@ async function onConnectButtonClick(e) {
         }
     }
 
+    if (oai_settings.chat_completion_source == chat_completion_sources.COHERE) {
+        const api_key_cohere = String($('#api_key_cohere').val()).trim();
+
+        if (api_key_cohere.length) {
+            await writeSecret(SECRET_KEYS.COHERE, api_key_cohere);
+        }
+
+        if (!secret_state[SECRET_KEYS.COHERE]) {
+            console.log('No secret key saved for Cohere');
+            return;
+        }
+    }
+
     startStatusLoading();
     saveSettingsDebounced();
     await getStatusOpen();
@@ -3892,6 +3953,9 @@ function toggleChatCompletionForms() {
     }
     else if (oai_settings.chat_completion_source == chat_completion_sources.MISTRALAI) {
         $('#model_mistralai_select').trigger('change');
+    }
+    else if (oai_settings.chat_completion_source == chat_completion_sources.COHERE) {
+        $('#model_cohere_select').trigger('change');
     }
     else if (oai_settings.chat_completion_source == chat_completion_sources.CUSTOM) {
         $('#model_custom_select').trigger('change');
@@ -4526,6 +4590,7 @@ $(document).ready(async function () {
     $('#openrouter_sort_models').on('change', onOpenrouterModelSortChange);
     $('#model_ai21_select').on('change', onModelChange);
     $('#model_mistralai_select').on('change', onModelChange);
+    $('#model_cohere_select').on('change', onModelChange);
     $('#model_custom_select').on('change', onModelChange);
     $('#settings_preset_openai').on('change', onSettingsPresetChange);
     $('#new_oai_preset').on('click', onNewPresetClick);
