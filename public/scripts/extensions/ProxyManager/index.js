@@ -48,6 +48,20 @@ function loadSettings() {
 function getBaseproxy(baseproxy){
     baseproxy = extension_settings.ProxyManager.ProxyURL;
     baseproxy = baseproxy.split('/');
+    if (baseproxy[baseproxy.length - 1] == 'proxy' ) {
+        baseproxy = baseproxy.join('/');
+        return baseproxy;
+    };
+    if ((baseproxy.length - 1) == 2) {
+        baseproxy.push('proxy'); 
+        baseproxy = baseproxy.join('/');
+        return baseproxy
+    };
+    if ((baseproxy.length - 1) == 3 && baseproxy[baseproxy.length - 1] == ''){
+        baseproxy[baseproxy.length - 1] = 'proxy';
+        baseproxy = baseproxy.join('/');
+        return baseproxy
+    };
     baseproxy.pop();
     if (baseproxy[4] == 'aws' || baseproxy[4] == 'azure' || baseproxy[4] == 'openai' ) {baseproxy.pop();}
     baseproxy = baseproxy.join('/');
