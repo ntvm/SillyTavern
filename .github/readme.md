@@ -36,7 +36,7 @@ Systemful (Возвращает роль System для Claude)(Работает 
 
 DonMoralez. If you're watching this, please NOTIFY me next time you want to contribute something from here to the main repository
 
-English | [中文](readme-zh_cn.md) | [日本語](readme-ja_jp.md)
+English | [中文](readme-zh_cn.md) | [日本語](readme-ja_jp.md) | [Русский](readme-ru_ru.md)
 
 ![SillyTavern-Banner](https://github.com/SillyTavern/SillyTavern/assets/18619528/c2be4c3f-aada-4f64-87a3-ae35a68b61a4)
 
