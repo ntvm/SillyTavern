@@ -1,6 +1,6 @@
 const express = require('express');
 const fetch = require('node-fetch').default;
-const Readable = require('stream').Readable;
+const { Readable } = require('stream').Readable;
 
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
@@ -99,7 +99,7 @@ async function sendClaudeRequest(request, response) {
         let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes == true);
         switch (IsExperemental){
             default:
-                converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? (convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes)) : convertClaudeMessages(request.body.messages, request.body.assistant_prefill, use_system_prompt, request.body.human_sysprompt_message);
+                converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? (convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes)) : convertClaudeMessages(request.body.messages, request.body.assistant_prefill, use_system_prompt, request.body.human_sysprompt_message, request.body.char_name, request.body.user_name);
                 break;
             case true:
                 converted_prompt = convertClaudeExperementalMessages(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, request.body.exclude_h_a_prompt, SystemFul, request.body.claude_exclude_prefixes);

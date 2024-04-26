@@ -101,8 +101,8 @@ const cliArguments = yargs(hideBin(process.argv))
     }).parseSync();
 
 // change all relative paths
-const serverDirectory = process['pkg'] ? path.dirname(process.execPath) : __dirname;
-console.log(process['pkg'] ? 'Running from binary' : 'Running from source');
+console.log(`Running in ${process.env.NODE_ENV} environment`);
+const serverDirectory = __dirname;
 process.chdir(serverDirectory);
 
 const app = express();
@@ -395,9 +395,9 @@ app.post('/uploadimage', jsonParser, async (request, response) => {
         }
 
         // if character is defined, save to a sub folder for that character
-        let pathToNewFile = path.join(DIRECTORIES.userImages, filename);
+        let pathToNewFile = path.join(DIRECTORIES.userImages, sanitize(filename));
         if (request.body.ch_name) {
-            pathToNewFile = path.join(DIRECTORIES.userImages, request.body.ch_name, filename);
+            pathToNewFile = path.join(DIRECTORIES.userImages, sanitize(request.body.ch_name), sanitize(filename));
         }
 
         ensureDirectoryExistence(pathToNewFile);

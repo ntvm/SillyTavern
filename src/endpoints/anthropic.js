@@ -5,7 +5,6 @@ const { jsonParser } = require('../express-common');
 
 const router = express.Router();
 
-
 function Proxystuff(Uscase){
     var array = readSecret(SECRET_KEYS.OAIPROXY);
     if (array == undefined) { allowProxy = false; return allowProxy;}
@@ -33,20 +32,20 @@ router.post('/caption-image', jsonParser, async (request, response) => {
         var rn = 'useproxy';
         var allowProxy = Proxystuff(rn);
 
-        var apiUrl;
+        var url;
         var apikey;
 
         if (allowProxy == false && request.body.reverse_proxy && request.body.proxy_password !== undefined) {
-            apiUrl = `${request.body.reverse_proxy}/v1/messages`;
+            url = `${request.body.reverse_proxy}/v1/messages`;
             apikey = request.body.proxy_password;
         } else {
-            apiUrl = 'https://api.anthropic.com/v1/messages';
+            url = 'https://api.anthropic.com/v1/messages';
             apikey = readSecret(SECRET_KEYS.CLAUDE);
         }
         if (allowProxy == true) {
             rn = 'getURL';
-            apiUrl = Proxystuff(rn);
-            apiUrl = apiUrl + '/anthropic/v1/messages';
+            url = Proxystuff(rn);
+            url = url + '/anthropic/v1/messages';
             rn = 'getkey';
             apikey = Proxystuff(rn);
         }
@@ -74,7 +73,7 @@ router.post('/caption-image', jsonParser, async (request, response) => {
 
         console.log('Multimodal captioning request', body);
 
-        const result = await fetch(apiUrl, {
+        const result = await fetch(url, {
             body: JSON.stringify(body),
             method: 'POST',
             headers: {
