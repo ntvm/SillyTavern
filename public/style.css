@@ -353,6 +353,9 @@ table.responsiveTable {
     display: flex;
 }
 
+.delete_paragraph{
+    border: dashed #ff0000;
+}
 
 .last_mes[is_favorite="true"]{
     border: dashed #FCFF5E;

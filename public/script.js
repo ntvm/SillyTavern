@@ -2726,7 +2726,8 @@ class StreamingProcessor {
         // when streaming, we cache the result of getStoppingStrings instead of calling it once per token.
         const isImpersonate = this.type == 'impersonate';
         const isContinue = this.type == 'continue';
-        this.stoppingStrings = getStoppingStrings(isImpersonate, isContinue);
+        const isLookaround = this.type == 'lookaround';
+        this.stoppingStrings = getStoppingStrings(isImpersonate, isContinue, isLookaround);
 
         try {
             const sw = new Stopwatch(1000 / power_user.streaming_fps);
@@ -2971,6 +2972,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     }
 
     const isContinue = type == 'continue';
+    const isLookaround = type == 'lookaround';
 
     // Rewrite the generation timer to account for the time passed for all the continuations.
     if (isContinue && chat.length) {
@@ -8099,14 +8101,14 @@ jQuery(async function () {
     $('#send_textarea').on('focusin focus click', () => {
         S_TAPreviouslyFocused = true;
     });
-    $('#options_button, #send_but, #option_regenerate, #option_continue, #mes_continue').on('click', () => {
+    $('#options_button, #send_but, #option_regenerate, #option_continue, #option_lookaround, #mes_continue').on('click', () => {
         if (S_TAPreviouslyFocused) {
             $('#send_textarea').focus();
         }
     });
     $(document).click(event => {
         if ($(':focus').attr('id') !== 'send_textarea') {
-            var validIDs = ['options_button', 'send_but', 'mes_continue', 'send_textarea', 'option_regenerate', 'option_continue'];
+            var validIDs = ['options_button', 'send_but', 'mes_continue', 'send_textarea', 'option_regenerate', 'option_lookaround', 'option_continue'];
             if (!validIDs.includes($(event.target).attr('id'))) {
                 S_TAPreviouslyFocused = false;
             }
@@ -8146,6 +8148,10 @@ jQuery(async function () {
 
     $('#mes_continue').on('click', function () {
         $('#option_continue').trigger('click');
+    });
+
+    $('#mes_lookaround').on('click', function () {
+        $('#option_lookaround').trigger('click');
     });
 
     $('#send_but').on('click', function () {
@@ -8788,6 +8794,13 @@ jQuery(async function () {
             if (is_send_press == false || fromSlashCommand) {
                 is_send_press = true;
                 Generate('continue', buildOrFillAdditionalArgs());
+            }
+        }
+
+        else if (id == 'option_lookaround') {
+            if (is_send_press == false || fromSlashCommand) {
+                is_send_press = true;
+                Generate('lookaround', buildOrFillAdditionalArgs());
             }
         }
 
