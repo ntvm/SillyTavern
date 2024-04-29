@@ -172,6 +172,14 @@ function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFi
         }
     });
 
+    // Shouldn't be conditional anymore, messages api expects the last role to be user unless we're explicitly prefilling
+    if (prefillString) {
+        messages.push({
+            role: 'assistant',
+            content: prefillString.trimEnd(),
+        });
+    }
+
     // Since the messaging endpoint only supports user assistant roles in turns, we have to merge messages with the same role if they follow eachother
     // Also handle multi-modality, holy slop.
     let mergedMessages = [];
@@ -221,16 +229,6 @@ function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFi
             ];
         }
     });
-
-    // Shouldn't be conditional anymore, messages api expects the last role to be user unless we're explicitly prefilling
-    if (prefillString) {
-        prefillString = prefillString.trimEnd();
-        mergedMessages.push({
-            role: 'assistant',
-            content: prefillString,
-        });
-    }
-
 
     return { messages: mergedMessages, systemPrompt: systemPrompt.trim() };
 }

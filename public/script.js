@@ -399,6 +399,7 @@ export const event_types = {
     GROUP_MEMBER_DRAFTED: 'group_member_drafted',
     WORLD_INFO_ACTIVATED: 'world_info_activated',
     TEXT_COMPLETION_SETTINGS_READY: 'text_completion_settings_ready',
+    CHARACTER_FIRST_MESSAGE_SELECTED: 'character_first_message_selected',
 };
 
 export const eventSource = new EventEmitter();
@@ -1644,6 +1645,10 @@ function messageFormatting(mes, ch_name, isSystem, isUser, messageId) {
         return '';
     }
 
+    if (Number(messageId) === 0 && !isSystem && !isUser) {
+        mes = substituteParams(mes);
+    }
+
     mesForShowdownParse = mes;
 
     // Force isSystem = false on comment messages so they get formatted properly
@@ -1835,7 +1840,6 @@ function getMessageFromTemplate({
 } = {}) {
     let is_favorite;
     const mes = messageTemplate.clone();
-
     mes.attr({
         'mesid': mesId,
         'ch_name': characterName,
@@ -3169,11 +3173,18 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
     //////////////////////////////////
 
-    // Insert character jailbreak as a last user message (if exists, allowed, preferred, and not using Chat Completion)
+    // Insert character jailbreak as the last user message (if exists, allowed, preferred, and not using Chat Completion)
     if (power_user.context.allow_jailbreak && power_user.prefer_character_jailbreak && main_api !== 'openai' && jailbreak) {
         // Set "original" explicity to empty string since there's no original
         jailbreak = substituteParams(jailbreak, name1, name2, '');
-        coreChat.push({ mes: jailbreak, is_user: true });
+
+        // When continuing generation of previous output, last user message precedes the message to continue
+        if (isContinue) {
+            coreChat.splice(coreChat.length - 1, 0, { mes: jailbreak, is_user: true });
+        }
+        else {
+            coreChat.push({ mes: jailbreak, is_user: true });
+        }
     }
 
     let chat2 = [];
@@ -5339,12 +5350,12 @@ function getFirstMessage() {
         is_user: false,
         is_system: false,
         send_date: getMessageTimeStamp(),
-        mes: substituteParams(getRegexedString(firstMes, regex_placement.AI_OUTPUT)),
+        mes: getRegexedString(firstMes, regex_placement.AI_OUTPUT),
         extra: {},
     };
 
     if (Array.isArray(alternateGreetings) && alternateGreetings.length > 0) {
-        const swipes = [message.mes, ...(alternateGreetings.map(greeting => substituteParams(getRegexedString(greeting, regex_placement.AI_OUTPUT))))];
+        const swipes = [message.mes, ...(alternateGreetings.map(greeting => getRegexedString(greeting, regex_placement.AI_OUTPUT)))];
         message['swipe_id'] = 0;
         message['swipes'] = swipes;
         message['swipe_info'] = [];
@@ -7192,6 +7203,8 @@ async function createOrEditCharacter(e) {
                 formData.append('alternate_greetings', value);
             }
 
+            formData.append('extensions', JSON.stringify(create_save.extensions));
+
             await jQuery.ajax({
                 type: 'POST',
                 url: url,
@@ -7225,6 +7238,7 @@ async function createOrEditCharacter(e) {
                         { id: '#character_json_data', callback: () => { } },
                         { id: '#alternate_greetings_template', callback: value => create_save.alternate_greetings = value, defaultValue: [] },
                         { id: '#character_world', callback: value => create_save.world = value },
+                        { id: '#_character_extensions_fake', callback: value => create_save.extensions = {} },
                     ];
 
                     fields.forEach(field => {
@@ -7345,7 +7359,7 @@ window['SillyTavern'].getContext = function () {
         chatMetadata: chat_metadata,
         streamingProcessor,
         eventSource: eventSource,
-        event_types: event_types,
+        eventTypes: event_types,
         addOneMessage: addOneMessage,
         generate: Generate,
         getTokenCount: getTokenCount,
@@ -7375,6 +7389,12 @@ window['SillyTavern'].getContext = function () {
         writeExtensionField: writeExtensionField,
         tags: tags,
         tagMap: tag_map,
+        menuType: menu_type,
+        createCharacterData: create_save,
+        /**
+         * @deprecated Legacy snake-case naming, compatibility with old extensions
+         */
+        event_types: event_types,
     };
 };
 
@@ -8760,44 +8780,23 @@ jQuery(async function () {
     });
 
     $('#api_button_textgenerationwebui').on('click', async function (e) {
-        const mancerKey = String($('#api_key_mancer').val()).trim();
-        if (mancerKey.length) {
-            await writeSecret(SECRET_KEYS.MANCER, mancerKey);
-        }
+        const keys = [
+            { id: 'api_key_mancer', secret: SECRET_KEYS.MANCER },
+            { id: 'api_key_aphrodite', secret: SECRET_KEYS.APHRODITE },
+            { id: 'api_key_tabby', secret: SECRET_KEYS.TABBY },
+            { id: 'api_key_togetherai', secret: SECRET_KEYS.TOGETHERAI },
+            { id: 'api_key_ooba', secret: SECRET_KEYS.OOBA },
+            { id: 'api_key_infermaticai', secret: SECRET_KEYS.INFERMATICAI },
+            { id: 'api_key_dreamgen', secret: SECRET_KEYS.DREAMGEN },
+            { id: 'api_key_openrouter-tg', secret: SECRET_KEYS.OPENROUTER },
+            { id: 'api_key_koboldcpp', secret: SECRET_KEYS.KOBOLDCPP },
+        ];
 
-        const aphroditeKey = String($('#api_key_aphrodite').val()).trim();
-        if (aphroditeKey.length) {
-            await writeSecret(SECRET_KEYS.APHRODITE, aphroditeKey);
-        }
-
-        const tabbyKey = String($('#api_key_tabby').val()).trim();
-        if (tabbyKey.length) {
-            await writeSecret(SECRET_KEYS.TABBY, tabbyKey);
-        }
-
-        const togetherKey = String($('#api_key_togetherai').val()).trim();
-        if (togetherKey.length) {
-            await writeSecret(SECRET_KEYS.TOGETHERAI, togetherKey);
-        }
-
-        const oobaKey = String($('#api_key_ooba').val()).trim();
-        if (oobaKey.length) {
-            await writeSecret(SECRET_KEYS.OOBA, oobaKey);
-        }
-
-        const infermaticAIKey = String($('#api_key_infermaticai').val()).trim();
-        if (infermaticAIKey.length) {
-            await writeSecret(SECRET_KEYS.INFERMATICAI, infermaticAIKey);
-        }
-
-        const dreamgenKey = String($('#api_key_dreamgen').val()).trim();
-        if (dreamgenKey.length) {
-            await writeSecret(SECRET_KEYS.DREAMGEN, dreamgenKey);
-        }
-
-        const openRouterKey = String($('#api_key_openrouter-tg').val()).trim();
-        if (openRouterKey.length) {
-            await writeSecret(SECRET_KEYS.OPENROUTER, openRouterKey);
+        for (const key of keys) {
+            const keyValue = String($(`#${key.id}`).val()).trim();
+            if (keyValue.length) {
+                await writeSecret(key.secret, keyValue);
+            }
         }
 
         validateTextGenUrl();

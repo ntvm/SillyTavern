@@ -42,8 +42,10 @@ import { hideChatMessage, unhideChatMessage } from './chats.js';
 import { getContext, saveMetadataDebounced } from './extensions.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 import { findGroupMemberId, groups, is_group_generating, openGroupById, resetSelectedGroup, saveGroupChat, selected_group } from './group-chats.js';
+import { chat_completion_sources, oai_settings } from './openai.js';
 import { autoSelectPersona } from './personas.js';
 import { addEphemeralStoppingString, chat_styles, flushEphemeralStoppingStrings, power_user } from './power-user.js';
+import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
 import { decodeTextTokens, getFriendlyTokenizerName, getTextTokens, getTokenCount } from './tokenizers.js';
 import { delay, isFalseBoolean, isTrueBoolean, stringToRange, trimToEndSentence, trimToStartSentence, waitUntilCondition } from './utils.js';
 import { registerVariableCommands, resolveVariable } from './variables.js';
@@ -240,6 +242,7 @@ parser.addCommand('inject', injectCallback, [], '<span class="monospace">id=inje
 parser.addCommand('listinjects', listInjectsCallback, [], ' – lists all script injections for the current chat.', true, true);
 parser.addCommand('flushinjects', flushInjectsCallback, [], ' – removes all script injections for the current chat.', true, true);
 parser.addCommand('tokens', (_, text) => getTokenCount(text), [], '<span class="monospace">(text)</span> – counts the number of tokens in the text.', true, true);
+parser.addCommand('model', modelCallback, [], '<span class="monospace">(model name)</span> – sets the model for the current API.', true, true);
 registerVariableCommands();
 
 const NARRATOR_NAME_KEY = 'narrator_name';
@@ -1639,7 +1642,9 @@ function modelCallback(_, model) {
     if (!model) {
         return;
     }
+
     console.log('Set model to ' + model);
+
     const modelSelectMap = [
         { id: 'model_togetherai_select', api: 'textgenerationwebui', type: textgen_types.TOGETHERAI },
         { id: 'openrouter_model', api: 'textgenerationwebui', type: textgen_types.OPENROUTER },
@@ -1670,27 +1675,37 @@ function modelCallback(_, model) {
                 return null;
         }
     }
+
     const apiSubType = getSubType();
     const modelSelectItem = modelSelectMap.find(x => x.api == main_api && x.type == apiSubType)?.id;
+
     if (!modelSelectItem) {
         toastr.info('Setting a model for your API is not supported or not implemented yet.');
         return;
     }
+
     const modelSelectControl = document.getElementById(modelSelectItem);
+
     if (!(modelSelectControl instanceof HTMLSelectElement)) {
         toastr.error(`Model select control not found: ${main_api}[${apiSubType}]`);
         return;
     }
+
     const options = Array.from(modelSelectControl.options);
+
     if (!options.length) {
         toastr.warning('No model options found. Check your API settings.');
         return;
     }
+
     let newSelectedOption = null;
+
     const fuse = new Fuse(options, { keys: ['text', 'value'] });
     const fuzzySearchResult = fuse.search(model);
+
     const exactValueMatch = options.find(x => x.value.trim().toLowerCase() === model.trim().toLowerCase());
     const exactTextMatch = options.find(x => x.text.trim().toLowerCase() === model.trim().toLowerCase());
+
     if (exactValueMatch) {
         newSelectedOption = exactValueMatch;
     } else if (exactTextMatch) {
@@ -1698,6 +1713,7 @@ function modelCallback(_, model) {
     } else if (fuzzySearchResult.length) {
         newSelectedOption = fuzzySearchResult[0].item;
     }
+
     if (newSelectedOption) {
         modelSelectControl.value = newSelectedOption.value;
         $(modelSelectControl).trigger('change');
@@ -1782,8 +1798,7 @@ async function executeSlashCommands(text, unescape = false) {
             unnamedArg = unnamedArg
                 ?.replace(/\\\|/g, '|')
                 ?.replace(/\\\{/g, '{')
-                ?.replace(/\\\}/g, '}')
-                ;
+                ?.replace(/\\\}/g, '}');
         }
 
         for (const [key, value] of Object.entries(result.args)) {
@@ -1791,8 +1806,7 @@ async function executeSlashCommands(text, unescape = false) {
                 result.args[key] = value
                     .replace(/\\\|/g, '|')
                     .replace(/\\\{/g, '{')
-                    .replace(/\\\}/g, '}')
-                    ;
+                    .replace(/\\\}/g, '}');
             }
         }
 
