@@ -5841,6 +5841,7 @@ async function getSettings() {
 
         if (data.enable_extensions) {
             const isVersionChanged = settings.currentVersion !== currentVersion;
+            settingsReady = true;
             await loadExtensionSettings(settings, isVersionChanged);
             eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
         }
