@@ -1,6 +1,6 @@
 import { getStringHash, debounce, waitUntilCondition, extractAllWords } from "../../utils.js";
 import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules } from "../../extensions.js";
-import { eventSource, event_types, extension_prompt_types, generateQuietPrompt, callPopup, getRequestHeaders, is_send_press, saveSettingsDebounced, saveSettings, substituteParams, getCharacterBlock  } from "../../../script.js";
+import { eventSource, event_types, extension_prompt_types, generateQuietPrompt, callPopup, getRequestHeaders, is_send_press, saveSettingsDebounced, saveSettings, substituteParams, getCharacters  } from "../../../script.js";
 import { is_group_generating, selected_group, getGroupChatNames } from "../../group-chats.js";
 import { oai_settings } from "../../openai.js";
 

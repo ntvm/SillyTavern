@@ -53,6 +53,42 @@ function getLastMessageID() {
 }
 
 /**
+ * Returns the last message from the user.
+ * @returns {string} The last message from the user.
+ */
+function getLastUserMessage() {
+    if (!Array.isArray(chat) || chat.length === 0) {
+        return '';
+    }
+
+    for (let i = chat.length - 1; i >= 0; i--) {
+        if (chat[i].is_user && !chat[i].is_system) {
+            return chat[i].mes;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Returns the last message from the bot.
+ * @returns {string} The last message from the bot.
+ */
+function getLastCharMessage() {
+    if (!Array.isArray(chat) || chat.length === 0) {
+        return '';
+    }
+
+    for (let i = chat.length - 1; i >= 0; i--) {
+        if (!chat[i].is_user && !chat[i].is_system) {
+            return chat[i].mes;
+        }
+    }
+
+    return '';
+}
+
+/**
  * Returns the ID of the last swipe.
  * @returns {string} The 1-based ID of the last swipe
  */
@@ -155,31 +191,27 @@ function randomReplace(input, emptyListPlaceholder = '') {
     const randomPatternNew = /{{random\s?::\s?([^}]+)}}/gi;
     const randomPatternOld = /{{random\s?:\s?([^}]+)}}/gi;
 
-    if (randomPatternNew.test(input)) {
-        return input.replace(randomPatternNew, (match, listString) => {
-            //split on double colons instead of commas to allow for commas inside random items
-            const list = listString.split('::').filter(item => item.length > 0);
-            if (list.length === 0) {
-                return emptyListPlaceholder;
-            }
-            var rng = new Math.seedrandom('added entropy.', { entropy: true });
-            const randomIndex = Math.floor(rng() * list.length);
-            //trim() at the end to allow for empty random values
-            return list[randomIndex].trim();
-        });
-    } else if (randomPatternOld.test(input)) {
-        return input.replace(randomPatternOld, (match, listString) => {
-            const list = listString.split(',').map(item => item.trim()).filter(item => item.length > 0);
-            if (list.length === 0) {
-                return emptyListPlaceholder;
-            }
-            var rng = new Math.seedrandom('added entropy.', { entropy: true });
-            const randomIndex = Math.floor(rng() * list.length);
-            return list[randomIndex];
-        });
-    } else {
-        return input;
-    }
+    input = input.replace(randomPatternNew, (match, listString) => {
+        //split on double colons instead of commas to allow for commas inside random items
+        const list = listString.split('::').filter(item => item.length > 0);
+        if (list.length === 0) {
+            return emptyListPlaceholder;
+        }
+        const rng = new Math.seedrandom('added entropy.', { entropy: true });
+        const randomIndex = Math.floor(rng() * list.length);
+        //trim() at the end to allow for empty random values
+        return list[randomIndex].trim();
+    });
+    input = input.replace(randomPatternOld, (match, listString) => {
+        const list = listString.split(',').map(item => item.trim()).filter(item => item.length > 0);
+        if (list.length === 0) {
+            return emptyListPlaceholder;
+        }
+        const rng = new Math.seedrandom('added entropy.', { entropy: true });
+        const randomIndex = Math.floor(rng() * list.length);
+        return list[randomIndex];
+    });
+    return input;
 }
 
 function diceRollReplace(input, invalidRollPlaceholder = '') {
@@ -244,6 +276,8 @@ export function evaluateMacros(content, env) {
     content = content.replace(/{{maxPrompt}}/gi, () => String(getMaxContextSize()));
     content = content.replace(/{{lastMessage}}/gi, () => getLastMessage());
     content = content.replace(/{{lastMessageId}}/gi, () => getLastMessageId());
+    content = content.replace(/{{lastUserMessage}}/gi, () => getLastUserMessage());
+    content = content.replace(/{{lastCharMessage}}/gi, () => getLastCharMessage());
     content = content.replace(/{{firstIncludedMessageId}}/gi, () => getFirstIncludedMessageId());
     content = content.replace(/{{lastSwipeId}}/gi, () => getLastSwipeId());
     content = content.replace(/{{currentSwipeId}}/gi, () => getCurrentSwipeId());

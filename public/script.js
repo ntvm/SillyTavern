@@ -1,4 +1,4 @@
-import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods } from './scripts/RossAscends-mods.js';
+import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods, shouldSendOnEnter } from './scripts/RossAscends-mods.js';
 import { userStatsHandler, statMesProcess, initStats } from './scripts/stats.js';
 import {
     generateKoboldWithStreaming,
@@ -81,6 +81,7 @@ import {
     switchSimpleMode,
     flushEphemeralStoppingStrings,
     context_presets,
+    resetMovableStyles,
 } from './scripts/power-user.js';
 
 import {
@@ -149,6 +150,7 @@ import {
     humanFileSize,
     Stopwatch,
     isValidUrl,
+    ensureImageFormatSupported,
 } from './scripts/utils.js';
 
 import { ModuleWorkerWrapper, doDailyExtensionUpdatesCheck, extension_settings, getContext, loadExtensionSettings, renderExtensionTemplate, runGenerationInterceptors, saveMetadataDebounced, writeExtensionField } from './scripts/extensions.js';
@@ -156,14 +158,20 @@ import { COMMENT_NAME_DEFAULT, executeSlashCommands, getSlashCommandsHelp, proce
 import {
     tag_map,
     tags,
+    filterByTagState,
+    isBogusFolder,
+    isBogusFolderOpen,
+    chooseBogusFolder,
+    getTagBlock,
     loadTagsSettings,
     printTagFilters,
-    getTagsList,
-    appendTagToList,
+    getTagKeyForEntity,
+    printTagList,
     createTagMapFromList,
     renameTagKey,
     importTags,
     tag_filter_types,
+    compareTagsForSort,
 } from './scripts/tags.js';
 import {
     SECRET_KEYS,
@@ -243,6 +251,7 @@ export {
     scrollChatToBottom,
     isStreamingEnabled,
     getThumbnailUrl,
+    buildAvatarList,
     getStoppingStrings,
     reloadMarkdownProcessor,
     getCurrentChatId,
@@ -400,6 +409,8 @@ export const event_types = {
     WORLD_INFO_ACTIVATED: 'world_info_activated',
     TEXT_COMPLETION_SETTINGS_READY: 'text_completion_settings_ready',
     CHARACTER_FIRST_MESSAGE_SELECTED: 'character_first_message_selected',
+    // TODO: Naming convention is inconsistent with other events
+    CHARACTER_DELETED: 'characterDeleted',
 };
 
 export const eventSource = new EventEmitter();
@@ -483,6 +494,9 @@ const durationSaveEdit = 1000;
 const saveSettingsDebounced = debounce(() => saveSettings(), durationSaveEdit);
 export const saveCharacterDebounced = debounce(() => $('#create_button').trigger('click'), durationSaveEdit);
 
+/**
+ * @enum {string} System message types
+ */
 const system_message_types = {
     HELP: 'help',
     WELCOME: 'welcome',
@@ -499,12 +513,18 @@ const system_message_types = {
     MACROS: 'macros',
 };
 
+/**
+ * @enum {number} Extension prompt types
+ */
 export const extension_prompt_types = {
     IN_PROMPT: 0,
     IN_CHAT: 1,
     BEFORE_PROMPT: 2,
 };
 
+/**
+ * @enum {number} Extension prompt roles
+ */
 export const extension_prompt_roles = {
     SYSTEM: 0,
     USER: 1,
@@ -809,8 +829,11 @@ let token;
 
 var PromptArrayItemForRawPromptDisplay;
 
+/** The tag of the active character. (NOT the id) */
 export let active_character = '';
+/** The tag of the active group. (Coincidentally also the id) */
 export let active_group = '';
+
 export const entitiesFilter = new FilterHelper(debounce(printCharacters, 100));
 export const personasFilter = new FilterHelper(debounce(getUserAvatars, 100));
 
@@ -836,11 +859,12 @@ async function firstLoadInit() {
         throw new Error('Initialization failed');
     }
 
+    initLocales();
     getSystemMessages();
     sendSystemMessage(system_message_types.WELCOME);
-    initLocales();
-    await readSecretState();
+
     await getClientVersion();
+    await readSecretState();
     await getSettings();
     await getUserAvatars(true, user_avatar);
     await getCharacters();
@@ -883,12 +907,12 @@ export function setAnimationDuration(ms = null) {
     animation_duration = ms ?? ANIMATION_DURATION_DEFAULT;
 }
 
-export function setActiveCharacter(character) {
-    active_character = character;
+export function setActiveCharacter(entityOrKey) {
+    active_character = getTagKeyForEntity(entityOrKey);
 }
 
-export function setActiveGroup(group) {
-    active_group = group;
+export function setActiveGroup(entityOrKey) {
+    active_group = getTagKeyForEntity(entityOrKey);
 }
 
 /**
@@ -1174,23 +1198,6 @@ export async function selectCharacterById(id) {
     }
 }
 
-function getTagBlock(item, entities) {
-    let count = 0;
-
-    for (const entity of entities) {
-        if (entitiesFilter.isElementTagged(entity, item.id)) {
-            count++;
-        }
-    }
-
-    const template = $('#bogus_folder_template .bogus_folder_select').clone();
-    template.attr({ 'tagid': item.id, 'id': `BogusFolder${item.id}` });
-    template.find('.avatar').css({ 'background-color': item.color, 'color': item.color2 });
-    template.find('.ch_name').text(item.name);
-    template.find('.bogus_folder_counter').text(count);
-    return template;
-}
-
 function getBackBlock() {
     const template = $('#bogus_folder_back_template .bogus_folder_select').clone();
     return template;
@@ -1201,7 +1208,7 @@ function getEmptyBlock() {
     const texts = ['Here be dragons', 'Otterly empty', 'Kiwibunga', 'Pump-a-Rum', 'Croak it'];
     const roll = new Date().getMinutes() % icons.length;
     const emptyBlock = `
-    <div class="empty_block">
+    <div class="text_block empty_block">
         <i class="fa-solid ${icons[roll]} fa-4x"></i>
         <h1>${texts[roll]}</h1>
         <p>There are no items to display.</p>
@@ -1209,7 +1216,21 @@ function getEmptyBlock() {
     return $(emptyBlock);
 }
 
-export function getCharacterBlock(item, id) {
+/**
+ * @param {number} hidden Number of hidden characters
+ */
+function getHiddenBlock(hidden) {
+    const hiddenBlock = `
+    <div class="text_block hidden_block">
+        <small>
+            <p>${hidden} ${hidden > 1 ? 'characters' : 'character'} hidden.</p>
+            <div class="fa-solid fa-circle-info opacity50p" data-i18n="[title]Characters and groups hidden by filters or closed folders" title="Characters and groups hidden by filters or closed folders"></div>
+        </small>
+    </div>`;
+    return $(hiddenBlock);
+}
+
+function getCharacterBlock(item, id) {
     let this_avatar = default_avatar;
     if (item.avatar != 'none') {
         this_avatar = getThumbnailUrl('avatar', item.avatar);
@@ -1217,9 +1238,9 @@ export function getCharacterBlock(item, id) {
     // Populate the template
     const template = $('#character_template .character_select').clone();
     template.attr({ 'chid': id, 'id': `CharID${id}` });
-    template.find('img').attr('src', this_avatar);
-    template.find('.avatar').attr('title', item.avatar);
-    template.find('.ch_name').text(item.name);
+    template.find('img').attr('src', this_avatar).attr('alt', item.name);
+    template.find('.avatar').attr('title', `[Character] ${item.name}`);
+    template.find('.ch_name').text(item.name).attr('title', `[Character] ${item.name}`);
     if (power_user.show_card_avatar_urls) {
         template.find('.ch_avatar_url').text(item.avatar);
     }
@@ -1245,9 +1266,8 @@ export function getCharacterBlock(item, id) {
     }
 
     // Display inline tags
-    const tags = getTagsList(item.avatar);
     const tagsElement = template.find('.tags');
-    tags.forEach(tag => appendTagToList(tagsElement, tag, {}));
+    printTagList(tagsElement, { forEntityOrKey: id });
 
     // Add to the list
     return template;
@@ -1258,11 +1278,6 @@ async function printCharacters(fullRefresh = false) {
         saveCharactersPage = 0;
         printTagFilters(tag_filter_types.character);
         printTagFilters(tag_filter_types.group_member);
-
-        // Return to main list
-        if (isBogusFolderOpen()) {
-            entitiesFilter.setFilterData(FILTER_TYPES.TAG, { excluded: [], selected: [] });
-        }
 
         await delay(1);
     }
@@ -1292,19 +1307,28 @@ async function printCharacters(fullRefresh = false) {
             if (!data.length) {
                 $(listId).append(getEmptyBlock());
             }
+            let displayCount = 0;
             for (const i of data) {
                 switch (i.type) {
                     case 'character':
                         $(listId).append(getCharacterBlock(i.item, i.id));
+                        displayCount++;
                         break;
                     case 'group':
                         $(listId).append(getGroupBlock(i.item));
+                        displayCount++;
                         break;
                     case 'tag':
-                        $(listId).append(getTagBlock(i.item, entities));
+                        $(listId).append(getTagBlock(i.item, i.entities, i.hidden));
                         break;
                 }
             }
+
+            const hidden = (characters.length + groups.length) - displayCount;
+            if (hidden > 0) {
+                $(listId).append(getHiddenBlock(hidden));
+            }
+
             eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
         },
         afterSizeSelectorChange: function (e) {
@@ -1321,15 +1345,7 @@ async function printCharacters(fullRefresh = false) {
     favsToHotswap();
 }
 
-/**
- * Indicates whether a user is currently in a bogus folder.
- * @returns {boolean} If currently viewing a folder
- */
-function isBogusFolderOpen() {
-    return !!entitiesFilter.getFilterData(FILTER_TYPES.TAG)?.bogus;
-}
-
-export function getEntitiesList({ doFilter } = {}) {
+export function getEntitiesList({ doFilter = false, doSort = true } = {}) {
     function characterToEntity(character, id) {
         return { item: character, id, type: 'character' };
     }
@@ -1339,36 +1355,53 @@ export function getEntitiesList({ doFilter } = {}) {
     }
 
     function tagToEntity(tag) {
-        return { item: structuredClone(tag), id: tag.id, type: 'tag' };
+        return { item: structuredClone(tag), id: tag.id, type: 'tag', entities: [] };
     }
 
     let entities = [
         ...characters.map((item, index) => characterToEntity(item, index)),
         ...groups.map(item => groupToEntity(item)),
-        ...(power_user.bogus_folders ? tags.map(item => tagToEntity(item)) : []),
+        ...(power_user.bogus_folders ? tags.filter(isBogusFolder).sort(compareTagsForSort).map(item => tagToEntity(item)) : []),
     ];
 
+    // We need to do multiple filter runs in a specific order, otherwise different settings might override each other
+    // and screw up tags and search filter, sub lists or similar.
+    // The specific filters are written inside the "filterByTagState" method and its different parameters.
+    // Generally what we do is the following:
+    //   1. First swipe over the list to remove the most obvious things
+    //   2. Build sub entity lists for all folders, filtering them similarly to the second swipe
+    //   3. We do the last run, where global filters are applied, and the search filters last
+
+    // First run filters, that will hide what should never be displayed
     if (doFilter) {
+        entities = filterByTagState(entities);
+    }
+
+    // Run over all entities between first and second filter to save some states
+    for (const entity of entities) {
+        // For folders, we remember the sub entities so they can be displayed later, even if they might be filtered
+        // Those sub entities should be filtered and have the search filters applied too
+        if (entity.type === 'tag') {
+            let subEntities = filterByTagState(entities, { subForEntity: entity, filterHidden: false });
+            const subCount = subEntities.length;
+            subEntities = filterByTagState(entities, { subForEntity: entity });
+            if (doFilter) {
+                subEntities = entitiesFilter.applyFilters(subEntities);
+            }
+            entity.entities = subEntities;
+            entity.hidden = subCount - subEntities.length;
+        }
+    }
+
+    // Second run filters, hiding whatever should be filtered later
+    if (doFilter) {
+        entities = filterByTagState(entities, { globalDisplayFilters: true });
         entities = entitiesFilter.applyFilters(entities);
     }
 
-    if (isBogusFolderOpen()) {
-        // Get tags of entities within the bogus folder
-        const filterData = structuredClone(entitiesFilter.getFilterData(FILTER_TYPES.TAG));
-        entities = entities.filter(x => x.type !== 'tag');
-        const otherTags = tags.filter(x => !filterData.selected.includes(x.id));
-        const bogusTags = [];
-        for (const entity of entities) {
-            for (const tag of otherTags) {
-                if (!bogusTags.includes(tag) && entitiesFilter.isElementTagged(entity, tag.id)) {
-                    bogusTags.push(tag);
-                }
-            }
-        }
-        entities.push(...bogusTags.map(item => tagToEntity(item)));
+    if (doSort) {
+        sortEntitiesList(entities);
     }
-
-    sortEntitiesList(entities);
     return entities;
 }
 
@@ -2451,13 +2484,21 @@ function getExtensionPromptByName(moduleName) {
     }
 }
 
+/**
+ * Returns the extension prompt for the given position, depth, and role.
+ * If multiple prompts are found, they are joined with a separator.
+ * @param {number} [position] Position of the prompt
+ * @param {number} [depth] Depth of the prompt
+ * @param {string} [separator] Separator for joining multiple prompts
+ * @param {number} [role] Role of the prompt
+ * @returns {string} Extension prompt
+ */
 function getExtensionPrompt(position = extension_prompt_types.IN_PROMPT, depth = undefined, separator = '\n', role = undefined, wrap = true) {
     let extension_prompt = Object.keys(extension_prompts)
         .sort()
         .map((x) => extension_prompts[x])
         .filter(x => x.position == position && x.value)
-        .filter(x => depth === undefined || x.depth === undefined || x.depth === depth)
-        .filter(x => role === undefined || x.role === undefined || x.role === role)
+        .filter(x => x.depth === undefined || x.depth === depth)
         .map(x => x.value.trim())
         .join(separator);
     if (wrap && extension_prompt.length && !extension_prompt.startsWith(separator)) {
@@ -3160,6 +3201,21 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         console.debug('Skipping extension interceptors for dry run');
     }
 
+    // Adjust token limit for Horde
+    let adjustedParams;
+    if (main_api == 'koboldhorde' && (horde_settings.auto_adjust_context_length || horde_settings.auto_adjust_response_length)) {
+        try {
+            adjustedParams = await adjustHordeGenerationParams(max_context, amount_gen);
+        }
+        catch {
+            unblockGeneration();
+            return Promise.resolve();
+        }
+        if (horde_settings.auto_adjust_context_length) {
+            this_max_context = (adjustedParams.maxContextLength - adjustedParams.maxLength);
+        }
+    }
+
     console.log(`Core/all messages: ${coreChat.length}/${chat.length}`);
 
     // kingbri MARK: - Make sure the prompt bias isn't the same as the user bias
@@ -3172,6 +3228,32 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     }
 
     //////////////////////////////////
+    // Extension added strings
+    // Set non-WI AN
+    setFloatingPrompt();
+    // Add WI to prompt (and also inject WI to AN value via hijack)
+
+    const chatForWI = coreChat.map(x => `${x.name}: ${x.mes}`).reverse();
+    let { worldInfoString, worldInfoBefore, worldInfoAfter, worldInfoDepth } = await getWorldInfoPrompt(chatForWI, this_max_context, dryRun);
+
+    if (skipWIAN !== true) {
+        console.log('skipWIAN not active, adding WIAN');
+        // Add all depth WI entries to prompt
+        flushWIDepthInjections();
+        if (Array.isArray(worldInfoDepth)) {
+            worldInfoDepth.forEach((e) => {
+                const joinedEntries = e.entries.join('\n');
+                setExtensionPrompt(`customDepthWI-${e.depth}-${e.role}`, joinedEntries, extension_prompt_types.IN_CHAT, e.depth, false, e.role);
+            });
+        }
+    } else {
+        console.log('skipping WIAN');
+    }
+
+    // Inject all Depth prompts. Chat Completion does it separately
+    if (main_api !== 'openai') {
+        doChatInject(coreChat, isContinue);
+    }
 
     // Insert character jailbreak as the last user message (if exists, allowed, preferred, and not using Chat Completion)
     if (power_user.context.allow_jailbreak && power_user.prefer_character_jailbreak && main_api !== 'openai' && jailbreak) {
@@ -3190,9 +3272,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     let chat2 = [];
     let continue_mag = '';
     for (let i = coreChat.length - 1, j = 0; i >= 0; i--, j++) {
-        // For OpenAI it's only used in WI
-        if (main_api == 'openai' && (!world_info || world_info.length === 0)) {
-            console.debug('No WI, skipping chat2 for OAI');
+        if (main_api == 'openai') {
             break;
         }
 
@@ -3215,49 +3295,12 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         }
     }
 
-    // Adjust token limit for Horde
-    let adjustedParams;
-    if (main_api == 'koboldhorde' && (horde_settings.auto_adjust_context_length || horde_settings.auto_adjust_response_length)) {
-        try {
-            adjustedParams = await adjustHordeGenerationParams(max_context, amount_gen);
-        }
-        catch {
-            unblockGeneration();
-            return Promise.resolve();
-        }
-        if (horde_settings.auto_adjust_context_length) {
-            this_max_context = (adjustedParams.maxContextLength - adjustedParams.maxLength);
-        }
-    }
-
-    // Extension added strings
-    // Set non-WI AN
-    setFloatingPrompt();
-    // Add WI to prompt (and also inject WI to AN value via hijack)
-
-    let { worldInfoString, worldInfoBefore, worldInfoAfter, worldInfoDepth } = await getWorldInfoPrompt(chat2, this_max_context, dryRun);
-
-    if (skipWIAN !== true) {
-        console.log('skipWIAN not active, adding WIAN');
-        // Add all depth WI entries to prompt
-        flushWIDepthInjections();
-        if (Array.isArray(worldInfoDepth)) {
-            worldInfoDepth.forEach((e) => {
-                const joinedEntries = e.entries.join('\n');
-                setExtensionPrompt(`customDepthWI-${e.depth}`, joinedEntries, extension_prompt_types.IN_CHAT, e.depth);
-            });
-        }
-    } else {
-        console.log('skipping WIAN');
-    }
-
     // Add persona description to prompt
     addPersonaDescriptionExtensionPrompt();
     // Call combined AN into Generate
     let allAnchors = getAllExtensionPrompts();
     const beforeScenarioAnchor = getExtensionPrompt(extension_prompt_types.BEFORE_PROMPT).trimStart();
     const afterScenarioAnchor = getExtensionPrompt(extension_prompt_types.IN_PROMPT);
-    let zeroDepthAnchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, 0, ' ');
 
     const storyStringParams = {
         description: description,
@@ -3496,7 +3539,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         }
 
         // Add a space if prompt cache doesn't start with one
-        if (!/^\s/.test(promptCache) && !isInstruct && !isContinue) {
+        if (!/^\s/.test(promptCache) && !isInstruct) {
             promptCache = ' ' + promptCache;
         }
 
@@ -3559,40 +3602,6 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
         // Deep clone
         let finalMesSend = structuredClone(mesSend);
-
-        // TODO: Rewrite getExtensionPrompt to not require multiple for loops
-        // Set all extension prompts where insertion depth > mesSend length
-        if (finalMesSend.length) {
-            for (let upperDepth = MAX_INJECTION_DEPTH; upperDepth >= finalMesSend.length; upperDepth--) {
-                const upperAnchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, upperDepth);
-                if (upperAnchor && upperAnchor.length) {
-                    finalMesSend[0].extensionPrompts.push(upperAnchor);
-                }
-            }
-        }
-
-        finalMesSend.forEach((mesItem, index) => {
-            if (index === 0) {
-                return;
-            }
-
-            const anchorDepth = Math.abs(index - finalMesSend.length);
-            // NOTE: Depth injected here!
-            const extensionAnchor = getExtensionPrompt(extension_prompt_types.IN_CHAT, anchorDepth);
-
-            if (anchorDepth >= 0 && extensionAnchor && extensionAnchor.length) {
-                mesItem.extensionPrompts.push(extensionAnchor);
-            }
-        });
-
-        // TODO: Move zero-depth anchor append to work like CFG and bias appends
-        if (zeroDepthAnchor?.length && !isContinue) {
-            console.debug(/\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1)));
-            finalMesSend[finalMesSend.length - 1].message +=
-                /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
-                    ? zeroDepthAnchor
-                    : `${zeroDepthAnchor}`;
-        }
 
         let cfgPrompt = {};
         if (cfgGuidanceScale && cfgGuidanceScale?.value !== 1) {
@@ -3969,6 +3978,57 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     }
 }
 
+/**
+ * Injects extension prompts into chat messages.
+ * @param {object[]} messages Array of chat messages
+ * @param {boolean} isContinue Whether the generation is a continuation. If true, the extension prompts of depth 0 are injected at position 1.
+ * @returns {void}
+ */
+function doChatInject(messages, isContinue) {
+    let totalInsertedMessages = 0;
+    messages.reverse();
+
+    for (let i = 0; i <= MAX_INJECTION_DEPTH; i++) {
+        // Order of priority (most important go lower)
+        const roles = [extension_prompt_roles.SYSTEM, extension_prompt_roles.USER, extension_prompt_roles.ASSISTANT];
+        const names = {
+            [extension_prompt_roles.SYSTEM]: '',
+            [extension_prompt_roles.USER]: name1,
+            [extension_prompt_roles.ASSISTANT]: name2,
+        }
+        const roleMessages = [];
+        const separator = '\n';
+
+        for (const role of roles) {
+            // Get extension prompt
+            const extensionPrompt = String(getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, role)).trimStart();
+            const isNarrator = role === extension_prompt_roles.SYSTEM;
+            const isUser = role === extension_prompt_roles.USER;
+            const name = names[role];
+
+            if (extensionPrompt) {
+                roleMessages.push({
+                    name: name,
+                    is_user: isUser,
+                    mes: extensionPrompt,
+                    extra: {
+                        type: isNarrator ? system_message_types.NARRATOR : null,
+                    }
+                });
+            }
+        }
+
+        if (roleMessages.length) {
+            const depth = isContinue && i === 0 ? 1 : i;
+            const injectIdx = depth + totalInsertedMessages;
+            messages.splice(injectIdx, 0, ...roleMessages);
+            totalInsertedMessages += roleMessages.length;
+        }
+    }
+
+    messages.reverse();
+}
+
 function flushWIDepthInjections() {
     //prevent custom depth WI entries (which have unique random key names) from duplicating
     for (const key of Object.keys(extension_prompts)) {
@@ -4227,25 +4287,6 @@ function addChatsSeparator(mesSendString) {
     else {
         return mesSendString;
     }
-}
-
-// There's a TODO related to zero-depth anchors; not removing this function until that's resolved
-// eslint-disable-next-line no-unused-vars
-function appendZeroDepthAnchor(force_name2, zeroDepthAnchor, finalPrompt) {
-    const trimBothEnds = !force_name2;
-    let trimmedPrompt = (trimBothEnds ? zeroDepthAnchor.trim() : zeroDepthAnchor.trimEnd());
-
-    if (trimBothEnds && !finalPrompt.endsWith('\n')) {
-        finalPrompt += '\n';
-    }
-
-    finalPrompt += trimmedPrompt;
-
-    if (force_name2) {
-        finalPrompt += ' ';
-    }
-
-    return finalPrompt;
 }
 
 async function DupeChar() {
@@ -4750,7 +4791,7 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
         type = 'normal';
     }
 
-    if (chat.length && typeof chat[chat.length - 1]['extra'] !== 'object') {
+    if (chat.length && (!chat[chat.length - 1]['extra'] || typeof chat[chat.length - 1]['extra'] !== 'object')) {
         chat[chat.length - 1]['extra'] = {};
     }
 
@@ -4900,7 +4941,7 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
 
 function saveImageToMessage(img, mes) {
     if (mes && img.image) {
-        if (typeof mes.extra !== 'object') {
+        if (!mes.extra || typeof mes.extra !== 'object') {
             mes.extra = {};
         }
         mes.extra.image = img.image;
@@ -5285,6 +5326,51 @@ function getThumbnailUrl(type, file) {
     return `/thumbnail?type=${type}&file=${encodeURIComponent(file)}`;
 }
 
+function buildAvatarList(block, entities, { templateId = 'inline_avatar_template', empty = true, selectable = false, highlightFavs = true } = {}) {
+    if (empty) {
+        block.empty();
+    }
+
+    for (const entity of entities) {
+        const id = entity.id;
+
+        // Populate the template
+        const avatarTemplate = $(`#${templateId} .avatar`).clone();
+
+        let this_avatar = default_avatar;
+        if (entity.item.avatar !== undefined && entity.item.avatar != 'none') {
+            this_avatar = getThumbnailUrl('avatar', entity.item.avatar);
+        }
+
+        avatarTemplate.attr('data-type', entity.type);
+        avatarTemplate.attr({ 'chid': id, 'id': `CharID${id}` });
+        avatarTemplate.find('img').attr('src', this_avatar).attr('alt', entity.item.name);
+        avatarTemplate.attr('title', `[Character] ${entity.item.name}`);
+        if (highlightFavs) {
+            avatarTemplate.toggleClass('is_fav', entity.item.fav || entity.item.fav == 'true');
+            avatarTemplate.find('.ch_fav').val(entity.item.fav);
+        }
+
+        // If this is a group, we need to hack slightly. We still want to keep most of the css classes and layout, but use a group avatar instead.
+        if (entity.type === 'group') {
+            const grpTemplate = getGroupAvatar(entity.item);
+
+            avatarTemplate.addClass(grpTemplate.attr('class'));
+            avatarTemplate.empty();
+            avatarTemplate.append(grpTemplate.children());
+            avatarTemplate.attr('title', `[Group] ${entity.item.name}`);
+        }
+
+        if (selectable) {
+            avatarTemplate.addClass('selectable');
+            avatarTemplate.toggleClass('character_select', entity.type === 'character');
+            avatarTemplate.toggleClass('group_select', entity.type === 'group');
+        }
+
+        block.append(avatarTemplate);
+    }
+}
+
 async function getChat() {
     //console.log('/api/chats/get -- entered for -- ' + characters[this_chid].name);
     try {
@@ -5311,9 +5397,12 @@ async function getChat() {
         await getChatResult();
         eventSource.emit('chatLoaded', { detail: { id: this_chid, character: characters[this_chid] } });
 
+        // Focus on the textarea if not already focused on a visible text input
         setTimeout(function () {
-            $('#send_textarea').click();
-            $('#send_textarea').focus();
+            if ($(document.activeElement).is('input:visible, textarea:visible')) {
+                return;
+            }
+            $('#send_textarea').trigger('click').trigger('focus');
         }, 200);
     } catch (error) {
         await getChatResult();
@@ -5506,7 +5595,7 @@ function changeMainAPI() {
  * @returns {Promise<string[]>} List of avatar file names
  */
 export async function getUserAvatars(doRender = true, openPageAt = '') {
-    const response = await fetch('/getuseravatars', {
+    const response = await fetch('/api/avatars/get', {
         method: 'POST',
         headers: getRequestHeaders(),
     });
@@ -5653,7 +5742,7 @@ async function uploadUserAvatar(e) {
 
     const formData = new FormData($('#form_upload_avatar').get(0));
     const dataUrl = await getBase64Async(file);
-    let url = '/uploaduseravatar';
+    let url = '/api/avatars/upload';
 
     if (!power_user.never_resize_avatars) {
         $('#dialogue_popup').addClass('large_dialogue_popup wide_dialogue_popup');
@@ -5665,6 +5754,12 @@ async function uploadUserAvatar(e) {
         if (crop_data !== undefined) {
             url += `?crop=${encodeURIComponent(JSON.stringify(crop_data))}`;
         }
+    }
+
+    const rawFile = formData.get('avatar');
+    if (rawFile instanceof File) {
+        const convertedFile = await ensureImageFormatSupported(rawFile);
+        formData.set('avatar', convertedFile);
     }
 
     jQuery.ajax({
@@ -5725,6 +5820,16 @@ async function doOnboarding(avatarId) {
     }
 }
 
+function reloadLoop() {
+    const MAX_RELOADS = 5;
+    let reloads = Number(sessionStorage.getItem('reloads') || 0);
+    if (reloads < MAX_RELOADS) {
+        reloads++;
+        sessionStorage.setItem('reloads', String(reloads));
+        window.location.reload();
+    }
+}
+
 //***************SETTINGS****************//
 ///////////////////////////////////////////
 async function getSettings() {
@@ -5736,7 +5841,8 @@ async function getSettings() {
     });
 
     if (!response.ok) {
-        toastr.error('Settings could not be loaded. Try reloading the page.');
+        reloadLoop();
+        toastr.error('Settings could not be loaded after multiple attempts. Please try again later.');
         throw new Error('Error getting settings');
     }
 
@@ -6595,9 +6701,18 @@ function select_rm_characters() {
  * @param {string} value Prompt injection value.
  * @param {number} position Insertion position. 0 is after story string, 1 is in-chat with custom depth.
  * @param {number} depth Insertion depth. 0 represets the last message in context. Expected values up to MAX_INJECTION_DEPTH.
+ * @param {number} role Extension prompt role. Defaults to SYSTEM.
  * @param {boolean} scan Should the prompt be included in the world info scan.
  */
 export function setExtensionPrompt(key, value, position, depth, scan = false, role = extension_prompt_roles.SYSTEM) {
+    extension_prompts[key] = {
+        value: String(value),
+        position: Number(position),
+        depth: Number(depth),
+        scan: !!scan,
+        role: Number(role ?? extension_prompt_roles.SYSTEM),
+    };
+
     extension_prompts[key] = { value: String(value), position: Number(position), depth: Number(depth), scan: !!scan, role: Number(role ?? extension_prompt_roles.SYSTEM), };
 }
 
@@ -7182,8 +7297,15 @@ function addAlternateGreeting(template, greeting, index, getArray) {
 
 async function createOrEditCharacter(e) {
     $('#rm_info_avatar').html('');
-    var formData = new FormData($('#form_create').get(0));
+    const formData = new FormData($('#form_create').get(0));
     formData.set('fav', fav_ch_checked);
+
+    const rawFile = formData.get('avatar');
+    if (rawFile instanceof File) {
+        const convertedFile = await ensureImageFormatSupported(rawFile);
+        formData.set('avatar', convertedFile);
+    }
+
     if ($('#form_create').attr('actiontype') == 'createcharacter') {
         if ($('#character_name_pole').val().length > 0) {
             if (is_group_generating || is_send_press) {
@@ -7374,6 +7496,7 @@ window['SillyTavern'].getContext = function () {
         saveReply,
         registerSlashCommand: registerSlashCommand,
         executeSlashCommands: executeSlashCommands,
+        timestampToMoment: timestampToMoment,
         /**
          * @deprecated Handlebars for extensions are no longer supported.
          */
@@ -7387,6 +7510,11 @@ window['SillyTavern'].getContext = function () {
         getTokenizerModel: getTokenizerModel,
         generateQuietPrompt: generateQuietPrompt,
         writeExtensionField: writeExtensionField,
+        getThumbnailUrl: getThumbnailUrl,
+        selectCharacterById: selectCharacterById,
+        messageFormatting: messageFormatting,
+        shouldSendOnEnter: shouldSendOnEnter,
+        isMobile: isMobile,
         tags: tags,
         tagMap: tag_map,
         menuType: menu_type,
@@ -8201,6 +8329,11 @@ function addDebugFunctions() {
             await reloadCurrentChat();
         }
     });
+
+    registerDebugFunction('toggleEventTracing', 'Toggle event tracing', 'Useful to see what triggered a certain event.', () => {
+        localStorage.setItem('eventTracing', localStorage.getItem('eventTracing') === 'true' ? 'false' : 'true');
+        toastr.info('Event tracing is now ' + (localStorage.getItem('eventTracing') === 'true' ? 'enabled' : 'disabled'));
+    });
 }
 
 jQuery(async function () {
@@ -8341,25 +8474,8 @@ jQuery(async function () {
 
     $(document).on('click', '.bogus_folder_select', function () {
         const tagId = $(this).attr('tagid');
-        console.log('Bogus folder clicked', tagId);
-
-        const filterData = structuredClone(entitiesFilter.getFilterData(FILTER_TYPES.TAG));
-
-        if (!Array.isArray(filterData.selected)) {
-            filterData.selected = [];
-            filterData.excluded = [];
-            filterData.bogus = false;
-        }
-
-        if (tagId === 'back') {
-            filterData.selected.pop();
-            filterData.bogus = filterData.selected.length > 0;
-        } else {
-            filterData.selected.push(tagId);
-            filterData.bogus = true;
-        }
-
-        entitiesFilter.setFilterData(FILTER_TYPES.TAG, filterData);
+        console.debug('Bogus folder clicked', tagId);
+        chooseBogusFolder($(this), tagId);
     });
 
     $(document).on('input', '.edit_textarea', function () {
@@ -8398,7 +8514,15 @@ jQuery(async function () {
         }
     });
 
-    $(document).on('click', '#user_avatar_block .avatar-container', setUserAvatar);
+    $(document).on('click', '#user_avatar_block .avatar-container', function () {
+        const imgfile = $(this).attr('imgfile');
+        setUserAvatar(imgfile);
+
+        // force firstMes {{user}} update on persona switch
+        if (this_chid >= 0 && !selected_group && chat.length === 1) {
+            $('#firstmessage_textarea').trigger('input');
+        }
+    });
     $(document).on('click', '#user_avatar_block .avatar_upload', function () {
         $('#avatar_upload_overwrite').val('');
         $('#avatar_upload_file').trigger('click');
@@ -8428,8 +8552,7 @@ jQuery(async function () {
     $('#advanced_div').click(function () {
         if (!is_advanced_char_open) {
             is_advanced_char_open = true;
-            $('#character_popup').css('display', 'flex');
-            $('#character_popup').css('opacity', 0.0);
+            $('#character_popup').css({ 'display': 'flex', 'opacity': 0.0 }).addClass('open');
             $('#character_popup').transition({
                 opacity: 1.0,
                 duration: animation_duration,
@@ -8437,7 +8560,7 @@ jQuery(async function () {
             });
         } else {
             is_advanced_char_open = false;
-            $('#character_popup').css('display', 'none');
+            $('#character_popup').css('display', 'none').removeClass('open');
         }
     });
 
@@ -8500,8 +8623,8 @@ jQuery(async function () {
         }
         if (popup_type == 'del_ch') {
             const deleteChats = !!$('#del_char_checkbox').prop('checked');
+            eventSource.emit(event_types.CHARACTER_DELETED, { id: this_chid, character: characters[this_chid] });
             await handleDeleteCharacter(popup_type, this_chid, deleteChats);
-            eventSource.emit('characterDeleted', { id: this_chid, character: characters[this_chid] });
         }
         if (popup_type == 'alternate_greeting' && menu_type !== 'create') {
             createOrEditCharacter();
@@ -8523,8 +8646,8 @@ jQuery(async function () {
             await clearChat();
             chat.length = 0;
 
-            chat_file_for_del = getCurrentChatDetails().sessionName
-            const isDelChatCheckbox = document.getElementById('del_chat_checkbox').checked
+            chat_file_for_del = getCurrentChatDetails().sessionName;
+            const isDelChatCheckbox = document.getElementById('del_chat_checkbox').checked;
 
             if (selected_group) {
                 //Fix it; When you're creating a new group chat (but not when initially converting from the existing regular chat), the first greeting message doesn't automatically get translated.
@@ -9803,6 +9926,15 @@ jQuery(async function () {
         $(this).closest('.inline-drawer').find('.inline-drawer-content textarea.autoSetHeight').each(function () {
             resetScrollHeight($(this));
         });
+    });
+
+    $(document).on('click', '.inline-drawer-maximize', function () {
+        const icon = $(this).find('.inline-drawer-icon, .floating_panel_maximize');
+        icon.toggleClass('fa-window-maximize fa-window-restore');
+        const drawerContent = $(this).closest('.drawer-content');
+        drawerContent.toggleClass('maximized');
+        const drawerId = drawerContent.attr('id');
+        resetMovableStyles(drawerId);
     });
 
     $(document).on('click', '.mes .avatar', function () {

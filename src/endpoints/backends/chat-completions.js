@@ -5,7 +5,7 @@ const { Readable } = require('stream').Readable;
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
 const { forwardFetchResponse, getConfigValue, tryParse, uuidv4, mergeObjectWithYaml, excludeKeysByYaml, color } = require('../../util');
-const {convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMessages, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages } = require('../prompt-converters');
+const {convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMessages, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages } = require('../../prompt-converters');
 
 const { readSecret, SECRET_KEYS } = require('../secrets');
 const { getTokenizerModel, getSentencepiceTokenizer, getTiktokenTokenizer, sentencepieceTokenizers, TEXT_COMPLETION_MODELS } = require('../tokenizers');

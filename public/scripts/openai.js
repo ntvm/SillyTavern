@@ -11,6 +11,7 @@ import {
     characters,
     event_types,
     eventSource,
+    extension_prompt_roles,
     extension_prompt_types,
     Generate,
     getExtensionPrompt,
@@ -30,7 +31,6 @@ import {
     substituteParams,
     system_message_types,
     this_chid,
-    extension_prompt_roles,
 } from '../script.js';
 import { groups, selected_group } from './group-chats.js';
 import { registerSlashCommand } from './slash-commands.js';
@@ -122,6 +122,7 @@ const max_16k = 16383;
 const max_32k = 32767;
 const max_128k = 128 * 1000;
 const max_200k = 200 * 1000;
+const max_1mil = 1000 * 1000;
 const scale_max = 8191;
 const claude_max = 9000; // We have a proper tokenizer, so theoretically could be larger (up to 9k)
 const claude_100k_max = 99000;
@@ -179,6 +180,12 @@ export const chat_completion_sources = {
     COHERE: 'cohere',
 };
 
+const character_names_behavior = {
+    NONE: 0,
+    COMPLETION: 1,
+    CONTENT: 2,
+};
+
 const prefixMap = selected_group ? {
     assistant: '',
     user: '',
@@ -205,7 +212,6 @@ const default_settings = {
     openai_max_context: max_4k,
     openai_max_tokens: 300,
     wrap_in_quotes: false,
-    names_in_completion: false,
     ...chatCompletionDefaultPrompts,
     ...promptManagerDefaultPromptOrders,
     send_if_empty: '',
@@ -258,6 +264,7 @@ const default_settings = {
     image_inlining: false,
     bypass_status_check: false,
     continue_prefill: false,
+    names_behavior: character_names_behavior.NONE,
     seed: -1,
     n: 1,
 };
@@ -282,7 +289,6 @@ const oai_settings = {
     openai_max_context: max_4k,
     openai_max_tokens: 300,
     wrap_in_quotes: false,
-    names_in_completion: false,
     ...chatCompletionDefaultPrompts,
     ...promptManagerDefaultPromptOrders,
     send_if_empty: '',
@@ -335,6 +341,7 @@ const oai_settings = {
     image_inlining: false,
     bypass_status_check: false,
     continue_prefill: false,
+    names_behavior: character_names_behavior.NONE,
     seed: -1,
     n: 1,
 };
@@ -478,6 +485,15 @@ function convertChatCompletionToInstruct(messages, type) {
 function setOpenAIMessages(chat) {
     let j = 0;
     // clean openai msgs
+    let names_behavior_x = oai_settings.names_behavior;
+    switch (extension_settings.Nvkun.AlwaysCharnames) {
+        case 'true':
+            names_behavior_x = 'override';
+            break;
+        default:
+            break;
+    }
+
     const messages = [];
     for (let i = chat.length - 1; i >= 0; i--) {
         let role = chat[j]['is_user'] ? 'user' : 'assistant';
@@ -487,34 +503,28 @@ function setOpenAIMessages(chat) {
         if (chat[j].extra?.type === system_message_types.NARRATOR) {
             role = 'system';
         }
-        switch (extension_settings.Nvkun.AlwaysCharnames) {
-            case undefined:
-                var AlwaysCharnames = extension_settings.Nvkun.AlwaysCharnames;
-                break;
-            case 'true':
-                AlwaysCharnames = true;
-                break;
-            default:
-                AlwaysCharnames = false;
-                break;
-        }
-        // Check the value of AlwaysCharnames
-        switch (AlwaysCharnames) {
-            // If it turned on, use Anons code
-            case true:
-                // for groups or sendas command - prepend a character's name
-                content = `${chat[j].name}: ${content}`;
-                break
-            // If it is anything else, use the original code
-            default:
-                // for groups or sendas command - prepend a character's name
-                if (!oai_settings.names_in_completion) {
-                    if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
-                        content = `${chat[j].name}: ${content}`;
-                    }
 
-				}
+        // for groups or sendas command - prepend a character's name
+        switch (names_behavior_x) {
+            case 'override':
+			    content = `${chat[j].name}: ${content}`;
+                break;
+            case character_names_behavior.NONE:
+                if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
+                    content = `${chat[j].name}: ${content}`;
+                }
+                break;
+            case character_names_behavior.CONTENT:
+                if (chat[j].extra?.type !== system_message_types.NARRATOR) {
+                    content = `${chat[j].name}: ${content}`;
+                }
+                break;
+            default:
+                // No action for character_names_behavior.COMPLETION
+                break;
+
         }
+
         // remove caret return (waste of tokens)
         content = content.replace(/\r/gm, '');
 
@@ -692,6 +702,7 @@ function populationInjectionPrompts(prompts, messages) {
         'user': extension_prompt_roles.USER,
         'assistant': extension_prompt_roles.ASSISTANT,
     };
+
     const roles = ['system', 'user', 'assistant'];
     const separator = '\n';
     const wrap = false;
@@ -703,6 +714,7 @@ function populationInjectionPrompts(prompts, messages) {
         // Order of priority (most important go lower)
 
         const roleMessages = [];
+        const separator = '\n';
 
         for (const role of roles) {
             // Get prompts for current role
@@ -810,7 +822,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
         prompt.identifier = `chatHistory-${messages.length - index}`;
         const chatMessage = Message.fromPrompt(promptManager.preparePrompt(prompt));
 
-        if (true === promptManager.serviceSettings.names_in_completion && prompt.name) {
+        if (promptManager.serviceSettings.names_behavior === character_names_behavior.COMPLETION && prompt.name) {
             const messageName = promptManager.isValidName(prompt.name) ? prompt.name : promptManager.sanitizeName(prompt.name);
             chatMessage.setName(messageName);
         }
@@ -1129,7 +1141,7 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
 
     // Tavern Extras - Summary NVfix
     const summary = extensionPrompts['1_memory'];
-    if (summary && summary.value&& summary.position !== 1) systemPrompts.push({
+    if (summary && summary.value && summary.position !== 1) systemPrompts.push({
         role: getPromptRole(summary.role),
         content: summary.value,
         identifier: 'summary',
@@ -1782,11 +1794,6 @@ async function sendOpenAIRequest(type, messages, signal) {
         delete generate_data.stop;
     }
 
-    // Remove logit bias and stop strings if it's not supported by the model
-    if (isOAI && oai_settings.openai_model.includes('vision') || isOpenRouter && oai_settings.openrouter_model.includes('vision')) {
-        delete generate_data.logit_bias;
-        delete generate_data.stop;
-    }
 
     // Proxy is only supported for Claude, Gemini? and OpenAI
         switch (extension_settings.ProxyManager.ProxyPrior) {
@@ -1819,6 +1826,13 @@ async function sendOpenAIRequest(type, messages, signal) {
     // Add logprobs request (currently OpenAI only, max 5 on their side)
     if (useLogprobs && (isOAI || isCustom)) {
         generate_data['logprobs'] = 5;
+    }
+
+    // Remove logit bias, logprobs and stop strings if it's not supported by the model
+    if (isOAI && oai_settings.openai_model.includes('vision') || isOpenRouter && oai_settings.openrouter_model.includes('vision')) {
+        delete generate_data.logit_bias;
+        delete generate_data.stop;
+        delete generate_data.logprobs;
     }
 
     if (isClaude) {
@@ -2761,6 +2775,12 @@ function loadOpenAISettings(data, settings) {
     oai_settings.lookaround_nudge_prompt = settings.lookaround_nudge_prompt ?? default_settings.lookaround_nudge_prompt;
     oai_settings.squash_system_messages = settings.squash_system_messages ?? default_settings.squash_system_messages;
     oai_settings.continue_prefill = settings.continue_prefill ?? default_settings.continue_prefill;
+    oai_settings.names_behavior = settings.names_behavior ?? default_settings.names_behavior;
+
+    // Migrate from old settings
+    if (settings.names_in_completion === true) {
+        oai_settings.names_behavior = character_names_behavior.COMPLETION;
+    }
 
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
     if (settings.claude_allow_plaintext !== undefined) oai_settings.claude_allow_plaintext = !!settings.claude_allow_plaintext;
@@ -2802,7 +2822,6 @@ function loadOpenAISettings(data, settings) {
     $('#openai_max_tokens').val(oai_settings.openai_max_tokens);
 
     $('#wrap_in_quotes').prop('checked', oai_settings.wrap_in_quotes);
-    $('#names_in_completion').prop('checked', oai_settings.names_in_completion);
     $('#jailbreak_system').prop('checked', oai_settings.jailbreak_system);
     $('#openai_show_external_models').prop('checked', oai_settings.show_external_models);
     $('#openai_external_category').toggle(oai_settings.show_external_models);
@@ -2880,8 +2899,24 @@ function loadOpenAISettings(data, settings) {
         oai_settings.chat_completion_source = chat_completion_sources.MAKERSUITE;
     }
 
+    setNamesBehaviorControls();
+
     $('#chat_completion_source').val(oai_settings.chat_completion_source).trigger('change');
     $('#oai_max_context_unlocked').prop('checked', oai_settings.max_context_unlocked);
+}
+
+function setNamesBehaviorControls() {
+    switch (oai_settings.names_behavior) {
+        case character_names_behavior.NONE:
+            $('#character_names_none').prop('checked', true);
+            break;
+        case character_names_behavior.COMPLETION:
+            $('#character_names_completion').prop('checked', true);
+            break;
+        case character_names_behavior.CONTENT:
+            $('#character_names_content').prop('checked', true);
+            break;
+    }
 }
 
 async function getStatusOpen() {
@@ -3009,7 +3044,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         openai_max_context: settings.openai_max_context,
         openai_max_tokens: settings.openai_max_tokens,
         wrap_in_quotes: settings.wrap_in_quotes,
-        names_in_completion: settings.names_in_completion,
+        names_behavior: settings.names_behavior,
         send_if_empty: settings.send_if_empty,
         jailbreak_prompt: settings.jailbreak_prompt,
         jailbreak_system: settings.jailbreak_system,
@@ -3395,7 +3430,7 @@ function onSettingsPresetChange() {
         openai_max_context: ['#openai_max_context', 'openai_max_context', false],
         openai_max_tokens: ['#openai_max_tokens', 'openai_max_tokens', false],
         wrap_in_quotes: ['#wrap_in_quotes', 'wrap_in_quotes', true],
-        names_in_completion: ['#names_in_completion', 'names_in_completion', true],
+        names_behavior: ['#names_behavior', 'names_behavior', false],
         send_if_empty: ['#send_if_empty_textarea', 'send_if_empty', false],
         impersonation_prompt: ['#impersonation_prompt_textarea', 'impersonation_prompt', false],
         new_chat_prompt: ['#newchat_prompt_textarea', 'new_chat_prompt', false],
@@ -3435,6 +3470,11 @@ function onSettingsPresetChange() {
     oai_settings.preset_settings_openai = presetName;
 
     const preset = structuredClone(openai_settings[openai_setting_names[oai_settings.preset_settings_openai]]);
+
+    // Migrate old settings
+    if (preset.names_in_completion === true && preset.names_behavior === undefined) {
+        preset.names_behavior = character_names_behavior.COMPLETION;
+    }
 
     const updateInput = (selector, value) => $(selector).val(value).trigger('input');
     const updateCheckbox = (selector, value) => $(selector).prop('checked', value).trigger('input');
@@ -3622,6 +3662,8 @@ async function onModelChange() {
     if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
         if (oai_settings.max_context_unlocked) {
             $('#openai_max_context').attr('max', unlocked_max);
+        } else if (value === 'gemini-1.5-pro')  {
+            $('#openai_max_context').attr('max', max_1mil);
         } else if (value === 'gemini-pro') {
             $('#openai_max_context').attr('max', max_32k);
         } else if (value === 'gemini-pro-vision') {
@@ -4091,7 +4133,6 @@ export function isImageInliningSupported() {
     const gpt4v = 'gpt-4-vision';
     const geminiProV = 'gemini-pro-vision';
     const claude = 'claude-3';
-    const llava = 'llava';
 
     if (!oai_settings.image_inlining) {
         return false;
@@ -4105,7 +4146,7 @@ export function isImageInliningSupported() {
         case chat_completion_sources.CLAUDE:
             return oai_settings.claude_model.includes(claude);
         case chat_completion_sources.OPENROUTER:
-            return !oai_settings.openrouter_force_instruct && (oai_settings.openrouter_model.includes(gpt4v) || oai_settings.openrouter_model.includes(llava));
+            return !oai_settings.openrouter_force_instruct;
         case chat_completion_sources.CUSTOM:
             return true;
         default:
@@ -4356,11 +4397,6 @@ $(document).ready(async function () {
         saveSettingsDebounced();
     });
 
-    $('#names_in_completion').on('change', function () {
-        oai_settings.names_in_completion = !!$('#names_in_completion').prop('checked');
-        saveSettingsDebounced();
-    });
-
     $('#send_if_empty_textarea').on('input', function () {
         oai_settings.send_if_empty = String($('#send_if_empty_textarea').val());
         saveSettingsDebounced();
@@ -4597,6 +4633,27 @@ $(document).ready(async function () {
 
     $('#custom_model_id').on('input', function () {
         oai_settings.custom_model = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#names_behavior').on('input', function () {
+        oai_settings.names_behavior = Number($(this).val());
+        setNamesBehaviorControls();
+        saveSettingsDebounced();
+    });
+
+    $('#character_names_none').on('input', function () {
+        oai_settings.names_behavior = character_names_behavior.NONE;
+        saveSettingsDebounced();
+    });
+
+    $('#character_names_completion').on('input', function () {
+        oai_settings.names_behavior = character_names_behavior.COMPLETION;
+        saveSettingsDebounced();
+    });
+
+    $('#character_names_content').on('input', function () {
+        oai_settings.names_behavior = character_names_behavior.CONTENT;
         saveSettingsDebounced();
     });
 
