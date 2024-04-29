@@ -2447,17 +2447,19 @@ function getExtensionPromptByName(moduleName) {
     }
 }
 
-function getExtensionPrompt(position = 0, depth = undefined, separator = '\n') {
+function getExtensionPrompt(position = extension_prompt_types.IN_PROMPT, depth = undefined, separator = '\n', role = undefined, wrap = true) {
     let extension_prompt = Object.keys(extension_prompts)
         .sort()
         .map((x) => extension_prompts[x])
-        .filter(x => x.position == position && x.value && (depth === undefined || x.depth == depth))
+        .filter(x => x.position == position && x.value)
+        .filter(x => depth === undefined || x.depth === undefined || x.depth === depth)
+        .filter(x => role === undefined || x.role === undefined || x.role === role)
         .map(x => x.value.trim())
         .join(separator);
-    if (extension_prompt.length && !extension_prompt.startsWith(separator)) {
+    if (wrap && extension_prompt.length && !extension_prompt.startsWith(separator)) {
         extension_prompt = separator + extension_prompt;
     }
-    if (extension_prompt.length && !extension_prompt.endsWith(separator)) {
+    if (wrap && extension_prompt.length && !extension_prompt.endsWith(separator)) {
         extension_prompt = extension_prompt + separator;
     }
     if (extension_prompt.length) {

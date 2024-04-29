@@ -687,21 +687,30 @@ function formatWorldInfo(value) {
 function populationInjectionPrompts(prompts, messages) {
     let totalInsertedMessages = 0;
 
+    const roleTypes = {
+        'system': extension_prompt_roles.SYSTEM,
+        'user': extension_prompt_roles.USER,
+        'assistant': extension_prompt_roles.ASSISTANT,
+    };
+    const roles = ['system', 'user', 'assistant'];
+    const separator = '\n';
+    const wrap = false;
+
     for (let i = 0; i <= MAX_INJECTION_DEPTH; i++) {
         // Get prompts for current depth
         const depthPrompts = prompts.filter(prompt => prompt.injection_depth === i && prompt.content);
 
         // Order of priority (most important go lower)
-        const roles = ['system', 'user', 'assistant'];
+
         const roleMessages = [];
 
         for (const role of roles) {
             // Get prompts for current role
-            const rolePrompts = depthPrompts.filter(prompt => prompt.role === role).map(x => x.content).join('\n');
-            // Get extension prompt (only for system role)
-            const extensionPrompt = role === 'system' ? getExtensionPrompt(extension_prompt_types.IN_CHAT, i) : '';
+            const rolePrompts = depthPrompts.filter(prompt => prompt.role === role).map(x => x.content).join(separator);
+            // Get extension prompt
+            const extensionPrompt = getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, roleTypes[role], wrap);
 
-            const jointPrompt = [rolePrompts, extensionPrompt].filter(x => x).map(x => x.trim()).join('\n');
+            const jointPrompt = [rolePrompts, extensionPrompt].filter(x => x).map(x => x.trim()).join(separator);
 
             if (jointPrompt && jointPrompt.length) {
                 roleMessages.push({ 'role': role, 'content': jointPrompt });
@@ -4489,7 +4498,7 @@ $(document).ready(async function () {
         $('#exclude_h_a_prompt_textarea').val(oai_settings.exclude_h_a_prompt);
         saveSettingsDebounced();
     });
-	
+
     $('#openai_bypass_status_check').on('input', function () {
         oai_settings.bypass_status_check = !!$(this).prop('checked');
         getStatusOpen();
