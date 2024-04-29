@@ -180,6 +180,7 @@ const TEXTGEN_TYPES = {
     LLAMACPP: 'llamacpp',
     OLLAMA: 'ollama',
     INFERMATICAI: 'infermaticai',
+    DREAMGEN: 'dreamgen',
     OPENROUTER: 'openrouter',
 };
 
@@ -193,6 +194,23 @@ const INFERMATICAI_KEYS = [
     'repetition_penalty',
     'stream',
     'stop',
+];
+
+// https://dreamgen.com/docs/api#openai-text
+const DREAMGEN_KEYS = [
+    'model',
+    'prompt',
+    'max_tokens',
+    'temperature',
+    'top_p',
+    'top_k',
+    'min_p',
+    'repetition_penalty',
+    'frequency_penalty',
+    'presence_penalty',
+    'stop',
+    'stream',
+    'minimum_message_content_tokens'
 ];
 
 // https://docs.together.ai/reference/completions
@@ -266,6 +284,7 @@ module.exports = {
     TOGETHERAI_KEYS,
     OLLAMA_KEYS,
     INFERMATICAI_KEYS,
+    DREAMGEN_KEYS,
     OPENROUTER_HEADERS,
     OPENROUTER_KEYS,
 };
