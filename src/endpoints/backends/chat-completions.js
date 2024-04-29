@@ -237,11 +237,11 @@ async function sendClaudeRequest(request, response) {
             let statusCode = generateResponse.status;
             let statusText = generateResponse.statusText;
             if (generateResponse.ok == false && Attempts < 3) {
-                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 4 seconds...`);
-                await new Promise(r => setTimeout(r, 4000));
+                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 6 seconds...`);
+                await new Promise(r => setTimeout(r, 6000));
             } else if (generateResponse.ok == false && Attempts < 5) {
-                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 8 seconds...`);
-                await new Promise(r => setTimeout(r, 8000));
+                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 9 seconds...`);
+                await new Promise(r => setTimeout(r, 9000));
             }
             Attempts++;
         }

@@ -127,8 +127,10 @@ function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill,
  * @param {string}   prefillString User determined prefill string
  * @param {boolean}  useSysPrompt See if we want to use a system prompt
  * @param {string}   humanMsgFix Add Human message between system prompt and assistant.
+ * @param {string}   charName Character name
+ * @param {string}   userName User name
  */
-function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFix) {
+function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFix, charName = '', userName = '') {
     let systemPrompt = '';
     if (useSysPrompt) {
         // Collect all the system messages up until the first instance of a non-system message, and then remove them from the messages array.
@@ -136,6 +138,12 @@ function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFi
         for (i = 0; i < messages.length; i++) {
             if (messages[i].role !== 'system') {
                 break;
+            }
+            if (userName && messages[i].name === 'example_user') {
+                messages[i].content = `${userName}: ${messages[i].content}`;
+            }
+            if (charName && messages[i].name === 'example_assistant') {
+                messages[i].content = `${charName}: ${messages[i].content}`;
             }
             systemPrompt += `${messages[i].content}\n\n`;
         }
@@ -154,6 +162,12 @@ function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFi
     // Now replace all further messages that have the role 'system' with the role 'user'. (or all if we're not using one)
     messages.forEach((message) => {
         if (message.role === 'system') {
+            if (userName && message.name === 'example_user') {
+                message.content = `${userName}: ${message.content}`;
+            }
+            if (charName && message.name === 'example_assistant') {
+                message.content = `${charName}: ${message.content}`;
+            }
             message.role = 'user';
         }
     });
@@ -311,120 +325,6 @@ function convertCohereMessages(messages, charName = '', userName = '') {
     });
 
     return { systemPrompt: systemPrompt.trim(), chatHistory, userPrompt };
-}
-
-/**
- * Convert ChatML objects into working with Anthropic's new Messaging API.
- * @param {object[]} messages Array of messages
- * @param {string}   prefillString User determined prefill string
- * @param {boolean}  useSysPrompt See if we want to use a system prompt
- * @param {string}   humanMsgFix Add Human message between system prompt and assistant.
- * @param {string}   charName Character name
- * @param {string}   userName User name
- */
-function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFix, charName = '', userName = '') {
-    let systemPrompt = '';
-    if (useSysPrompt) {
-        // Collect all the system messages up until the first instance of a non-system message, and then remove them from the messages array.
-        let i;
-        for (i = 0; i < messages.length; i++) {
-            if (messages[i].role !== 'system') {
-                break;
-            }
-            if (userName && messages[i].name === 'example_user') {
-                messages[i].content = `${userName}: ${messages[i].content}`;
-            }
-            if (charName && messages[i].name === 'example_assistant') {
-                messages[i].content = `${charName}: ${messages[i].content}`;
-            }
-            systemPrompt += `${messages[i].content}\n\n`;
-        }
-
-        messages.splice(0, i);
-
-        // Check if the first message in the array is of type user, if not, interject with humanMsgFix or a blank message.
-        if (messages.length > 0 && messages[0].role !== 'user') {
-            messages.unshift({
-                role: 'user',
-                content: humanMsgFix || '[Start a new chat]',
-            });
-        }
-    }
-    // Now replace all further messages that have the role 'system' with the role 'user'. (or all if we're not using one)
-    messages.forEach((message) => {
-        if (message.role === 'system') {
-            if (userName && message.name === 'example_user') {
-                message.content = `${userName}: ${message.content}`;
-            }
-            if (charName && message.name === 'example_assistant') {
-                message.content = `${charName}: ${message.content}`;
-            }
-            message.role = 'user';
-        }
-    });
-
-    // Since the messaging endpoint only supports user assistant roles in turns, we have to merge messages with the same role if they follow eachother
-    // Also handle multi-modality, holy slop.
-    let mergedMessages = [];
-    messages.forEach((message) => {
-        const imageEntry = message.content[1]?.image_url;
-        const imageData = imageEntry?.url;
-        const mimeType = imageData?.split(';')[0].split(':')[1];
-        const base64Data = imageData?.split(',')[1];
-
-        if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === message.role) {
-            if(Array.isArray(message.content)) {
-                if(Array.isArray(mergedMessages[mergedMessages.length - 1].content)) {
-                    mergedMessages[mergedMessages.length - 1].content[0].text += '\n\n' + message.content[0].text;
-                } else {
-                    mergedMessages[mergedMessages.length - 1].content += '\n\n' + message.content[0].text;
-                }
-            } else {
-                if(Array.isArray(mergedMessages[mergedMessages.length - 1].content)) {
-                    mergedMessages[mergedMessages.length - 1].content[0].text += '\n\n' + message.content;
-                } else {
-                    mergedMessages[mergedMessages.length - 1].content += '\n\n' + message.content;
-                }
-            }
-        } else {
-            mergedMessages.push(message);
-        }
-        if (imageData) {
-            mergedMessages[mergedMessages.length - 1].content = [
-                { type: 'text', text: mergedMessages[mergedMessages.length - 1].content[0]?.text || mergedMessages[mergedMessages.length - 1].content },
-                {
-                    type: 'image', source: {
-                        type: 'base64',
-                        media_type: mimeType,
-                        data: base64Data,
-                    },
-                },
-            ];
-        }
-    });
-
-
-    // Take care of name properties since claude messages don't support them
-    mergedMessages.forEach((message) => {
-        if (message.name) {
-            if (Array.isArray(message.content)) {
-                message.content[0].text = `${message.name}: ${message.content[0].text}`;
-            } else {
-                message.content = `${message.name}: ${message.content}`;
-            }
-            delete message.name;
-        }
-    });
-
-    // Shouldn't be conditional anymore, messages api expects the last role to be user unless we're explicitly prefilling
-    if (prefillString) {
-        mergedMessages.push({
-            role: 'assistant',
-            content: prefillString.trimEnd(),
-        });
-    }
-
-    return { messages: mergedMessages, systemPrompt: systemPrompt.trim() };
 }
 
 /**
