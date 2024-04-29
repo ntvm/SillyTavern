@@ -859,26 +859,25 @@ async function firstLoadInit() {
         throw new Error('Initialization failed');
     }
 
-    initLocales();
+    initBackgrounds();
     getSystemMessages();
+    initLocales();
     sendSystemMessage(system_message_types.WELCOME);
-
+    await getBackgrounds();
     await getClientVersion();
     await readSecretState();
     await getSettings();
     await getUserAvatars(true, user_avatar);
     await getCharacters();
-    await getBackgrounds();
     await initTokenizers();
     await initPresetManager();
-    initBackgrounds();
     initAuthorsNote();
     initPersonas();
     initRossMods();
     initStats();
+    doDailyExtensionUpdatesCheck();
     initCfg();
     initLogprobs();
-    doDailyExtensionUpdatesCheck();
     hideLoader();
     await eventSource.emit(event_types.APP_READY);
 }
@@ -2032,7 +2031,7 @@ function addOneMessage(mes, { type = 'normal', insertAfter = null, scroll = true
         forceAvatar: mes.force_avatar,
         timestamp: timestamp,
         extra: mes.extra,
-        tokenCount: mes.extra?.token_count,
+        tokenCount: mes.extra?.token_count ?? 0,
         ...formatGenerationTimer(mes.gen_started, mes.gen_finished, mes.extra?.token_count),
     };
 
@@ -2491,6 +2490,7 @@ function getExtensionPromptByName(moduleName) {
  * @param {number} [depth] Depth of the prompt
  * @param {string} [separator] Separator for joining multiple prompts
  * @param {number} [role] Role of the prompt
+ * @param {boolean} [wrap] Wrap start and end with a separator
  * @returns {string} Extension prompt
  */
 function getExtensionPrompt(position = extension_prompt_types.IN_PROMPT, depth = undefined, separator = '\n', role = undefined, wrap = true) {
@@ -2498,7 +2498,8 @@ function getExtensionPrompt(position = extension_prompt_types.IN_PROMPT, depth =
         .sort()
         .map((x) => extension_prompts[x])
         .filter(x => x.position == position && x.value)
-        .filter(x => x.depth === undefined || x.depth === depth)
+        .filter(x => depth === undefined || x.depth === undefined || x.depth === depth)
+        .filter(x => role === undefined || x.role === undefined || x.role === role)
         .map(x => x.value.trim())
         .join(separator);
     if (wrap && extension_prompt.length && !extension_prompt.startsWith(separator)) {
@@ -3251,8 +3252,9 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     }
 
     // Inject all Depth prompts. Chat Completion does it separately
+    let injectedIndices = [];
     if (main_api !== 'openai') {
-        doChatInject(coreChat, isContinue);
+        injectedIndices = doChatInject(coreChat, isContinue);
     }
 
     // Insert character jailbreak as the last user message (if exists, allowed, preferred, and not using Chat Completion)
@@ -3670,6 +3672,10 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             return combinedPrompt;
         };
 
+        finalMesSend.forEach((item, i) => {
+            item.injected = Array.isArray(injectedIndices) && injectedIndices.includes(i);
+        });
+
         let data = {
             api: main_api,
             combinedPrompt: null,
@@ -3987,9 +3993,10 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
  * Injects extension prompts into chat messages.
  * @param {object[]} messages Array of chat messages
  * @param {boolean} isContinue Whether the generation is a continuation. If true, the extension prompts of depth 0 are injected at position 1.
- * @returns {void}
+ * @returns {number[]} Array of indices where the extension prompts were injected
  */
 function doChatInject(messages, isContinue) {
+    const injectedIndices = [];
     let totalInsertedMessages = 0;
     messages.reverse();
 
@@ -4000,13 +4007,13 @@ function doChatInject(messages, isContinue) {
             [extension_prompt_roles.SYSTEM]: '',
             [extension_prompt_roles.USER]: name1,
             [extension_prompt_roles.ASSISTANT]: name2,
-        }
+        };
         const roleMessages = [];
         const separator = '\n';
+        const wrap = false;
 
         for (const role of roles) {
-            // Get extension prompt
-            const extensionPrompt = String(getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, role)).trimStart();
+            const extensionPrompt = String(getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, role, wrap)).trimStart();
             const isNarrator = role === extension_prompt_roles.SYSTEM;
             const isUser = role === extension_prompt_roles.USER;
             const name = names[role];
@@ -4018,7 +4025,7 @@ function doChatInject(messages, isContinue) {
                     mes: extensionPrompt,
                     extra: {
                         type: isNarrator ? system_message_types.NARRATOR : null,
-                    }
+                    },
                 });
             }
         }
@@ -4028,10 +4035,16 @@ function doChatInject(messages, isContinue) {
             const injectIdx = depth + totalInsertedMessages;
             messages.splice(injectIdx, 0, ...roleMessages);
             totalInsertedMessages += roleMessages.length;
+            injectedIndices.push(...Array.from({ length: roleMessages.length }, (_, i) => injectIdx + i));
         }
     }
 
+    for (let i = 0; i < injectedIndices.length; i++) {
+        injectedIndices[i] = messages.length - injectedIndices[i] - 1;
+    }
+
     messages.reverse();
+    return injectedIndices;
 }
 
 function flushWIDepthInjections() {
@@ -4577,6 +4590,7 @@ function parseAndSaveLogprobs(data, continueFrom) {
                     logprobs = data?.completion_probabilities?.map(x => parseTextgenLogprobs(x.content, [x])) || null;
                 } break;
                 case textgen_types.APHRODITE:
+                case textgen_types.MANCER:
                 case textgen_types.TABBY: {
                     logprobs = parseTabbyLogprobs(data) || null;
                 } break;
@@ -4631,7 +4645,7 @@ function extractMultiSwipes(data, type) {
         return swipes;
     }
 
-    if (main_api === 'openai' || (main_api === 'textgenerationwebui' && textgen_settings.type === textgen_types.APHRODITE)) {
+    if (main_api === 'openai' || (main_api === 'textgenerationwebui' && [MANCER, APHRODITE].includes(textgen_settings.type))) {
         if (!Array.isArray(data.choices)) {
             return swipes;
         }
@@ -6717,8 +6731,6 @@ export function setExtensionPrompt(key, value, position, depth, scan = false, ro
         scan: !!scan,
         role: Number(role ?? extension_prompt_roles.SYSTEM),
     };
-
-    extension_prompts[key] = { value: String(value), position: Number(position), depth: Number(depth), scan: !!scan, role: Number(role ?? extension_prompt_roles.SYSTEM), };
 }
 
 /**

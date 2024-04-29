@@ -107,7 +107,6 @@ const listen = getConfigValue('listen', false);
 const HumAssistOff = getConfigValue('HumAssistOff', false);
 const SystemFul = getConfigValue('SystemFul', true);
 
-
 const { DIRECTORIES, UPLOADS_PATH } = require('./src/constants');
 
 // CORS Settings //

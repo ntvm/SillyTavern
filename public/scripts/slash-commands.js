@@ -54,6 +54,11 @@ export {
 };
 
 class SlashCommandParser {
+    static COMMENT_KEYWORDS = ['#', '/'];
+    static RESERVED_KEYWORDS = [
+        ...this.COMMENT_KEYWORDS,
+    ];
+
     constructor() {
         this.commands = {};
         this.helpStrings = {};
@@ -61,6 +66,11 @@ class SlashCommandParser {
 
     addCommand(command, callback, aliases, helpString = '', interruptsGeneration = false, purgeFromMessage = true) {
         const fnObj = { callback, helpString, interruptsGeneration, purgeFromMessage };
+
+        if ([command, ...aliases].some(x => SlashCommandParser.RESERVED_KEYWORDS.includes(x))) {
+            console.error('ERROR: Reserved slash command keyword used!');
+            return;
+        }
 
         if ([command, ...aliases].some(x => Object.hasOwn(this.commands, x))) {
             console.trace('WARN: Duplicate slash command registered!');
@@ -1766,6 +1776,11 @@ async function executeSlashCommands(text, unescape = false) {
         const result = parser.parse(trimmedLine);
 
         if (!result) {
+            continue;
+        }
+
+        // Skip comment commands. They don't run macros or interrupt pipes.
+        if (SlashCommandParser.COMMENT_KEYWORDS.includes(result.command)) {
             continue;
         }
 

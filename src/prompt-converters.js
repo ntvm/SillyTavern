@@ -1,4 +1,4 @@
-require('../polyfill.js');
+require('./endpoints/polyfill.js');
 
 /**
  * Convert a prompt from the ChatML objects to the format used by Claude.

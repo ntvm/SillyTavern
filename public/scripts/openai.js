@@ -530,7 +530,6 @@ function setOpenAIMessages(chat) {
             default:
                 // No action for character_names_behavior.COMPLETION
                 break;
-
         }
 
         // remove caret return (waste of tokens)
@@ -597,7 +596,7 @@ function setupChatCompletionPromptManager(openAiSettings) {
         prefix: 'completion_',
         containerIdentifier: 'completion_prompt_manager',
         listIdentifier: 'completion_prompt_manager_list',
-        toggleDisabled: ['main'],
+        toggleDisabled: [],
         sortableDelay: getSortableDelay(),
         defaultPrompts: {
             main: default_main_prompt,
@@ -723,6 +722,7 @@ function populationInjectionPrompts(prompts, messages) {
 
         const roleMessages = [];
         const separator = '\n';
+        const wrap = false;
 
         for (const role of roles) {
             // Get prompts for current role
@@ -779,19 +779,12 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
     let continueMessage = null;
     const instruct = isOpenRouterWithInstruct();
     if (type === 'continue' && cyclePrompt && !instruct && !oai_settings.continue_prefill) {
-        const promptObject = oai_settings.continue_prefill ?
-            {
-                identifier: 'continueNudge',
-                role: 'assistant',
-                content: cyclePrompt,
-                system_prompt: true,
-            } :
-            {
-                identifier: 'continueNudge',
-                role: 'system',
-                content: oai_settings.continue_nudge_prompt.replace('{{lastChatMessage}}', cyclePrompt),
-                system_prompt: true,
-            };
+        const promptObject = {
+            identifier: 'continueNudge',
+            role: 'system',
+            content: oai_settings.continue_nudge_prompt.replace('{{lastChatMessage}}', String(cyclePrompt).trim()),
+            system_prompt: true,
+        };
         const continuePrompt = new Prompt(promptObject);
         const preparedPrompt = promptManager.preparePrompt(continuePrompt);
         continueMessage = Message.fromPrompt(preparedPrompt);
@@ -959,7 +952,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
         // We need the prompts array to determine a position for the source.
         if (false === prompts.has(source)) return;
 
-        if (promptManager.isPromptDisabledForActiveCharacter(source)) {
+        if (promptManager.isPromptDisabledForActiveCharacter(source) && source !== 'main') {
             promptManager.log(`Skipping prompt ${source} because it is disabled`);
             return;
         }
@@ -982,6 +975,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
     addToChatCompletion('personaDescription');
 
     // Collection of control prompts that will always be positioned last
+    chatCompletion.setOverriddenPrompts(prompts.overriddenPrompts);
     const controlPrompts = new MessageCollection('controlPrompts');
 
     const impersonateMessage = Message.fromPrompt(prompts.get('impersonate')) ?? null;
@@ -1233,20 +1227,20 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
 
     // Apply character-specific main prompt
     const systemPrompt = prompts.get('main') ?? null;
-    if (systemPromptOverride && systemPrompt) {
+    if (systemPromptOverride && systemPrompt && systemPrompt.forbid_overrides !== true) {
         const mainOriginalContent = systemPrompt.content;
         systemPrompt.content = systemPromptOverride;
         const mainReplacement = promptManager.preparePrompt(systemPrompt, mainOriginalContent);
-        prompts.set(mainReplacement, prompts.index('main'));
+        prompts.override(mainReplacement, prompts.index('main'));
     }
 
     // Apply character-specific jailbreak
     const jailbreakPrompt = prompts.get('jailbreak') ?? null;
-    if (jailbreakPromptOverride && jailbreakPrompt) {
+    if (jailbreakPromptOverride && jailbreakPrompt && jailbreakPrompt.forbid_overrides !== true) {
         const jbOriginalContent = jailbreakPrompt.content;
         jailbreakPrompt.content = jailbreakPromptOverride;
         const jbReplacement = promptManager.preparePrompt(jailbreakPrompt, jbOriginalContent);
-        prompts.set(jbReplacement, prompts.index('jailbreak'));
+        prompts.override(jbReplacement, prompts.index('jailbreak'));
     }
 
     return prompts;
@@ -1801,7 +1795,6 @@ async function sendOpenAIRequest(type, messages, signal) {
     if (!Array.isArray(generate_data.stop) || !generate_data.stop.length) {
         delete generate_data.stop;
     }
-
 
     // Proxy is only supported for Claude, Gemini? and OpenAI
         switch (extension_settings.ProxyManager.ProxyPrior) {
@@ -2387,7 +2380,7 @@ class MessageCollection {
  * @see https://platform.openai.com/docs/guides/gpt/chat-completions-api
  *
  */
-class ChatCompletion {
+export class ChatCompletion {
 
     /**
      * Combines consecutive system messages into one if they have no name attached.
@@ -2430,6 +2423,7 @@ class ChatCompletion {
         this.tokenBudget = 0;
         this.messages = new MessageCollection('root');
         this.loggingEnabled = false;
+        this.overriddenPrompts = [];
     }
 
     /**
@@ -2704,6 +2698,18 @@ class ChatCompletion {
         }
         return index;
     }
+
+    /**
+     * Sets the list of overridden prompts.
+     * @param {string[]} list A list of prompts that were overridden.
+     */
+    setOverriddenPrompts(list) {
+        this.overriddenPrompts = list;
+    }
+
+    getOverriddenPrompts() {
+        return this.overriddenPrompts ?? [];
+    }
 }
 
 function loadOpenAISettings(data, settings) {
@@ -2927,6 +2933,8 @@ function setNamesBehaviorControls() {
             $('#character_names_content').prop('checked', true);
             break;
     }
+    const checkedItemText = $('input[name="character_names"]:checked ~ span').text().trim();
+    $('#character_names_display').text(checkedItemText);
 }
 
 function setContinuePostfixControls() {
@@ -2948,6 +2956,8 @@ function setContinuePostfixControls() {
     }
 
     $('#continue_postfix').val(oai_settings.continue_postfix);
+    const checkedItemText = $('input[name="continue_postfix"]:checked ~ span').text().trim();
+    $('#continue_postfix_display').text(checkedItemText);
 }
 
 async function getStatusOpen() {
@@ -4677,16 +4687,19 @@ $(document).ready(async function () {
 
     $('#character_names_none').on('input', function () {
         oai_settings.names_behavior = character_names_behavior.NONE;
+        setNamesBehaviorControls();
         saveSettingsDebounced();
     });
 
     $('#character_names_completion').on('input', function () {
         oai_settings.names_behavior = character_names_behavior.COMPLETION;
+        setNamesBehaviorControls();
         saveSettingsDebounced();
     });
 
     $('#character_names_content').on('input', function () {
         oai_settings.names_behavior = character_names_behavior.CONTENT;
+        setNamesBehaviorControls();
         saveSettingsDebounced();
     });
 
@@ -4698,16 +4711,19 @@ $(document).ready(async function () {
 
     $('#continue_postfix_space').on('input', function () {
         oai_settings.continue_postfix = continue_postfix_types.SPACE;
+        setContinuePostfixControls();
         saveSettingsDebounced();
     });
 
     $('#continue_postfix_newline').on('input', function () {
-        oai_settings.continue_postfix = continue_postfix_types.NEWLINE;
+        oai_settings.continue_postfix = continue_postfix_types.NEWLINE
+        setContinuePostfixControls();
         saveSettingsDebounced();
     });
 
     $('#continue_postfix_double_newline').on('input', function () {
         oai_settings.continue_postfix = continue_postfix_types.DOUBLE_NEWLINE;
+        setContinuePostfixControls();
         saveSettingsDebounced();
     });
 

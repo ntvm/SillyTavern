@@ -902,8 +902,9 @@ export function initRossMods() {
     }
 
     $(document).on('keydown', function (event) {
-        processHotkeys(event.originalEvent);
+        processHotkeysDebounced(event.originalEvent);
     });
+    const processHotkeysDebounced = debounce(processHotkeys);
 
     const hotkeyTargets = {
         'send_textarea': sendTextArea,

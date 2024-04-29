@@ -130,7 +130,7 @@
                     <span name="samplerHelpButton" class="note-link-span topRightInset fa-solid fa-circle-question"></span>
                 </a>
                 <div class="scrollableInner">
-                    <div class="flex-container" id="ai_response_configuration">
+                    <div class="flex-container flexNoGap" id="ai_response_configuration">
                         <div id="respective-presets-block" class="width100p">
                             <div id="kobold_api-presets">
                                 <h4 class="margin0"><span data-i18n="kobldpresets">Kobold Presets</span>
@@ -1200,7 +1200,7 @@
                                         <div class="fa-solid fa-circle-info opacity50p" title="Set all samplers to their neutral/disabled state." data-i18n="[title]Set all samplers to their neutral/disabled state."></div>
                                     </small>
                                 </div>
-                                <div data-newbie-hidden data-tg-type="aphrodite" class="flex-container flexFlowColumn alignitemscenter flexBasis100p flexGrow flexShrink gap0">
+                                <div data-newbie-hidden data-tg-type="mancer, aphrodite" class="flex-container flexFlowColumn alignitemscenter flexBasis100p flexGrow flexShrink gap0">
                                     <small data-i18n="Multiple swipes per generation">Multiple swipes per generation</small>
                                     <input type="number" id="n_textgenerationwebui" class="text_pole textAlignCenter" min="1" value="1" step="1" />
                                 </div>
@@ -1261,7 +1261,7 @@
                                         <input class="neo-range-slider" type="range" id="tfs_textgenerationwebui" name="volume" min="0" max="1" step="0.01">
                                         <input class="neo-range-input" type="number" min="0" max="1" step="0.01" data-for="tfs_textgenerationwebui" id="tfs_counter_textgenerationwebui">
                                     </div>
-                                    <div data-newbie-hidden data-tg-type="ooba" class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
+                                    <div data-newbie-hidden data-tg-type="ooba,mancer" class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
                                         <small>
                                             <span data-i18n="Epsilon Cutoff">Epsilon Cutoff</span>
                                             <div class="fa-solid fa-circle-info opacity50p" data-i18n="[title]Epsilon cutoff sets a probability floor below which tokens are excluded from being sampled" title="Epsilon cutoff sets a probability floor below which tokens are excluded from being sampled.&#13;In units of 1e-4; a reasonable value is 3.&#13;Set to 0 to disable."></div>
@@ -1269,7 +1269,7 @@
                                         <input class="neo-range-slider" type="range" id="epsilon_cutoff_textgenerationwebui" name="volume" min="0" max="9" step="0.01">
                                         <input class="neo-range-input" type="number" min="0" max="9" step="0.01" data-for="epsilon_cutoff_textgenerationwebui" id="epsilon_cutoff_counter_textgenerationwebui">
                                     </div>
-                                    <div data-newbie-hidden data-tg-type="ooba" class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
+                                    <div data-newbie-hidden data-tg-type="ooba,mancer" class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
                                         <small>
                                             <span data-i18n="Eta Cutoff">Eta Cutoff</span>
                                             <div class="fa-solid fa-circle-info opacity50p" data-i18n="[title]Eta cutoff is the main parameter of the special Eta Sampling technique.&#13;In units of 1e-4; a reasonable value is 3.&#13;Set to 0 to disable.&#13;See the paper Truncation Sampling as Language Model Desmoothing by Hewitt et al. (2022) for details." title="Eta cutoff is the main parameter of the special Eta Sampling technique.&#13;In units of 1e-4; a reasonable value is 3.&#13;Set to 0 to disable.&#13;See the paper Truncation Sampling as Language Model Desmoothing by Hewitt et al. (2022) for details."></div>
@@ -1307,7 +1307,7 @@
                                         <input class="neo-range-slider" type="range" id="no_repeat_ngram_size_textgenerationwebui" name="volume" min="0" max="20" step="1">
                                         <input class="neo-range-input" type="number" min="0" max="20" step="1" data-for="no_repeat_ngram_size_textgenerationwebui" id="no_repeat_ngram_size_counter_textgenerationwebui">
                                     </div>
-                                    <div data-newbie-hidden data-tg-type="ooba, dreamgen" class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
+                                    <div data-newbie-hidden data-tg-type="mancer, ooba, dreamgen" class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
                                         <small data-i18n="Min Length">Min Length</small>
                                         <input class="neo-range-slider" type="range" id="min_length_textgenerationwebui" name="volume" min="0" max="2000" step="1" />
                                         <input class="neo-range-input" type="number" min="0" max="2000" step="1" data-for="min_length_textgenerationwebui" id="min_length_counter_textgenerationwebui">
@@ -1317,20 +1317,22 @@
                                         <input class="neo-range-slider" type="range" id="max_tokens_second_textgenerationwebui" name="volume" min="0" max="20" step="1" />
                                         <input class="neo-range-input" type="number" min="0" max="20" step="1" data-for="max_tokens_second_textgenerationwebui" id="max_tokens_second_counter_textgenerationwebui">
                                     </div>
-                                    <div data-newbie-hidden name="smoothingBlock" class="wide100p">
+                                    <div data-newbie-hidden data-tg-type="mancer, ooba, koboldcpp, aphrodite, tabby" name="smoothingBlock" class="wide100p">
                                         <h4 class="wide100p textAlignCenter">
                                             <label data-i18n="Smooth Sampling">Smooth Sampling</label>
                                             <div class=" fa-solid fa-circle-info opacity50p " data-i18n="[title]Smooth Sampling" title="Allows you to use quadratic/cubic transformations to adjust the distribution. Lower Smoothing Factor values will be more creative, usually between 0.2-0.3 is the sweetspot (assuming the curve = 1). Higher Smoothing Curve values will make the curve steeper, which will punish low probability choices more aggressively. 1.0 curve is equivalent to only using Smoothing Factor."></div>
                                         </h4>
-                                        <div data-newbie-hidden data-tg-type="ooba, koboldcpp, aphrodite, tabby" class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
-                                            <small data-i18n="Smoothing Factor">Smoothing Factor</small>
-                                            <input class="neo-range-slider" type="range" id="smoothing_factor_textgenerationwebui" name="volume" min="0" max="10" step="0.01" />
-                                            <input class="neo-range-input" type="number" min="0" max="10" step="0.01" data-for="smoothing_factor_textgenerationwebui" id="smoothing_factor_counter_textgenerationwebui">
-                                        </div>
-                                        <div data-newbie-hidden data-tg-type="ooba, koboldcpp, aphrodite, tabby" class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
-                                            <small data-i18n="Smoothing Curve">Smoothing Curve</small>
-                                            <input class="neo-range-slider" type="range" id="smoothing_curve_textgenerationwebui" name="volume" min="1" max="10" step="0.01" />
-                                            <input class="neo-range-input" type="number" min="1" max="10" step="0.01" data-for="smoothing_curve_textgenerationwebui" id="smoothing_curve_counter_textgenerationwebui">
+                                        <div class="flex-container flexFlowRow gap10px flexShrink">
+                                            <div data-newbie-hidden class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
+                                                <small data-i18n="Smoothing Factor">Smoothing Factor</small>
+                                                <input class="neo-range-slider" type="range" id="smoothing_factor_textgenerationwebui" name="volume" min="0" max="10" step="0.01" />
+                                                <input class="neo-range-input" type="number" min="0" max="10" step="0.01" data-for="smoothing_factor_textgenerationwebui" id="smoothing_factor_counter_textgenerationwebui">
+                                            </div>
+                                            <div data-newbie-hidden class="alignitemscenter flex-container flexFlowColumn flexBasis48p flexGrow flexShrink gap0">
+                                                <small data-i18n="Smoothing Curve">Smoothing Curve</small>
+                                                <input class="neo-range-slider" type="range" id="smoothing_curve_textgenerationwebui" name="volume" min="1" max="10" step="0.01" />
+                                                <input class="neo-range-input" type="number" min="1" max="10" step="0.01" data-for="smoothing_curve_textgenerationwebui" id="smoothing_curve_counter_textgenerationwebui">
+                                            </div>
                                         </div>
                                     </div>
                                     <!--
@@ -1355,7 +1357,7 @@
                                             <input class="neo-range-input" type="number" min="0" max="5" step="1" data-for="prompt_log_probs_aphrodite" id="prompt_log_probs_aphrodite_counter_textgenerationwebui">
                                         </div>
                                     -->
-                                    <div data-newbie-hidden data-tg-type="ooba, koboldcpp, tabby, llamacpp, aphrodite" name="dynaTempBlock" class="wide100p">
+                                    <div data-newbie-hidden data-tg-type="ooba, mancer, koboldcpp, tabby, llamacpp, aphrodite" name="dynaTempBlock" class="wide100p">
                                         <h4 class="wide100p textAlignCenter" data-i18n="DynaTemp">
                                             <div class="flex-container alignitemscenter" style="justify-content: center;">
                                                 <div class="checkbox_label" for="dynatemp_textgenerationwebui">
@@ -1525,7 +1527,7 @@
                                             <div class="logit_bias_list"></div>
                                         </div>
                                     </div>
-                                    <div data-newbie-hidden data-forAphro="False" class="wide100p">
+                                    <div data-newbie-hidden data-forAphro="False" data-tg-type="ooba, tabby" class="wide100p">
                                         <hr class="width100p">
                                         <h4 data-i18n="CFG" class="textAlignCenter">CFG
                                             <div class="margin5 fa-solid fa-circle-info opacity50p " data-i18n="[title]Classifier Free Guidance. More helpful tip coming soon" title="Classifier Free Guidance. More helpful tip coming soon."></div>
@@ -2118,7 +2120,7 @@
                             <div data-tg-type="dreamgen" class="flex-container flexFlowColumn">
                                 <h4 data-i18n="DreamGen API key">
                                     DreamGen API key
-                                    <a href="https://dreamgen.com/account/api-keys" class="notes-link" target="_blank">
+                                    <a href="https://docs.sillytavern.app/usage/api-connections/dreamgen/" class="notes-link" target="_blank">
                                         <span class="fa-solid fa-circle-question note-link-span"></span>
                                     </a>
                                 </h4>
@@ -5110,10 +5112,20 @@
                         </div>
                     </div>
                     <div class="completion_prompt_manager_popup_entry_form_control">
-                        <label for="completion_prompt_manager_popup_entry_form_prompt">
-                            <span>Prompt</span>
-                        </label>
-                        <div class="text_muted">The prompt to be sent.</div>
+                        <div class="flex-container alignItemsCenter">
+                            <div class="flex1">
+                                <label for="completion_prompt_manager_popup_entry_form_prompt">
+                                    <span>Prompt</span>
+                                </label>
+                                <div class="text_muted">The prompt to be sent.</div>
+                            </div>
+                            <div id="completion_prompt_manager_forbid_overrides_block">
+                                <label class="checkbox_label" for="completion_prompt_manager_popup_entry_form_forbid_overrides" title="This prompt cannot be overridden by character cards, even if overrides are preferred.">
+                                    <input type="checkbox" id="completion_prompt_manager_popup_entry_form_forbid_overrides" name="forbid_overrides" />
+                                    <span>Forbid Overrides</span>
+                                </label>
+                            </div>
+                        </div>
                         <textarea id="completion_prompt_manager_popup_entry_form_prompt" class="text_pole" name="prompt">
                         </textarea>
                     </div>
@@ -5217,23 +5229,33 @@
         <div class="onboarding">
             <h3 data-i18n="Welcome to SillyTavern!">Welcome to SillyTavern!</h3>
             <ul class="justifyLeft margin-bot-10px">
-                <li>Read the <a href="https://docs.sillytavern.app/" target="_blank">Official Documentation</a>.</li>
+                <li>Read the <a href="https://docs.sillytavern.app/" data-i18n="Official Documentation" target="_blank">Official Documentation</a>.</li>
                 <li>Type <code>/help</code> in chat for commands and macros.</li>
-                <li>Join the <a href="https://discord.gg/RZdyAEUPvj" target="_blank">Discord server</a> for info and announcements.</li>
+                <li>Join the <a href="https://discord.gg/sillytavern" data-i18n="Discord server" target="_blank">Discord server</a> for info and announcements.</li>
             </ul>
-            <b>SillyTavern is aimed at advanced users.</b>
-            <div>
+            <b data-i18n="SillyTavern is aimed at advanced users.">
+                SillyTavern is aimed at advanced users.
+            </b>
+            <div data-i18n="If you're new to this, enable the simplified UI mode below.">
                 If you're new to this, enable the simplified UI mode below.
             </div>
             <label class="checkbox_label">
                 <input type="checkbox" name="enable_simple_mode" />
-                <span data-i18n="Enable simple UI mode">Enable simple UI mode</span>
+                <span data-i18n="Enable simple UI mode">
+                    Enable simple UI mode
+                </span>
             </label>
             <div class="justifyLeft margin-bot-10px">
-                Before you get started, you must select a user name.
+                <span data-i18n="Before you get started, you must select a user name.">
+                    Before you get started, you must select a user name.
+                </span>
                 This can be changed at any time via the <code><i class="fa-solid fa-face-smile"></i></code> icon.
             </div>
-            <h4>User Name:</h4>
+            <h4 data-i18n="UI Language:">UI Language:</h4>
+            <select name="onboarding_ui_language">
+                <option value="en">English</option>
+            </select>
+            <h4 data-i18n="User Name:">User Name:</h4>
         </div>
     </div>
     <div id="group_member_template" class="template_element">
