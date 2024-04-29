@@ -29,6 +29,7 @@ const SECRET_KEYS = {
     OAIPROXY: 'api_oai_proxy',
     TOGETHERAI: 'api_key_togetherai',
     MISTRALAI: 'api_key_mistralai',
+    COHERE:'api_key_cohere',
     CUSTOM: 'api_key_custom',
     OOBA: 'api_key_ooba',
     INFERMATICAI: 'api_key_infermaticai',
