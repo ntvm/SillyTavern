@@ -46,6 +46,12 @@ function getLastMessage() {
     return '';
 }
 
+function getLastMessageID() {
+    const index = chat?.length - 1;
+
+    return '';
+}
+
 /**
  * Returns the ID of the last swipe.
  * @returns {string} The 1-based ID of the last swipe
@@ -230,6 +236,7 @@ export function evaluateMacros(content, env) {
     content = content.replace(/{{firstIncludedMessageId}}/gi, getFirstIncludedMessageId());
     content = content.replace(/{{lastSwipeId}}/gi, getLastSwipeId());
     content = content.replace(/{{currentSwipeId}}/gi, getCurrentSwipeId());
+    content = content.replace(/{{lastMesID}}/gi, (chat?.length - 1));
 
     // Legacy non-macro substitutions
     content = content.replace(/<USER>/gi, typeof env.user === 'function' ? env.user() : env.user);

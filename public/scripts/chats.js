@@ -87,6 +87,30 @@ export async function unhideChatMessage(messageId, messageBlock) {
     saveChatDebounced();
 }
 
+export async function favoriteswipe(is) {
+    const chatId = getCurrentChatId();
+
+    if (!chatId) return;
+
+    const message = chat[chat.length - 1];
+
+    let checkEmptyswipe = message.swipes.length - message.swipe_info.length;
+
+    if (checkEmptyswipe !== 0) {for ( let i = 0 ; checkEmptyswipe >= 1; checkEmptyswipe--){
+        i++; message.swipe_info[(message.swipe_id + i)] = (message.swipe_info[message.swipe_id.length - 1].extra !== undefined)
+            ? message.swipe_info[message.swipe_id.length - 1] : { extra: { null:  'true' } }; }
+
+    }
+    message.swipe_info[message.swipe_id].extra.is_favorite = is;
+    document.querySelector('.last_mes').setAttribute('is_favorite',is);
+
+    // Reload swipes. Useful when a last message is hidden.
+    hideSwipeButtons();
+    showSwipeButtons();
+
+    saveChatDebounced();
+}
+
 /**
  * Adds a file attachment to the message.
  * @param {object} message Message object
@@ -427,6 +451,18 @@ jQuery(function () {
         const messageBlock = $(this).closest('.mes');
         const messageId = Number(messageBlock.attr('mesid'));
         await unhideChatMessage(messageId, messageBlock);
+    });
+
+    $(document).on('click', '.mes_favorite', async function () {
+        const messageBlock = $(this).closest('.mes');
+        const messageId = Number(messageBlock.attr('mesid'));
+        if (messageId > 1) {await favoriteswipe('true');}
+    });
+
+    $(document).on('click', '.mes_unfavorite', async function () {
+        const messageBlock = $(this).closest('.mes');
+        const messageId = Number(messageBlock.attr('mesid'));
+        if (messageId > 1) {await favoriteswipe('false');}
     });
 
     $(document).on('click', '.mes_file_delete', async function () {

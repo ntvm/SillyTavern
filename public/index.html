@@ -642,7 +642,7 @@
                                                     Prompt what used when Lookaround Pushed
                                                 </div>
                                                 <div class="toggle-description justifyLeft" data-i18n="In past Prompt supposed">
-                                                    In past Prompt supposed be NSFW avoidant,
+                                                    Previously, prompt supposed be NSFW avoidant,
                                                 </div>
                                                 <div class="toggle-description justifyLeft" data-i18n="Before deleted by">
                                                     before removed by ST devs
@@ -769,6 +769,20 @@
                                             </div>
                                             <div class="wide100p">
                                                 <textarea id="send_if_empty_textarea" class="text_pole textarea_compact autoSetHeight" name="send_if_empty" rows="3" placeholder="&mdash;"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="range-block m-t-1" data-source="claude">
+                                            <div class="range-block-title openai_restorable" data-i18n="Exclude H/A prompt">
+                                                <span>Exclude H/A prompt</span>
+                                                <div id="exclude_h_a_prompt_restore" title="Restore default format" class="right_menu_button">
+                                                    <div class="fa-solid fa-clock-rotate-left"></div>
+                                                </div>
+                                            </div>
+                                            <div class="toggle-description justifyLeft" data-i18n="Exclude H/A prompt2">
+                                                When Exclude Human/Assistant option are enabled in non-plaintext mode, this prompt would be inserted in first human message. 
+                                            </div>
+                                            <div class="wide100p">
+                                                <textarea id="exclude_h_a_prompt_textarea" class="text_pole textarea_compact autoSetHeight" rows="3"></textarea>
                                             </div>
                                         </div>
                                     </div>
@@ -1745,6 +1759,9 @@
                                                         <span data-i18n="Exclude Human/Assistant prefixes from being added to the prompt.">
                                                             Exclude Human/Assistant prefixes from being added to the prompt, except very first/last message, system prompt Human message and Assistant suffix.
                                                             Requires 'Add character names' and 'Allow plain format' checked.
+                                                            <hr>
+                                                            If plain text are diasbled or model doesn't support it, everything would be inserted within System prompt by next scheme.
+                                                            {Sysprompt: everything},{User: Exclude H/A prompt (In Utility prompts)},{Assistant: Prefill}
                                                         </span>
                                                     </div>
                                                     <label for="exclude_assistant" title="Exclude Assistant suffix" class="checkbox_label widthFreeExpand">
@@ -2386,7 +2403,7 @@
                                         <option value="claude-2.0">claude-2.0</option>
                                         <option value="claude-3-opus-20240229">claude-3-Opus (smarter, biggest cost per tokens)</option>
                                         <option value="claude-3-sonnet-20240229">claude-3-Sonnet (medium intelligence, cost)</option>
-                                        <option value="claude-3-haiku-20240307">claude-3-Haiku (dumber, cheaper)</option>
+                                        <option value="claude-3-haiku-20240307">claude-3-Haiku (obscure genius, cheaper)</option>
                                         <option value="claude-1.3">claude-v1.3</option>
                                         <option value="claude-1.3-100k">claude-v1.3-100k</option>
                                         <option value="claude-1.2">claude-v1.2</option>
@@ -2608,6 +2625,7 @@
                                         <option value="command-light">command-light</option>
                                         <option value="command">command</option>
                                         <option value="command-r">command-r</option>
+                                        <option value="command-r-plus">command-r-plus</option>
                                     </optgroup>
                                     <optgroup label="Nightly">
                                         <option value="command-light-nightly">command-light-nightly</option>
@@ -4403,7 +4421,7 @@
                         Character's Note
                     </span>
                 </h4>
-                <textarea id="depth_prompt_prompt" name="depth_prompt_prompt" class="text_pole" rows="2" maxlength="50000" autocomplete="off" form="form_create" placeholder="(Text to be inserted in-chat @ designated depth)"></textarea>
+                <textarea id="depth_prompt_prompt" name="depth_prompt_prompt" class="text_pole" rows="5" maxlength="50000" autocomplete="off" form="form_create" placeholder="(Text to be inserted in-chat @ designated depth and role)"></textarea>
             </div>
             <div>
                 <h4>
@@ -4411,7 +4429,17 @@
                         @ Depth
                     </span>
                 </h4>
-                <input id="depth_prompt_depth" name="depth_prompt_depth" class="text_pole widthUnset m-t-0" type="number" min="0" max="999" value="4" form="form_create" />
+                <input id="depth_prompt_depth" name="depth_prompt_depth" class="text_pole textarea_compact m-t-0" type="number" min="0" max="999" value="4" form="form_create" />
+                <h4>
+                    <span data-i18n="Role">
+                        Role
+                    </span>
+                </h4>
+                <select id="depth_prompt_role" name="depth_prompt_role" form="form_create" class="text_pole textarea_compact m-t-0">
+                    <option value="system" data-i18n="System">System</option>
+                    <option value="user" data-i18n="User">User</option>
+                    <option value="assistant" data-i18n="Assistant">Assistant</option>
+                </select>
                 <div class="extension_token_counter">
                     Tokens: <span data-token-counter="depth_prompt_prompt" data-token-permanent="true">counting...</span>
                 </div>
@@ -4945,7 +4973,7 @@
                 <div class="mes_timer"></div>
                 <div class="tokenCounterDisplay"></div>
             </div>
-            <div class="swipe_left fa-solid fa-chevron-left"></div>
+            <div class="swipe_left fa-solid fa-chevron-left" style="display: none;"></div>
             <div class="mes_block">
                 <div class="ch_name flex-container justifySpaceBetween">
                     <div class="flex-container flex1 alignitemscenter">
@@ -4961,7 +4989,9 @@
                             <div title="Translate message" class="mes_translate fa-solid fa-language" data-i18n="[title]Translate message"></div>
                             <div title="Generate Image" class="sd_message_gen fa-solid fa-paintbrush" data-i18n="[title]Generate Image"></div>
                             <div title="Narrate" class="mes_narrate fa-solid fa-bullhorn" data-i18n="[title]Narrate"></div>
-                            <div title="Prompt" class="mes_prompt fa-solid fa-square-poll-horizontal " data-i18n="[title]Prompt"></div>
+                            <div title="Prompt" class="mes_prompt fa-solid fa-square-poll-horizontal " data-i18n="[title]Prompt" style="display: none;"></div>
+                            <div title="Mark swipe" class="mes_favorite fa-solid fa-star" data-i18n="[title]Favorite"></div>
+                            <div title="Unmark swipe" class="mes_unfavorite fa-solid fa-star" data-i18n="[title]Unavorite"></div>
                             <div title="Exclude message from prompts" class="mes_hide fa-solid fa-eye" data-i18n="[title]Exclude message from prompts"></div>
                             <div title="Include message in prompts" class="mes_unhide fa-solid fa-eye-slash" data-i18n="[title]Include message in prompts"></div>
                             <div title="Embed file or image" class="mes_embed fa-solid fa-paperclip" data-i18n="[title]Embed file or image"></div>
@@ -4993,7 +5023,7 @@
                 </div>
                 <div class="mes_bias"></div>
             </div>
-            <div class="swipe_right fa-solid fa-chevron-right">
+            <div class="swipe_right fa-solid fa-chevron-right" style="display: none;">
                 <div class="swipes-counter"></div>
             </div>
         </div>
@@ -5155,9 +5185,12 @@
     </div>
     <div id="movingDivs">
         <div id="floatingPrompt" class="drawer-content flexGap5">
-            <div class="panelControlBar flex-container">
-                <div id="floatingPromptheader" class="fa-solid fa-grip drag-grabber"></div>
-                <div id="ANClose" class="fa-solid fa-circle-xmark floating_panel_close"></div>
+            <div class="panelControlBar flex-container alignItemsBaseline">
+                <div id="floatingPromptheader" class="fa-fw fa-solid fa-grip drag-grabber"></div>
+                <div id="floatingPromptMaximize" class="inline-drawer-maximize">
+                    <i class="floating_panel_maximize fa-fw fa-solid fa-window-maximize"></i>
+                </div>
+                <div id="ANClose" class="fa-fw fa-solid fa-circle-xmark floating_panel_close"></div>
             </div>
             <div name="floatingPromptHolder" class="scrollY">
                 <div class="inline-drawer">
@@ -5170,7 +5203,7 @@
                             <b>Unique to this chat</b>.<br>
                             Checkpoints inherit the Note from their parent, and can be changed individually after that.<br>
                         </small>
-                        <textarea id="extension_floating_prompt" class="text_pole" rows="12" maxlength="59976"></textarea>
+                        <textarea id="extension_floating_prompt" class="text_pole textarea_compact" rows="8" maxlength="59976"></textarea>
                         <div class="extension_token_counter">
                             Tokens: <span id="extension_floating_prompt_token_counter">0</span>
                         </div>
@@ -5179,22 +5212,34 @@
                             <span data-i18n="Include in World Info Scanning">Include in World Info Scanning</span>
                         </label>
                         <div class="floating_prompt_radio_group">
-                            <label>
-                                <input type="radio" name="extension_floating_position" value="2" />
-                                Before Main Prompt / Story String
+                            <label class="checkbox_label" for="extension_floating_position_before">
+                                <input type="radio" id="extension_floating_position_before" name="extension_floating_position" value="2" />
+                                <span data-i18n="Before Main Prompt / Story String">Before Main Prompt / Story String</span>
                             </label>
-                            <label>
-                                <input type="radio" name="extension_floating_position" value="0" />
-                                After Main Prompt / Story String
+                            <label class="checkbox_label" for="extension_floating_position_after">
+                                <input type="radio" id="extension_floating_position_after" name="extension_floating_position" value="0" />
+                                <span data-i18n="After Main Prompt / Story String">After Main Prompt / Story String</span>
                             </label>
-                            <label>
-                                <input type="radio" name="extension_floating_position" value="1" />
-                                In-chat @ Depth <input id="extension_floating_depth" class="text_pole widthUnset" type="number" min="0" max="999" />
+                            <label class="checkbox_label alignItemsCenter" for="extension_floating_position_depth">
+                                <input type="radio" id="extension_floating_position_depth" name="extension_floating_position" value="1" />
+                                <span data-i18n="In-chat @ Depth">In-chat @ Depth</span>
+                                <input id="extension_floating_depth" class="text_pole textarea_compact widthNatural" type="number" min="0" max="999" />
+                                <span data-i18n="as">as</span>
+                                <select id="extension_floating_role" class="text_pole widthNatural">
+                                    <option value="0">System</option>
+                                    <option value="1">User</option>
+                                    <option value="2">Assistant</option>
+                                </select>
                             </label>
                         </div>
                         <!--<label for="extension_floating_interval">In-Chat Insertion Depth</label>-->
-                        <label for="extension_floating_interval">Insertion Frequency</label>
-                        <input id="extension_floating_interval" class="text_pole widthUnset" type="number" min="0" max="999" /><small> (0 = Disable, 1 = Always)</small>
+                        <div class="flex-container">
+                            <label for="extension_floating_interval" class="flex-container flexNoGap flexFlowColumn">
+                                <span data-i18n="Insertion Frequency">Insertion Frequency</span>
+                                <small data-i18n="(0 = Disable, 1 = Always)">(0 = Disable, 1 = Always)</small>
+                            </label>
+                            <input id="extension_floating_interval" class="text_pole widthUnset" type="number" min="0" max="999" />
+                        </div>
                         <br>
                         <span>User inputs until next insertion: <span id="extension_floating_counter">(disabled)</span></span>
                     </div>
@@ -5215,7 +5260,7 @@
                     <div class="inline-drawer-content">
                         <small>Will be automatically added as the author's note for this character. Will be used in groups, but
                             can't be modified when a group chat is open.</small>
-                        <textarea id="extension_floating_chara" class="text_pole" rows="8" maxlength="50000" placeholder="Example:&#10;[Scenario: wacky adventures; Genre: romantic comedy; Style: verbose, creative]"></textarea>
+                        <textarea id="extension_floating_chara" class="text_pole textarea_compact" rows="8" maxlength="50000" placeholder="Example:&#10;[Scenario: wacky adventures; Genre: romantic comedy; Style: verbose, creative]"></textarea>
                         <div class="extension_token_counter">
                             Tokens: <span id="extension_floating_chara_token_counter">0</span>
                         </div>
@@ -5247,30 +5292,49 @@
                     </div>
                     <div class="inline-drawer-content">
                         <small>Will be automatically added as the Author's Note for all new chats.</small>
-                        <textarea id="extension_floating_default" class="text_pole" rows="8" maxlength="50000" placeholder="Example:&#10;[Scenario: wacky adventures; Genre: romantic comedy; Style: verbose, creative]"></textarea>
+                        <textarea id="extension_floating_default" class="text_pole textarea_compact" rows="8" maxlength="50000" placeholder="Example:&#10;[Scenario: wacky adventures; Genre: romantic comedy; Style: verbose, creative]"></textarea>
                         <div class="extension_token_counter">
                             Tokens: <span id="extension_floating_default_token_counter">0</span>
                         </div>
                         <div class="floating_prompt_radio_group">
-                            <label>
-                                <input type="radio" name="extension_default_position" value="0" />
-                                After Main Prompt / Story String
+                            <label class="checkbox_label" for="extension_default_position_before">
+                                <input type="radio" id="extension_default_position_before" name="extension_default_position" value="2" />
+                                <span data-i18n="Before Main Prompt / Story String">Before Main Prompt / Story String</span>
                             </label>
-                            <label>
-                                <input type="radio" name="extension_default_position" value="1" />
-                                In-chat @ Depth <input id="extension_default_depth" class="text_pole widthUnset" type="number" min="0" max="999" />
+                            <label class="checkbox_label" for="extension_default_position_after">
+                                <input type="radio" id="extension_default_position_after" name="extension_default_position" value="0" />
+                                <span data-i18n="After Main Prompt / Story String">After Main Prompt / Story String</span>
+                            </label>
+                            <label class="checkbox_label alignItemsCenter" for="extension_default_position_depth">
+                                <input type="radio" id="extension_default_position_depth" name="extension_default_position" value="1" />
+                                <span data-i18n="In-chat @ Depth">In-chat @ Depth</span>
+                                <input id="extension_default_depth" class="text_pole textarea_compact widthNatural" type="number" min="0" max="999" />
+                                <span data-i18n="as">as</span>
+                                <select id="extension_default_role" class="text_pole widthNatural">
+                                    <option value="0">System</option>
+                                    <option value="1">User</option>
+                                    <option value="2">Assistant</option>
+                                </select>
                             </label>
                         </div>
-                        <label for="extension_default_interval">Insertion Frequency</label>
-                        <input id="extension_default_interval" class="text_pole widthUnset" type="number" min="0" max="999" /><small> (0 = Disable, 1 = Always)</small>
+                        <div class="flex-container">
+                            <label for="extension_default_interval" class="flex-container flexNoGap flexFlowColumn">
+                                <span data-i18n="Insertion Frequency">Insertion Frequency</span>
+                                <small data-i18n="(0 = Disable, 1 = Always)">(0 = Disable, 1 = Always)</small>
+                            </label>
+                            <input id="extension_default_interval" class="text_pole widthUnset" type="number" min="0" max="999" />
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <div id="cfgConfig" class="drawer-content flexGap5">
-            <div class="panelControlBar flex-container">
-                <div id="cfgConfigHeader" class="fa-solid fa-grip drag-grabber"></div>
-                <div id="CFGClose" class="fa-solid fa-circle-xmark floating_panel_close"></div>
+            <div class="panelControlBar flex-container alignItemsBaseline">
+                <div id="cfgConfigheader" class="fa-fw fa-solid fa-grip drag-grabber"></div>
+                <div id="cfgConfigMaximize" class="inline-drawer-maximize">
+                    <i class="floating_panel_maximize fa-fw fa-solid fa-window-maximize"></i>
+                </div>
+                <div id="CFGClose" class="fa-fw fa-solid fa-circle-xmark floating_panel_close"></div>
             </div>
             <div name="cfgConfigHolder" class="scrollY">
                 <div id="chat_cfg_container">
@@ -5574,8 +5638,8 @@
         <div class="draggable">
             <div class="dragTitle"></div>
             <div class="panelControlBar flex-container">
-                <div class="fa-solid fa-grip drag-grabber"></div>
-                <div class="fa-solid fa-circle-xmark dragClose"></div>
+                <div class="fa-fw fa-solid fa-grip drag-grabber"></div>
+                <div class="fa-fw fa-solid fa-circle-xmark dragClose"></div>
             </div>
         </div>
     </template>

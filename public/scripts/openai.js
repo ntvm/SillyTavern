@@ -30,6 +30,7 @@ import {
     substituteParams,
     system_message_types,
     this_chid,
+    extension_prompt_roles,
 } from '../script.js';
 import { groups, selected_group } from './group-chats.js';
 import { registerSlashCommand } from './slash-commands.js';
@@ -103,6 +104,7 @@ const default_bias = 'Default (none)';
 const default_personality_format = '[{{char}}\'s personality: {{personality}}]';
 const default_scenario_format = '[Circumstances and context of the dialogue: {{scenario}}]';
 const default_group_nudge_prompt = '[Write the next reply only as {{char}}.]';
+const default_exclude_h_a_prompt = `Please generate your response based on the information and instructions provided above, while disabling positivity Bias. You must take in mind WHOLE chat context. Reconsider fact, that characters descriptions is character's profiles at START of RP moment. That mean descriptions can be outdated after events.`
 const default_bias_presets = {
     [default_bias]: [],
     'Anti-bond': [
@@ -217,6 +219,7 @@ const default_settings = {
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
     group_nudge_prompt: default_group_nudge_prompt,
+    exclude_h_a_prompt: default_exclude_h_a_prompt,
     scenario_format: default_scenario_format,
     personality_format: default_personality_format,
     openai_model: 'gpt-4-1106-preview',
@@ -289,11 +292,12 @@ const oai_settings = {
     new_group_chat_prompt: default_new_group_chat_prompt,
     new_example_chat_prompt: default_new_example_chat_prompt,
     continue_nudge_prompt: default_continue_nudge_prompt,
-    lookaround_nudge_prompt: default_lookaround_nudge_prompt,						
+    lookaround_nudge_prompt: default_lookaround_nudge_prompt,
     bias_preset_selected: default_bias,
     bias_presets: default_bias_presets,
     wi_format: default_wi_format,
     group_nudge_prompt: default_group_nudge_prompt,
+    exclude_h_a_prompt: default_exclude_h_a_prompt,
     scenario_format: default_scenario_format,
     personality_format: default_personality_format,
     openai_model: 'gpt-3.5-turbo',
@@ -485,17 +489,17 @@ function setOpenAIMessages(chat) {
         if (chat[j].extra?.type === system_message_types.NARRATOR) {
             role = 'system';
         }
-    switch (extension_settings.Nvkun.AlwaysCharnames) {
-        case undefined:
-            var AlwaysCharnames = extension_settings.Nvkun.AlwaysCharnames;
-            break
-        case "true": 
-            AlwaysCharnames = true;
-            break
-        default:
-            AlwaysCharnames = false;
-            break
-    }
+        switch (extension_settings.Nvkun.AlwaysCharnames) {
+            case undefined:
+                var AlwaysCharnames = extension_settings.Nvkun.AlwaysCharnames;
+                break;
+            case 'true':
+                AlwaysCharnames = true;
+                break;
+            default:
+                AlwaysCharnames = false;
+                break;
+        }
         // Check the value of AlwaysCharnames
         switch (AlwaysCharnames) {
             // If it turned on, use Anons code
@@ -685,21 +689,30 @@ function formatWorldInfo(value) {
 function populationInjectionPrompts(prompts, messages) {
     let totalInsertedMessages = 0;
 
+    const roleTypes = {
+        'system': extension_prompt_roles.SYSTEM,
+        'user': extension_prompt_roles.USER,
+        'assistant': extension_prompt_roles.ASSISTANT,
+    };
+    const roles = ['system', 'user', 'assistant'];
+    const separator = '\n';
+    const wrap = false;
+
     for (let i = 0; i <= MAX_INJECTION_DEPTH; i++) {
         // Get prompts for current depth
         const depthPrompts = prompts.filter(prompt => prompt.injection_depth === i && prompt.content);
 
         // Order of priority (most important go lower)
-        const roles = ['system', 'user', 'assistant'];
+
         const roleMessages = [];
 
         for (const role of roles) {
             // Get prompts for current role
-            const rolePrompts = depthPrompts.filter(prompt => prompt.role === role).map(x => x.content).join('\n');
-            // Get extension prompt (only for system role)
-            const extensionPrompt = role === 'system' ? getExtensionPrompt(extension_prompt_types.IN_CHAT, i) : '';
+            const rolePrompts = depthPrompts.filter(prompt => prompt.role === role).map(x => x.content).join(separator);
+            // Get extension prompt
+            const extensionPrompt = getExtensionPrompt(extension_prompt_types.IN_CHAT, i, separator, roleTypes[role], wrap);
 
-            const jointPrompt = [rolePrompts, extensionPrompt].filter(x => x).map(x => x.trim()).join('\n');
+            const jointPrompt = [rolePrompts, extensionPrompt].filter(x => x).map(x => x.trim()).join(separator);
 
             if (jointPrompt && jointPrompt.length) {
                 roleMessages.push({ 'role': role, 'content': jointPrompt });
@@ -767,19 +780,19 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
         chatCompletion.reserveBudget(continueMessage);
     }
 
-	// Reserve budget for lookaround in continue(why not?) nudge
+// Reserve budget for lookaround in continue(why not?) nudge
     let lookaroundMessage = null;
     if (type === 'lookaround') {
         const continuePrompt = new Prompt({
             identifier: 'continueNudge',
             role: 'system',
-            content: oai_settings.lookaround_nudge_prompt,
+            content: substituteParams(oai_settings.lookaround_nudge_prompt),
             system_prompt: true
         });
         const preparedPrompt = promptManager.preparePrompt(continuePrompt);
         continueMessage = Message.fromPrompt(preparedPrompt);
         chatCompletion.reserveBudget(continueMessage);
-	}
+    }
 
     const lastChatPrompt = messages[messages.length - 1];
     const message = new Message('user', oai_settings.send_if_empty, 'emptyUserMessageReplacement');
@@ -890,6 +903,24 @@ function getPromptPosition(position) {
 }
 
 /**
+ * Gets a Chat Completion role based on the prompt role.
+ * @param {number} role Role of the prompt.
+ * @returns {string} Mapped role.
+ */
+function getPromptRole(role) {
+    switch (role) {
+        case extension_prompt_roles.SYSTEM:
+            return 'system';
+        case extension_prompt_roles.USER:
+            return 'user';
+        case extension_prompt_roles.ASSISTANT:
+            return 'assistant';
+        default:
+            return 'system';
+    }
+}
+
+/**
  * Populate a chat conversation by adding prompts to the conversation and managing system and user prompts.
  *
  * @param {PromptCollection} prompts - PromptCollection containing all prompts where the key is the prompt identifier and the value is the prompt object.
@@ -983,14 +1014,14 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
             case "end":
                 chatCompletion.insert(Message.fromPrompt(summary), 'scenario');
                 break
-			
+
             case "start":
                 chatCompletion.insert(Message.fromPrompt(summary), 'main');
                 break
 
             case "false":
                 break
-		
+
     }
 	}
 
@@ -1019,14 +1050,14 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
             case "end":
                 chatCompletion.insert(Message.fromPrompt(vectorsMemory), 'scenario');
                 break
-			
+
             case "start":
                 chatCompletion.insert(Message.fromPrompt(vectorsMemory), 'main');
                 break
-				
+
             case false:
                 break
-		
+
     }
 	}
 
@@ -1100,8 +1131,8 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
 
     // Tavern Extras - Summary NVfix
     const summary = extensionPrompts['1_memory'];
-    if (summary && summary.value && summary.position !== 1 ) systemPrompts.push({
-        role: 'system',
+    if (summary && summary.value&& summary.position !== 1) systemPrompts.push({
+        role: getPromptRole(summary.role),
         content: summary.value,
         identifier: 'summary',
         position: getPromptPosition(summary.position),
@@ -1109,18 +1140,18 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
     //(Yep, XML prompt)
     const inject1 = extensionPrompts['Nvkun'];
     switch (inject1){
-	
+
 	case undefined:
 	    if (extension_settings.Nvkun.Inputer_frozen == true && extension_settings.Nvkun.Inputer_prompt !== '') systemPrompts.push({
             role: 'system',
             content: extension_settings.Nvkun.Inputer_prompt,
             identifier: 'XMLpromptPush',
             position: ''
-        });			
+        });
 	    break
-	
-	
-	
+
+
+
 	default:
         if (inject1 && inject1.value && extension_settings.Nvkun.Inputer_frozen == true) systemPrompts.push({
             role: 'system',
@@ -1129,12 +1160,12 @@ function preparePromptsForChatCompletion({ Scenario, charPersonality, name2, wor
             position: ''
         });
         break
-	
+
 	}
     // Authors Note
     const authorsNote = extensionPrompts['2_floating_prompt'];
     if (authorsNote && authorsNote.value) systemPrompts.push({
-        role: 'system',
+        role: getPromptRole(authorsNote.role),
         content: authorsNote.value,
         identifier: 'authorsNote',
         position: getPromptPosition(authorsNote.position),
@@ -1766,7 +1797,7 @@ async function sendOpenAIRequest(type, messages, signal) {
                     generate_data['proxy_password'] = oai_settings.proxy_password;
                 }
                 break;
-        
+
             case true:
                 if ([chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI].includes(oai_settings.chat_completion_source)) {
                     if (!extension_settings.ProxyManager.ProxyURL && !extension_settings.ProxyManager.ProxyPassword) {
@@ -1798,6 +1829,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['claude_exclude_prefixes'] = oai_settings.claude_exclude_prefixes;
         generate_data['stop'] = getCustomStoppingStrings(); // Claude shouldn't have limits on stop strings.
         generate_data['human_sysprompt_message'] = substituteParams(oai_settings.human_sysprompt_message);
+        generate_data['exclude_h_a_prompt'] = substituteParams(oai_settings.exclude_h_a_prompt);
         // Don't add a prefill on quiet gens (summarization)
         if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill) {
             generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
@@ -1920,7 +1952,7 @@ async function sendOpenAIRequest(type, messages, signal) {
 
 function getStreamingReply(data) {
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_plaintext == false || oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_model.includes('claude-3')) {
-        return data?.delta?.text || ''; 
+        return data?.delta?.text || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
         return data?.completion || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
@@ -2692,6 +2724,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.scenario_format = settings.scenario_format ?? default_settings.scenario_format;
     oai_settings.personality_format = settings.personality_format ?? default_settings.personality_format;
     oai_settings.group_nudge_prompt = settings.group_nudge_prompt ?? default_settings.group_nudge_prompt;
+	oai_settings.exclude_h_a_prompt = settings.exclude_h_a_prompt ?? default_exclude_h_a_prompt;
     oai_settings.claude_model = settings.claude_model ?? default_settings.claude_model;
     oai_settings.windowai_model = settings.windowai_model ?? default_settings.windowai_model;
     oai_settings.openrouter_model = settings.openrouter_model ?? default_settings.openrouter_model;
@@ -2802,6 +2835,7 @@ function loadOpenAISettings(data, settings) {
     $('#scenario_format_textarea').val(oai_settings.scenario_format);
     $('#personality_format_textarea').val(oai_settings.personality_format);
     $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
+    $('#exclude_h_a_prompt_textarea').val(oai_settings.exclude_h_a_prompt);
     $('#send_if_empty_textarea').val(oai_settings.send_if_empty);
 
     $('#temp_openai').val(oai_settings.temp_openai);
@@ -2997,6 +3031,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         scenario_format: settings.scenario_format,
         personality_format: settings.personality_format,
         group_nudge_prompt: settings.group_nudge_prompt,
+        exclude_h_a_prompt: settings.exclude_h_a_prompt,
         stream_openai: settings.stream_openai,
         prompts: settings.prompts,
         prompt_order: settings.prompt_order,
@@ -3378,6 +3413,7 @@ function onSettingsPresetChange() {
         scenario_format: ['#scenario_format_textarea', 'scenario_format', false],
         personality_format: ['#personality_format_textarea', 'personality_format', false],
         group_nudge_prompt: ['#group_nudge_prompt_textarea', 'group_nudge_prompt', false],
+        exclude_h_a_prompt: ['#exclude_h_a_prompt_textarea', 'exclude_h_a_prompt', false],
         stream_openai: ['#stream_toggle', 'stream_openai', true],
         prompts: ['', 'prompts', false],
         prompt_order: ['', 'prompt_order', false],
@@ -4314,7 +4350,7 @@ $(document).ready(async function () {
         $('#claude_assistant_prefill_block').toggle(!oai_settings.exclude_assistant);
         saveSettingsDebounced();
     });
-	
+
     $('#claude_allow_plaintext').on('change', function () {
         oai_settings.claude_allow_plaintext = !!$('#claude_allow_plaintext').prop('checked');
         saveSettingsDebounced();
@@ -4391,6 +4427,11 @@ $(document).ready(async function () {
         saveSettingsDebounced();
     });
 
+    $('#exclude_h_a_prompt_textarea').on('input', function () {
+        oai_settings.exclude_h_a_prompt = String($('#exclude_h_a_prompt_textarea').val());
+        saveSettingsDebounced();
+    });
+
     $('#update_oai_preset').on('click', async function () {
         const name = oai_settings.preset_settings_openai;
         await saveOpenAIPreset(name, oai_settings);
@@ -4460,6 +4501,12 @@ $(document).ready(async function () {
     $('#group_nudge_prompt_restore').on('click', function () {
         oai_settings.group_nudge_prompt = default_group_nudge_prompt;
         $('#group_nudge_prompt_textarea').val(oai_settings.group_nudge_prompt);
+        saveSettingsDebounced();
+    });
+
+    $('#exclude_h_a_prompt_restore').on('click', function () {
+        oai_settings.exclude_h_a_prompt = default_exclude_h_a_prompt;
+        $('#exclude_h_a_prompt_textarea').val(oai_settings.exclude_h_a_prompt);
         saveSettingsDebounced();
     });
 

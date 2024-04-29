@@ -143,7 +143,8 @@ function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFi
         messages.splice(0, i);
 
         // Check if the first message in the array is of type user, if not, interject with humanMsgFix or a blank message.
-        if (messages.length > 0 && messages[0].role !== 'user') {
+        // Also prevents erroring out if the messages array is empty.
+        if (messages.length === 0 || (messages.length > 0 && messages[0].role !== 'user')) {
             messages.unshift({
                 role: 'user',
                 content: humanMsgFix || '[Start a new chat]',
@@ -224,6 +225,34 @@ function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFi
 
 
     return { messages: mergedMessages, systemPrompt: systemPrompt.trim() };
+}
+
+function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAssistantPrefill, withSysPromptSupport, useSystemPrompt, addSysHumanMsg, HumAssistOff, SystemFul, excludePrefixes){
+
+    //Prepare messages for claude.
+    //When 'Exclude Human/Assistant prefixes' checked, setting messages role to the 'system'(last message is exception).
+    if (messages.length > 0) {
+        if (excludePrefixes) {
+            messages.slice(0, -1).forEach(message => message.role = 'system');
+        } else {
+            messages[0].role = 'system';
+        }
+    }
+
+    let requestPrompt = '';
+
+    requestPrompt = requestPrompt + messages.map((v) => {
+        return v.content + '\n-----\n\n';
+    }).join('');
+
+    if (!addAssistantPrefill) {
+        addAssistantPrefill = '';
+    }
+
+
+    // eslint-disable-next-line quotes
+    let Twosteps = [{ role: 'user', content: HumAssistOff },{ role: 'assistant', content: addAssistantPrefill.trimEnd() }];
+    return { messages: Twosteps, systemPrompt: requestPrompt.trim() };
 }
 
 /**
@@ -376,5 +405,6 @@ module.exports = {
     convertClaudeMessages,
     convertGooglePrompt,
     convertTextCompletionPrompt,
+    convertClaudeExperementalMessages,
     convertCohereMessages,
 };
