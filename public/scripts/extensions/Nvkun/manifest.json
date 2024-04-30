@@ -3,6 +3,7 @@
     "loading_order": 9,
     "requires": [],
     "js": "index.js",
+    "css": "style.css",
     "author": "Nv-Kun",
     "version": "1.0.0",
     "homePage": "https://github.com/ntvm/SillyTavern"

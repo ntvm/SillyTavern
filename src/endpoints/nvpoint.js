@@ -89,7 +89,10 @@ router.post('/saveNv', jsonParser, async (request, response) => {
         return response.sendStatus(400);
     }
 
-    const filename = path.join(DIRECTORIES.NvSettings, sanitize(request.body.name) + '.json');
+//router.use('/user/nvsets/*', createRouteHandler(req => req.user.directories.NvSettings));
+//router.use('/user/Proxymanager/*', createRouteHandler(req => req.user.directories.ProxyManager));
+    //const fileName = path.join(request.user.directories.backgrounds, sanitize(request.body.bg));
+    const filename = path.join(request.user.directories.NvSettings, sanitize(request.body.name) + '.json');
     fs.writeFileSync(filename, JSON.stringify(request.body, null, 4), 'utf8');
 
     return response.sendStatus(200);
@@ -100,7 +103,7 @@ router.post('/saveProxy', jsonParser, async (request, response) => {
         return response.sendStatus(400);
     }
 
-    const filename = path.join(DIRECTORIES.ProxyManager, sanitize(request.body.name) + '.json');
+    const filename = path.join(request.user.directories.ProxyManager, sanitize(request.body.name) + '.json');
     fs.writeFileSync(filename, JSON.stringify(request.body, null, 4), 'utf8');
 
     return response.sendStatus(200);
@@ -111,7 +114,7 @@ router.post('/deleteProxy', jsonParser, async (request,response)=>{
         return response.sendStatus(400);
     }
 
-    const filename = path.join(DIRECTORIES.ProxyManager,sanitize(request.body.name)+'.json');
+    const filename = path.join(request.user.directories.ProxyManager,sanitize(request.body.name)+'.json');
     if(fs.existsSync(filename)){
         fs.unlinkSync(filename);
         return response.sendStatus(200);

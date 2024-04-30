@@ -666,5 +666,21 @@
     {
         "filename": "presets/quick-replies/Default.json",
         "type": "quick_replies"
+    },
+        {
+        "filename": "presets/NvSettings/Default.json",
+        "type": "NvSettings"
+    },
+    {
+        "filename": "presets/NvSettings/XML7.4.json",
+        "type": "NvSettings"
+    },
+    {
+        "filename": "presets/NvSettings/XML9.json",
+        "type": "NvSettings"
+    },
+    {
+        "filename": "presets/OpenAI_Settings/Default.json",
+        "type": "openai_preset"
     }
 ]

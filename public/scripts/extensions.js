@@ -185,6 +185,8 @@ let extension_settings = {
     },
     attachments: [],
     character_attachments: {},
+    chub: {},
+    timeline: {},
 };
 
 let modules = [];
