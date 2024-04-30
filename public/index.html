@@ -1717,11 +1717,11 @@
                                                             Prepend character names to message contents.
                                                         </small>
                                                     </label>
+                                                    <!-- Hidden input for loading radio buttons from presets. Don't remove! -->
+                                                    <input type="hidden" id="names_behavior" name="names_behavior" class="displayNone" />
                                                     <div class="toggle-description justifyLeft marginTop5">
                                                         <span data-i18n="Helps the model to associate messages with characters.">Helps the model to associate messages with characters.</span>
                                                     </div>
-                                                    <!-- Hidden input for loading radio buttons from presets. Don't remove! -->
-                                                    <input type="hidden" id="names_behavior" class="displayNone" />
                                                 </div>
                                                 <h4 class="range-block-title justifyLeft marginBot5 flex-container alignItemsCenter">
                                                     <span data-i18n="Continue Postfix">Continue Postfix</span>
@@ -1740,9 +1740,9 @@
                                                         <input type="radio" id="continue_postfix_double_newline" name="continue_postfix" value="2">
                                                         <span data-i18n="Double Newline">Double Newline</span>
                                                     </label>
+                                                 <!-- Hidden input for loading radio buttons from presets. Don't remove! -->
+                                                    <input type="hidden" id="continue_postfix" name="continue_postfix" class="displayNone" />
                                                 </div>
-                                                <!-- Hidden input for loading radio buttons from presets. Don't remove! -->
-                                                <input type="hidden" id="continue_postfix" class="displayNone" />
                                                 <div id="character_open_media_overrides" class="menu_button menu_button_icon open_media_overrides" title="Click to allow/forbid the use of external media for this character." data-i18n="[title]Click to allow/forbid the use of external media for this character.">
                                                     <i id="character_media_allowed_icon" class="fa-solid fa-fw fa-link"></i>
                                                     <i id="character_media_forbidden_icon" class="fa-solid fa-fw fa-link-slash"></i>

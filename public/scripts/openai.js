@@ -25,6 +25,7 @@ import {
     name2,
     replaceItemizedPromptText,
     resultCheckStatus,
+    saveChatDebounced,
     saveSettingsDebounced,
     setOnlineStatus,
     startStatusLoading,
@@ -185,6 +186,7 @@ const character_names_behavior = {
     NONE: 0,
     COMPLETION: 1,
     CONTENT: 2,
+    OVERRIDE: 3,
 };
 
 const continue_postfix_types = {
@@ -273,6 +275,7 @@ const default_settings = {
     claude_use_sysprompt: false,
     claude_exclude_prefixes: false,
     claude_allow_plaintext: true,
+    exclude_assistant: false,
     use_makersuite_sysprompt: true,
     use_alt_scale: false,
     squash_system_messages: false,
@@ -355,6 +358,8 @@ const oai_settings = {
     claude_use_sysprompt: false,
     claude_exclude_prefixes: false,
     claude_allow_plaintext: false,
+    names_in_completion: false,
+    exclude_assistant: false,
     use_makersuite_sysprompt: true,
     use_alt_scale: false,
     squash_system_messages: false,
@@ -512,7 +517,7 @@ function setOpenAIMessages(chat) {
     let names_behavior_x = oai_settings.names_behavior;
     switch (extension_settings.Nvkun.AlwaysCharnames) {
         case 'true':
-            names_behavior_x = 'override';
+            names_behavior_x = 3;
             break;
         default:
             break;
@@ -530,8 +535,8 @@ function setOpenAIMessages(chat) {
 
         // for groups or sendas command - prepend a character's name
         switch (names_behavior_x) {
-            case 'override':
-			    content = `${chat[j].name}: ${content}`;
+            case character_names_behavior.OVERRIDE:
+		        content = `${chat[j].name}: ${content}`;
                 break;
             case character_names_behavior.NONE:
                 if (selected_group || (chat[j].force_avatar && chat[j].name !== name1 && chat[j].extra?.type !== system_message_types.NARRATOR)) {
@@ -2840,11 +2845,6 @@ function loadOpenAISettings(data, settings) {
     oai_settings.names_behavior = settings.names_behavior ?? default_settings.names_behavior;
     oai_settings.continue_postfix = settings.continue_postfix ?? default_settings.continue_postfix;
 
-    // Migrate from old settings
-    if (settings.names_in_completion === true) {
-        oai_settings.names_behavior = character_names_behavior.COMPLETION;
-    }
-
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
     if (settings.claude_allow_plaintext !== undefined) oai_settings.claude_allow_plaintext = !!settings.claude_allow_plaintext;
     if (settings.names_in_completion !== undefined) oai_settings.names_in_completion = !!settings.names_in_completion;
@@ -2967,6 +2967,14 @@ function loadOpenAISettings(data, settings) {
         oai_settings.chat_completion_source = chat_completion_sources.MAKERSUITE;
     }
 
+    // Migrate from old settings
+    if (settings.names_in_completion === true) {
+        oai_settings.names_behavior = character_names_behavior.COMPLETION;
+        oai_settings.names_in_completion = false;
+        settings.names_in_completion = false;
+        saveSettingsDebounced();
+    }
+
     setNamesBehaviorControls();
     setContinuePostfixControls();
 
@@ -2988,8 +2996,6 @@ function setNamesBehaviorControls() {
             $('#character_names_content').prop('checked', true);
             break;
     }
-
-
     const checkedItemText = $('input[name="character_names"]:checked ~ span').text().trim();
     $('#character_names_display').text(checkedItemText);
 }
@@ -3176,7 +3182,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         exclude_assistant: settings.exclude_assistant,
 		claude_allow_plaintext: settings.claude_allow_plaintext,
         claude_use_sysprompt: settings.claude_use_sysprompt,
-        claude_allow_plaintext: settings.claude_allow_plaintext,
+        exclude_assistant: settings.exclude_assistant,
         exclude_h_a_prompt: settings.exclude_h_a_prompt,
         claude_exclude_prefixes: settings.claude_exclude_prefixes,
         use_makersuite_sysprompt: settings.use_makersuite_sysprompt,
@@ -4594,7 +4600,7 @@ $(document).ready(async function () {
     });
 
     $("#lookaround_nudge_prompt_textarea").on('input', function () {
-        oai_settings.lookaround_nudge_prompt = $('#lookaround_nudge_prompt_textarea').val();
+        oai_settings.lookaround_nudge_prompt = String($('#lookaround_nudge_prompt_textarea').val());
         saveSettingsDebounced();
     });
 
@@ -4809,7 +4815,7 @@ $(document).ready(async function () {
     });
 
     $('#names_behavior').on('input', function () {
-        oai_settings.names_behavior = Number($(this).val());
+        oai_settings.names_behavior = ($(this).val());
         setNamesBehaviorControls();
         saveSettingsDebounced();
     });
