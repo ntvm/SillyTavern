@@ -82,6 +82,7 @@ import {
     flushEphemeralStoppingStrings,
     context_presets,
     resetMovableStyles,
+    forceCharacterEditorTokenize,
 } from './scripts/power-user.js';
 
 import {
@@ -151,9 +152,11 @@ import {
     Stopwatch,
     isValidUrl,
     ensureImageFormatSupported,
+    flashHighlight,
 } from './scripts/utils.js';
+import { debounce_timeout } from './scripts/constants.js';
 
-import { ModuleWorkerWrapper, doDailyExtensionUpdatesCheck, extension_settings, getContext, loadExtensionSettings, renderExtensionTemplate, runGenerationInterceptors, saveMetadataDebounced, writeExtensionField } from './scripts/extensions.js';
+import { ModuleWorkerWrapper, doDailyExtensionUpdatesCheck, extension_settings, getContext, loadExtensionSettings, renderExtensionTemplate, renderExtensionTemplateAsync, runGenerationInterceptors, saveMetadataDebounced, writeExtensionField } from './scripts/extensions.js';
 import { COMMENT_NAME_DEFAULT, executeSlashCommands, getSlashCommandsHelp, processChatSlashCommands, registerSlashCommand } from './scripts/slash-commands.js';
 import {
     tag_map,
@@ -201,8 +204,8 @@ import {
     instruct_presets,
     selectContextPreset,
 } from './scripts/instruct-mode.js';
-import { applyLocale, initLocales } from './scripts/i18n.js';
-import { getFriendlyTokenizerName, getTokenCount, getTokenizerModel, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
+import { initLocales } from './scripts/i18n.js';
+import { getFriendlyTokenizerName, getTokenCount, getTokenCountAsync, getTokenizerModel, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import { createPersona, initPersonas, selectCurrentPersona, setPersonaDescription, updatePersonaNameIfExists } from './scripts/personas.js';
 import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_settings } from './scripts/backgrounds.js';
 import { hideLoader, showLoader } from './scripts/loader.js';
@@ -211,7 +214,10 @@ import { loadMancerModels, loadOllamaModels, loadTogetherAIModels, loadInfermati
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, getCurrentEntityId } from './scripts/chats.js';
 import { initPresetManager } from './scripts/preset-manager.js';
 import { evaluateMacros } from './scripts/macros.js';
+import { currentUser, setUserControls } from './scripts/user.js';
 import { callGenericPopup } from './scripts/popup.js';
+import { renderTemplate, renderTemplateAsync } from './scripts/templates.js';
+import { ScraperManager } from './scripts/scrapers.js';
 
 //exporting functions and vars for mods
 export {
@@ -286,7 +292,22 @@ export {
     printCharactersDebounced,
     isOdd,
     countOccurrences,
+    renderTemplate,
+    itemizedPrompts,
+    findItemizedPromptSet,
+    itemizedParams,
 };
+
+/**
+ * Wait for page to load before continuing the app initialization.
+ */
+await new Promise((resolve) => {
+    if (document.readyState === 'complete') {
+        resolve();
+    } else {
+        window.addEventListener('load', resolve);
+    }
+});
 
 showLoader();
 // Yoink preloader entirely; it only exists to cover up unstyled content while loading JS
@@ -371,6 +392,11 @@ DOMPurify.addHook('uponSanitizeElement', (node, _, config) => {
                 mediaBlocked = true;
                 node.remove();
             }
+
+            if (mediaBlocked && (node instanceof HTMLMediaElement)) {
+                node.autoplay = false;
+                node.pause();
+            }
         }
             break;
     }
@@ -443,6 +469,8 @@ export const event_types = {
     CHARACTER_DELETED: 'characterDeleted',
     CHARACTER_DUPLICATED: 'character_duplicated',
     SMOOTH_STREAM_TOKEN_RECEIVED: 'smooth_stream_token_received',
+    FILE_ATTACHMENT_DELETED: 'file_attachment_deleted',
+    WORLDINFO_FORCE_ACTIVATE: 'worldinfo_force_activate',
 };
 
 export const eventSource = new EventEmitter();
@@ -522,7 +550,8 @@ let fav_ch_checked = false;
 let scrollLock = false;
 export let abortStatusCheck = new AbortController();
 
-const durationSaveEdit = 1000;
+/** @type {number} The debounce timeout used for chat/settings save. debounce_timeout.long: 1.000 ms */
+const durationSaveEdit = debounce_timeout.relaxed;
 const saveSettingsDebounced = debounce(() => saveSettings(), durationSaveEdit);
 export const saveCharacterDebounced = debounce(() => $('#create_button').trigger('click'), durationSaveEdit);
 
@@ -532,7 +561,7 @@ export const saveCharacterDebounced = debounce(() => $('#create_button').trigger
  *
  * The printing will also always reprint all filter options of the global list, to keep them up to date.
  */
-const printCharactersDebounced = debounce(() => { printCharacters(false); }, 100);
+const printCharactersDebounced = debounce(() => { printCharacters(false); }, debounce_timeout.quick);
 
 /**
  * @enum {string} System message types
@@ -575,14 +604,14 @@ export const MAX_INJECTION_DEPTH = 1000;
 
 let system_messages = {};
 
-function getSystemMessages() {
+async function getSystemMessages() {
     system_messages = {
         help: {
             name: systemUserName,
             force_avatar: system_avatar,
             is_user: false,
             is_system: true,
-            mes: renderTemplate('help'),
+            mes: await renderTemplateAsync('help'),
         },
         slash_commands: {
             name: systemUserName,
@@ -596,21 +625,21 @@ function getSystemMessages() {
             force_avatar: system_avatar,
             is_user: false,
             is_system: true,
-            mes: renderTemplate('hotkeys'),
+            mes: await renderTemplateAsync('hotkeys'),
         },
         formatting: {
             name: systemUserName,
             force_avatar: system_avatar,
             is_user: false,
             is_system: true,
-            mes: renderTemplate('formatting'),
+            mes: await renderTemplateAsync('formatting'),
         },
         macros: {
             name: systemUserName,
             force_avatar: system_avatar,
             is_user: false,
             is_system: true,
-            mes: renderTemplate('macros'),
+            mes: await renderTemplateAsync('macros'),
         },
         welcome:
         {
@@ -618,7 +647,7 @@ function getSystemMessages() {
             force_avatar: system_avatar,
             is_user: false,
             is_system: true,
-            mes: renderTemplate('welcome'),
+            mes: await renderTemplateAsync('welcome'),
         },
         group: {
             name: systemUserName,
@@ -663,60 +692,16 @@ function getSystemMessages() {
 registerPromptManagerMigration();
 
 $(document).ajaxError(function myErrorHandler(_, xhr) {
+    // Cohee: CSRF doesn't error out in multiple tabs anymore, so this is unnecessary
+    /*
     if (xhr.status == 403) {
         toastr.warning(
             'doubleCsrf errors in console are NORMAL in this case. If you want to run ST in multiple tabs, start the server with --disableCsrf option.',
             'Looks like you\'ve opened SillyTavern in another browser tab',
             { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true },
         );
-    }
+    } */
 });
-
-/**
- * Loads a URL content using XMLHttpRequest synchronously.
- * @param {string} url URL to load synchronously
- * @returns {string} Response text
- */
-function getUrlSync(url) {
-    console.debug('Loading URL synchronously', url);
-    const request = new XMLHttpRequest();
-    request.open('GET', url, false); // `false` makes the request synchronous
-    request.send();
-
-    if (request.status >= 200 && request.status < 300) {
-        return request.responseText;
-    }
-
-    throw new Error(`Error loading ${url}: ${request.status} ${request.statusText}`);
-}
-
-const templateCache = new Map();
-
-export function renderTemplate(templateId, templateData = {}, sanitize = true, localize = true, fullPath = false) {
-    try {
-        const pathToTemplate = fullPath ? templateId : `/scripts/templates/${templateId}.html`;
-        let template = templateCache.get(pathToTemplate);
-        if (!template) {
-            const templateContent = getUrlSync(pathToTemplate);
-            template = Handlebars.compile(templateContent);
-            templateCache.set(pathToTemplate, template);
-        }
-        let result = template(templateData);
-
-        if (sanitize) {
-            result = DOMPurify.sanitize(result);
-        }
-
-        if (localize) {
-            result = applyLocale(result);
-        }
-
-        return result;
-    } catch (err) {
-        console.error('Error rendering template', templateId, templateData, err);
-        toastr.error('Check the DevTools console for more information.', 'Error rendering template');
-    }
-}
 
 async function getClientVersion() {
     try {
@@ -744,6 +729,7 @@ function reloadMarkdownProcessor(render_formulas = false) {
             underline: true,
             tables: true,
             parseImgDimensions: true,
+            simpleLineBreaks: true,
             extensions: [
                 showdownKatex(
                     {
@@ -762,6 +748,7 @@ function reloadMarkdownProcessor(render_formulas = false) {
             parseImgDimensions: true,
             tables: true,
             underline: true,
+            simpleLineBreaks: true,
             extensions: [markdownUnderscoreExt()],
         });
     }
@@ -781,7 +768,7 @@ function getCurrentChatId() {
     if (selected_group) {
         return groups.find(x => x.id == selected_group)?.chat_id;
     }
-    else if (this_chid) {
+    else if (this_chid !== undefined) {
         return characters[this_chid]?.chat;
     }
 }
@@ -874,7 +861,7 @@ export let active_character = '';
 export let active_group = '';
 
 export const entitiesFilter = new FilterHelper(printCharactersDebounced);
-export const personasFilter = new FilterHelper(debounce(getUserAvatars, 100));
+export const personasFilter = new FilterHelper(debounce(getUserAvatars, debounce_timeout.quick));
 
 export function getRequestHeaders() {
     return {
@@ -898,11 +885,11 @@ async function firstLoadInit() {
         throw new Error('Initialization failed');
     }
 
+    await getSystemMessages();
+    sendSystemMessage(system_message_types.WELCOME);
     await getClientVersion();
     await readSecretState();
     await getSettings();
-    getSystemMessages();
-    sendSystemMessage(system_message_types.WELCOME);
     initLocales();
     initTags();
     await getUserAvatars(true, user_avatar);
@@ -1204,7 +1191,7 @@ export function resultCheckStatus() {
 }
 
 export async function selectCharacterById(id) {
-    if (characters[id] == undefined) {
+    if (characters[id] === undefined) {
         return;
     }
 
@@ -1376,7 +1363,7 @@ async function printCharacters(fullRefresh = false) {
             }
 
             const hidden = (characters.length + groups.length) - displayCount;
-            if (hidden > 0) {
+            if (hidden > 0 && entitiesFilter.hasAnyFilter()) {
                 $(listId).append(getHiddenBlock(hidden));
             }
 
@@ -1544,7 +1531,7 @@ function getCharacterSource(chId = this_chid) {
 }
 
 async function getCharacters() {
-    var response = await fetch('/api/characters/all', {
+    const response = await fetch('/api/characters/all', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({
@@ -1552,11 +1539,9 @@ async function getCharacters() {
         }),
     });
     if (response.ok === true) {
-        var getData = ''; //RossAscends: reset to force array to update to account for deleted character.
-        getData = await response.json();
-        const load_ch_count = Object.getOwnPropertyNames(getData);
-        for (var i = 0; i < load_ch_count.length; i++) {
-            characters[i] = [];
+        characters.splice(0, characters.length);
+        const getData = await response.json();
+        for (let i = 0; i < getData.length; i++) {
             characters[i] = getData[i];
             characters[i]['name'] = DOMPurify.sanitize(characters[i]['name']);
 
@@ -1567,7 +1552,7 @@ async function getCharacters() {
 
             characters[i]['chat'] = String(characters[i]['chat']);
         }
-        if (this_chid != undefined && this_chid != 'invalid-safety-id') {
+        if (this_chid !== undefined) {
             $('#avatar_url_pole').val(characters[this_chid].avatar);
         }
 
@@ -1720,11 +1705,12 @@ export async function reloadCurrentChat() {
     if (selected_group) {
         await getGroupChat(selected_group, true);
     }
-    else if (this_chid) {
+    else if (this_chid !== undefined) {
         await getChat();
     }
     else {
         resetChatState();
+        await getCharacters();
         await printMessages();
         await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
     }
@@ -1827,10 +1813,8 @@ function messageFormatting(mes, ch_name, isSystem, isUser, messageId) {
         mes = mes.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
     }
 
-    if ((this_chid === undefined || this_chid === 'invalid-safety-id') && !selected_group) {
-        mes = mes
-            .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-            .replace(/\n/g, '<br/>');
+    if (this_chid === undefined && !selected_group) {
+        mes = mes.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
     } else if (!isSystem) {
         // Save double quotes in tags as a special character to prevent them from being encoded
         if (!power_user.encode_tags) {
@@ -1862,7 +1846,6 @@ function messageFormatting(mes, ch_name, isSystem, isUser, messageId) {
             // Firefox creates extra newlines from <br>s in code blocks, so we replace them before converting newlines to <br>s.
             return match.replace(/\n/gm, '\u0000');
         });
-        mes = mes.replace(/\n/g, '<br/>');
         mes = mes.replace(/\u0000/g, '\n'); // Restore converted newlines
         mes = mes.trim();
 
@@ -1879,7 +1862,7 @@ function messageFormatting(mes, ch_name, isSystem, isUser, messageId) {
     */
 
     if (!power_user.allow_name2_display && ch_name && !isUser && !isSystem) {
-        mes = mes.replace(new RegExp(`(^|\n)${ch_name}:`, 'g'), '$1');
+        mes = mes.replace(new RegExp(`(^|\n)${escapeRegex(ch_name)}:`, 'g'), '$1');
     }
 
     /** @type {any} */
@@ -2084,7 +2067,7 @@ function addOneMessage(mes, { type = 'normal', insertAfter = null, scroll = true
     if (!mes['is_user']) {
         if (mes.force_avatar) {
             avatarImg = mes.force_avatar;
-        } else if (this_chid === undefined || this_chid === 'invalid-safety-id') {
+        } else if (this_chid === undefined) {
             avatarImg = system_avatar;
         } else {
             if (characters[this_chid].avatar != 'none') {
@@ -2485,9 +2468,14 @@ function sendSystemMessage(type, text, extra = {}) {
     is_send_press = false;
 }
 
+/**
+ * Extracts the contents of bias macros from a message.
+ * @param {string} message Message text
+ * @returns {string} Message bias extracted from the message (or an empty string if not found)
+ */
 export function extractMessageBias(message) {
     if (!message) {
-        return null;
+        return '';
     }
 
     try {
@@ -3108,14 +3096,14 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
         if (interruptedByCommand) {
             //$("#send_textarea").val('').trigger('input');
-            unblockGeneration();
+            unblockGeneration(type);
             return Promise.resolve();
         }
     }
 
     if (main_api == 'kobold' && kai_settings.streaming_kobold && !kai_flags.can_use_streaming) {
         toastr.error('Streaming is enabled, but the version of Kobold used does not support token streaming.', undefined, { timeOut: 10000, preventDuplicates: true });
-        unblockGeneration();
+        unblockGeneration(type);
         return Promise.resolve();
     }
 
@@ -3124,12 +3112,12 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         textgen_settings.legacy_api &&
         (textgen_settings.type === OOBA || textgen_settings.type === APHRODITE)) {
         toastr.error('Streaming is not supported for the Legacy API. Update Ooba and use new API to enable streaming.', undefined, { timeOut: 10000, preventDuplicates: true });
-        unblockGeneration();
+        unblockGeneration(type);
         return Promise.resolve();
     }
 
     if (isHordeGenerationNotAllowed()) {
-        unblockGeneration();
+        unblockGeneration(type);
         return Promise.resolve();
     }
 
@@ -3165,7 +3153,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             setCharacterName('');
         } else {
             console.log('No enabled members found');
-            unblockGeneration();
+            unblockGeneration(type);
             return Promise.resolve();
         }
     }
@@ -3177,12 +3165,12 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         quiet_prompt = main_api == 'novel' && !quietToLoud ? adjustNovelInstructionPrompt(quiet_prompt) : quiet_prompt;
     }
 
-    const isChatValid = online_status != 'no_connection' && this_chid != undefined && this_chid !== 'invalid-safety-id';
+    const isChatValid = online_status !== 'no_connection' && this_chid !== undefined;
 
     // We can't do anything because we're not in a chat right now. (Unless it's a dry run, in which case we need to
     // assemble the prompt so we can count its tokens regardless of whether a chat is active.)
     if (!dryRun && !isChatValid) {
-        if (this_chid === undefined || this_chid === 'invalid-safety-id') {
+        if (this_chid === undefined) {
             toastr.warning('Сharacter is not selected');
         }
         is_send_press = false;
@@ -3339,7 +3327,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
         if (aborted) {
             console.debug('Generation aborted by extension interceptors');
-            unblockGeneration();
+            unblockGeneration(type);
             return Promise.resolve();
         }
     } else {
@@ -3353,7 +3341,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             adjustedParams = await adjustHordeGenerationParams(max_context, amount_gen);
         }
         catch {
-            unblockGeneration();
+            unblockGeneration(type);
             return Promise.resolve();
         }
         if (horde_settings.auto_adjust_context_length) {
@@ -3511,7 +3499,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     let chatString = '';
     let cyclePrompt = '';
 
-    function getMessagesTokenCount() {
+    async function getMessagesTokenCount() {
         const encodeString = [
             beforeScenarioAnchor,
             storyString,
@@ -3522,7 +3510,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             cyclePrompt,
             userAlignmentMessage,
         ].join('').replace(/\r/gm, '');
-        return getTokenCount(encodeString, power_user.token_padding);
+        return getTokenCountAsync(encodeString, power_user.token_padding);
     }
 
     // Force pinned examples into the context
@@ -3538,7 +3526,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
     // Collect enough messages to fill the context
     let arrMes = new Array(chat2.length);
-    let tokenCount = getMessagesTokenCount();
+    let tokenCount = await getMessagesTokenCount();
     let lastAddedIndex = -1;
 
     // Pre-allocate all injections first.
@@ -3550,7 +3538,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             continue;
         }
 
-        tokenCount += getTokenCount(item.replace(/\r/gm, ''));
+        tokenCount += await getTokenCountAsync(item.replace(/\r/gm, ''));
         chatString = item + chatString;
         if (tokenCount < this_max_context) {
             arrMes[index] = item;
@@ -3558,9 +3546,6 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         } else {
             break;
         }
-
-        // Prevent UI thread lock on tokenization
-        await delay(1);
     }
 
     for (let i = 0; i < chat2.length; i++) {
@@ -3580,7 +3565,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             continue;
         }
 
-        tokenCount += getTokenCount(item.replace(/\r/gm, ''));
+        tokenCount += await getTokenCountAsync(item.replace(/\r/gm, ''));
         chatString = item + chatString;
         if (tokenCount < this_max_context) {
             arrMes[i] = item;
@@ -3588,15 +3573,12 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         } else {
             break;
         }
-
-        // Prevent UI thread lock on tokenization
-        await delay(1);
     }
 
     // Add user alignment message if last message is not a user message
     const stoppedAtUser = userMessageIndices.includes(lastAddedIndex);
     if (addUserAlignment && !stoppedAtUser) {
-        tokenCount += getTokenCount(userAlignmentMessage.replace(/\r/gm, ''));
+        tokenCount += await getTokenCountAsync(userAlignmentMessage.replace(/\r/gm, ''));
         chatString = userAlignmentMessage + chatString;
         arrMes.push(userAlignmentMessage);
         injectedIndices.push(arrMes.length - 1);
@@ -3622,18 +3604,17 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     }
 
     // Estimate how many unpinned example messages fit in the context
-    tokenCount = getMessagesTokenCount();
+    tokenCount = await getMessagesTokenCount();
     let count_exm_add = 0;
     if (!power_user.pin_examples) {
         for (let example of mesExamplesArray) {
-            tokenCount += getTokenCount(example.replace(/\r/gm, ''));
+            tokenCount += await getTokenCountAsync(example.replace(/\r/gm, ''));
             examplesString += example;
             if (tokenCount < this_max_context) {
                 count_exm_add++;
             } else {
                 break;
             }
-            await delay(1);
         }
     }
 
@@ -3781,7 +3762,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         return promptCache;
     }
 
-    function checkPromptSize() {
+    async function checkPromptSize() {
         console.debug('---checking Prompt size');
         setPromptString();
         const prompt = [
@@ -3794,15 +3775,15 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             generatedPromptCache,
             quiet_prompt,
         ].join('').replace(/\r/gm, '');
-        let thisPromptContextSize = getTokenCount(prompt, power_user.token_padding);
+        let thisPromptContextSize = await getTokenCountAsync(prompt, power_user.token_padding);
 
         if (thisPromptContextSize > this_max_context) {        //if the prepared prompt is larger than the max context size...
             if (count_exm_add > 0) {                            // ..and we have example mesages..
                 count_exm_add--;                            // remove the example messages...
-                checkPromptSize();                            // and try agin...
+                await checkPromptSize();                            // and try agin...
             } else if (mesSend.length > 0) {                    // if the chat history is longer than 0
                 mesSend.shift();                            // remove the first (oldest) chat entry..
-                checkPromptSize();                            // and check size again..
+                await checkPromptSize();                            // and check size again..
             } else {
                 //end
                 console.debug(`---mesSend.length = ${mesSend.length}`);
@@ -3812,7 +3793,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
     if (generatedPromptCache.length > 0 && main_api !== 'openai') {
         console.debug('---Generated Prompt Cache length: ' + generatedPromptCache.length);
-        checkPromptSize();
+        await checkPromptSize();
     } else {
         console.debug('---calling setPromptString ' + generatedPromptCache.length);
         setPromptString();
@@ -3820,6 +3801,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
     // Fetches the combined prompt for both negative and positive prompts
     const cfgGuidanceScale = getGuidanceScale();
+    const useCfgPrompt = cfgGuidanceScale && cfgGuidanceScale.value !== 1;
 
     // For prompt bit itemization
     let mesSendString = '';
@@ -3827,7 +3809,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     function getCombinedPrompt(isNegative) {
         // Only return if the guidance scale doesn't exist or the value is 1
         // Also don't return if constructing the neutral prompt
-        if (isNegative && (!cfgGuidanceScale || cfgGuidanceScale?.value === 1)) {
+        if (isNegative && !useCfgPrompt) {
             return;
         }
 
@@ -3839,22 +3821,20 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         // Deep clone
         let finalMesSend = structuredClone(mesSend);
 
-        let cfgPrompt = {};
-        if (cfgGuidanceScale && cfgGuidanceScale?.value !== 1) {
-            cfgPrompt = getCfgPrompt(cfgGuidanceScale, isNegative);
-        }
-
-        if (cfgPrompt && cfgPrompt?.value) {
-            if (cfgPrompt?.depth === 0) {
-                finalMesSend[finalMesSend.length - 1].message +=
-                    /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
-                        ? cfgPrompt.value
-                        : ` ${cfgPrompt.value}`;
-            } else {
-                // TODO: Make all extension prompts use an array/splice method
-                const lengthDiff = mesSend.length - cfgPrompt.depth;
-                const cfgDepth = lengthDiff >= 0 ? lengthDiff : 0;
-                finalMesSend[cfgDepth].extensionPrompts.push(`${cfgPrompt.value}\n`);
+        if (useCfgPrompt) {
+            const cfgPrompt = getCfgPrompt(cfgGuidanceScale, isNegative);
+            if (cfgPrompt.value) {
+                if (cfgPrompt.depth === 0) {
+                    finalMesSend[finalMesSend.length - 1].message +=
+                        /\s/.test(finalMesSend[finalMesSend.length - 1].message.slice(-1))
+                            ? cfgPrompt.value
+                            : ` ${cfgPrompt.value}`;
+                } else {
+                    // TODO: Make all extension prompts use an array/splice method
+                    const lengthDiff = mesSend.length - cfgPrompt.depth;
+                    const cfgDepth = lengthDiff >= 0 ? lengthDiff : 0;
+                    finalMesSend[cfgDepth].extensionPrompts.push(`${cfgPrompt.value}\n`);
+                }
             }
         }
 
@@ -3935,75 +3915,78 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         return !data.combinedPrompt ? combine() : data.combinedPrompt;
     }
 
-    // Get the negative prompt first since it has the unmodified mesSend array
-    let negativePrompt = main_api == 'textgenerationwebui' ? getCombinedPrompt(true) : undefined;
     let finalPrompt = getCombinedPrompt(false);
-
-    // Include the entire guidance scale object
-    const cfgValues = cfgGuidanceScale && cfgGuidanceScale?.value !== 1 ? ({ guidanceScale: cfgGuidanceScale, negativePrompt: negativePrompt }) : null;
 
     let maxLength = Number(amount_gen); // how many tokens the AI will be requested to generate
     let thisPromptBits = [];
 
-    // TODO: Make this a switch
-    if (main_api == 'koboldhorde' && horde_settings.auto_adjust_response_length) {
-        maxLength = Math.min(maxLength, adjustedParams.maxLength);
-        maxLength = Math.max(maxLength, MIN_LENGTH); // prevent validation errors
-    }
-
     let generate_data;
-    if (main_api == 'koboldhorde' || main_api == 'kobold') {
-        generate_data = {
-            prompt: finalPrompt,
-            gui_settings: true,
-            max_length: maxLength,
-            max_context_length: max_context,
-            api_server,
-        };
+    switch (main_api) {
+        case 'koboldhorde':
+        case 'kobold':
+            if (main_api == 'koboldhorde' && horde_settings.auto_adjust_response_length) {
+                maxLength = Math.min(maxLength, adjustedParams.maxLength);
+                maxLength = Math.max(maxLength, MIN_LENGTH); // prevent validation errors
+            }
 
-        if (preset_settings != 'gui') {
-            const isHorde = main_api == 'koboldhorde';
-            const presetSettings = koboldai_settings[koboldai_setting_names[preset_settings]];
-            const maxContext = (adjustedParams && horde_settings.auto_adjust_context_length) ? adjustedParams.maxContextLength : max_context;
-            generate_data = getKoboldGenerationData(finalPrompt, presetSettings, maxLength, maxContext, isHorde, type);
+            generate_data = {
+                prompt: finalPrompt,
+                gui_settings: true,
+                max_length: maxLength,
+                max_context_length: max_context,
+                api_server,
+            };
+
+            if (preset_settings != 'gui') {
+                const isHorde = main_api == 'koboldhorde';
+                const presetSettings = koboldai_settings[koboldai_setting_names[preset_settings]];
+                const maxContext = (adjustedParams && horde_settings.auto_adjust_context_length) ? adjustedParams.maxContextLength : max_context;
+                generate_data = getKoboldGenerationData(finalPrompt, presetSettings, maxLength, maxContext, isHorde, type);
+            }
+            break;
+        case 'textgenerationwebui': {
+            const cfgValues = useCfgPrompt ? { guidanceScale: cfgGuidanceScale, negativePrompt: getCombinedPrompt(true) } : null;
+            generate_data = getTextGenGenerationData(finalPrompt, maxLength, isImpersonate, isContinue, cfgValues, type);
+            break;
         }
-    }
-    else if (main_api == 'textgenerationwebui') {
-        generate_data = getTextGenGenerationData(finalPrompt, maxLength, isImpersonate, isContinue, cfgValues, type);
-    }
-    else if (main_api == 'novel') {
-        const presetSettings = novelai_settings[novelai_setting_names[nai_settings.preset_settings_novel]];
-        generate_data = getNovelGenerationData(finalPrompt, presetSettings, maxLength, isImpersonate, isContinue, cfgValues, type);
-    }
-    else if (main_api == 'openai') {
-        let [prompt, counts] = await prepareOpenAIMessages({
-            name2: name2,
-            charDescription: description,
-            charPersonality: personality,
-            Scenario: scenario,
-            worldInfoBefore: worldInfoBefore,
-            worldInfoAfter: worldInfoAfter,
-            extensionPrompts: extension_prompts,
-            bias: promptBias,
-            type: type,
-            quietPrompt: quiet_prompt,
-            quietImage: quietImage,
-            cyclePrompt: cyclePrompt,
-            systemPromptOverride: system,
-            jailbreakPromptOverride: jailbreak,
-            personaDescription: persona,
-            messages: oaiMessages,
-            messageExamples: oaiMessageExamples,
-        }, dryRun);
-        generate_data = { prompt: prompt };
-
-        // counts will return false if the user has not enabled the token breakdown feature
-        if (counts) {
-            parseTokenCounts(counts, thisPromptBits);
+        case 'novel': {
+            const cfgValues = useCfgPrompt ? { guidanceScale: cfgGuidanceScale } : null;
+            const presetSettings = novelai_settings[novelai_setting_names[nai_settings.preset_settings_novel]];
+            generate_data = getNovelGenerationData(finalPrompt, presetSettings, maxLength, isImpersonate, isContinue, cfgValues, type);
+            break;
         }
+        case 'openai': {
+            let [prompt, counts] = await prepareOpenAIMessages({
+                name2: name2,
+                charDescription: description,
+                charPersonality: personality,
+                Scenario: scenario,
+                worldInfoBefore: worldInfoBefore,
+                worldInfoAfter: worldInfoAfter,
+                extensionPrompts: extension_prompts,
+                bias: promptBias,
+                type: type,
+                quietPrompt: quiet_prompt,
+                quietImage: quietImage,
+                cyclePrompt: cyclePrompt,
+                systemPromptOverride: system,
+                jailbreakPromptOverride: jailbreak,
+                personaDescription: persona,
+                messages: oaiMessages,
+                messageExamples: oaiMessageExamples,
+            }, dryRun);
+            generate_data = { prompt: prompt };
 
-        if (!dryRun) {
-            setInContextMessages(openai_messages_count, type);
+            // TODO: move these side-effects somewhere else, so this switch-case solely sets generate_data
+            // counts will return false if the user has not enabled the token breakdown feature
+            if (counts) {
+                parseTokenCounts(counts, thisPromptBits);
+            }
+
+            if (!dryRun) {
+                setInContextMessages(openai_messages_count, type);
+            }
+            break;
         }
     }
 
@@ -4051,16 +4034,14 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             userPersona: (power_user.persona_description || ''),
         };
 
-        thisPromptBits = additionalPromptStuff;
-
-        //console.log(thisPromptBits);
-        const itemizedIndex = itemizedPrompts.findIndex((item) => item.mesId === thisPromptBits['mesId']);
+        //console.log(additionalPromptStuff);
+        const itemizedIndex = itemizedPrompts.findIndex((item) => item.mesId === additionalPromptStuff.mesId);
 
         if (itemizedIndex !== -1) {
-            itemizedPrompts[itemizedIndex] = thisPromptBits;
+            itemizedPrompts[itemizedIndex] = additionalPromptStuff;
         }
         else {
-            itemizedPrompts.push(thisPromptBits);
+            itemizedPrompts.push(additionalPromptStuff);
         }
 
         console.debug(`pushed prompt bits to itemizedPrompts array. Length is now: ${itemizedPrompts.length}`);
@@ -4140,7 +4121,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
                 await eventSource.emit(event_types.IMPERSONATE_READY, getMessage);
             }
             else if (type == 'quiet') {
-                unblockGeneration();
+                unblockGeneration(type);
                 return getMessage;
             }
             else {
@@ -4173,8 +4154,12 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             // regenerate with character speech reenforced
             // to make sure we leave on swipe type while also adding the name2 appendage
             await delay(1000);
+            // A message was already deleted on regeneration, so instead treat is as a normal gen
+            if (type === 'regenerate') {
+                type = 'normal';
+            }
             // The first await is for waiting for the generate to start. The second one is waiting for it to finish
-            const result = await await Generate(type, { automatic_trigger, force_name2: true, quiet_prompt, skipWIAN, force_chid, maxLoops: maxLoops - 1 });
+            const result = await await Generate(type, { automatic_trigger, force_name2: true, quiet_prompt, quietToLoud, skipWIAN, force_chid, signal, quietImage, quietName, maxLoops: maxLoops - 1 });
             return result;
         }
 
@@ -4208,7 +4193,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
         console.debug('/api/chats/save called by /Generate');
         await saveChatConditional();
-        unblockGeneration();
+        unblockGeneration(type);
         streamingProcessor = null;
 
         if (type !== 'quiet') {
@@ -4226,7 +4211,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
         generatedPromptCache = '';
 
-        unblockGeneration();
+        unblockGeneration(type);
         console.log(exception);
         streamingProcessor = null;
         throw exception;
@@ -4296,7 +4281,16 @@ function flushWIDepthInjections() {
     }
 }
 
-function unblockGeneration() {
+/**
+ * Unblocks the UI after a generation is complete.
+ * @param {string} [type] Generation type (optional)
+ */
+function unblockGeneration(type) {
+    // Don't unblock if a parallel stream is still running
+    if (type === 'quiet' && streamingProcessor && !streamingProcessor.isFinished) {
+        return;
+    }
+
     is_send_press = false;
     activateSendButtons();
     showSwipeButtons();
@@ -4475,7 +4469,7 @@ export async function sendMessageAsUser(messageText, messageBias, insertAt = nul
     };
 
     if (power_user.message_token_count_enabled) {
-        message.extra.token_count = getTokenCount(message.mes, 0);
+        message.extra.token_count = await getTokenCountAsync(message.mes, 0);
     }
 
     // Lock user avatar to a persona.
@@ -4614,48 +4608,26 @@ async function DupeChar() {
     }
 }
 
-function promptItemize(itemizedPrompts, requestedMesId) {
-    console.log('PROMPT ITEMIZE ENTERED');
-    var incomingMesId = Number(requestedMesId);
-    console.debug(`looking for MesId ${incomingMesId}`);
-    var thisPromptSet = undefined;
-
-    for (var i = 0; i < itemizedPrompts.length; i++) {
-        console.log(`looking for ${incomingMesId} vs ${itemizedPrompts[i].mesId}`);
-        if (itemizedPrompts[i].mesId === incomingMesId) {
-            console.log(`found matching mesID ${i}`);
-            thisPromptSet = i;
-            PromptArrayItemForRawPromptDisplay = i;
-            console.log(`wanting to raw display of ArrayItem: ${PromptArrayItemForRawPromptDisplay} which is mesID ${incomingMesId}`);
-            console.log(itemizedPrompts[thisPromptSet]);
-        }
-    }
-
-    if (thisPromptSet === undefined) {
-        console.log(`couldnt find the right mesId. looked for ${incomingMesId}`);
-        console.log(itemizedPrompts);
-        return null;
-    }
-
+async function itemizedParams(itemizedPrompts, thisPromptSet) {
     const params = {
-        charDescriptionTokens: getTokenCount(itemizedPrompts[thisPromptSet].charDescription),
-        charPersonalityTokens: getTokenCount(itemizedPrompts[thisPromptSet].charPersonality),
-        scenarioTextTokens: getTokenCount(itemizedPrompts[thisPromptSet].scenarioText),
-        userPersonaStringTokens: getTokenCount(itemizedPrompts[thisPromptSet].userPersona),
-        worldInfoStringTokens: getTokenCount(itemizedPrompts[thisPromptSet].worldInfoString),
-        allAnchorsTokens: getTokenCount(itemizedPrompts[thisPromptSet].allAnchors),
-        summarizeStringTokens: getTokenCount(itemizedPrompts[thisPromptSet].summarizeString),
-        authorsNoteStringTokens: getTokenCount(itemizedPrompts[thisPromptSet].authorsNoteString),
-        smartContextStringTokens: getTokenCount(itemizedPrompts[thisPromptSet].smartContextString),
-        beforeScenarioAnchorTokens: getTokenCount(itemizedPrompts[thisPromptSet].beforeScenarioAnchor),
-        afterScenarioAnchorTokens: getTokenCount(itemizedPrompts[thisPromptSet].afterScenarioAnchor),
-        zeroDepthAnchorTokens: getTokenCount(itemizedPrompts[thisPromptSet].zeroDepthAnchor), // TODO: unused
+        charDescriptionTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].charDescription),
+        charPersonalityTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].charPersonality),
+        scenarioTextTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].scenarioText),
+        userPersonaStringTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].userPersona),
+        worldInfoStringTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].worldInfoString),
+        allAnchorsTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].allAnchors),
+        summarizeStringTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].summarizeString),
+        authorsNoteStringTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].authorsNoteString),
+        smartContextStringTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].smartContextString),
+        beforeScenarioAnchorTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].beforeScenarioAnchor),
+        afterScenarioAnchorTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].afterScenarioAnchor),
+        zeroDepthAnchorTokens: await getTokenCountAsync(itemizedPrompts[thisPromptSet].zeroDepthAnchor), // TODO: unused
         thisPrompt_padding: itemizedPrompts[thisPromptSet].padding,
         this_main_api: itemizedPrompts[thisPromptSet].main_api,
-        chatInjects: getTokenCount(itemizedPrompts[thisPromptSet].chatInjects),
+        chatInjects: await getTokenCountAsync(itemizedPrompts[thisPromptSet].chatInjects),
     };
 
-    if (params.chatInjects){
+    if (params.chatInjects) {
         params.ActualChatHistoryTokens = params.ActualChatHistoryTokens - params.chatInjects;
     }
 
@@ -4706,13 +4678,13 @@ function promptItemize(itemizedPrompts, requestedMesId) {
     } else {
         //for non-OAI APIs
         //console.log('-- Counting non-OAI Tokens');
-        params.finalPromptTokens = getTokenCount(itemizedPrompts[thisPromptSet].finalPrompt);
-        params.storyStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].storyString) - params.worldInfoStringTokens;
-        params.examplesStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].examplesString);
-        params.mesSendStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].mesSendString);
+        params.finalPromptTokens = await getTokenCountAsync(itemizedPrompts[thisPromptSet].finalPrompt);
+        params.storyStringTokens = await getTokenCountAsync(itemizedPrompts[thisPromptSet].storyString) - params.worldInfoStringTokens;
+        params.examplesStringTokens = await getTokenCountAsync(itemizedPrompts[thisPromptSet].examplesString);
+        params.mesSendStringTokens = await getTokenCountAsync(itemizedPrompts[thisPromptSet].mesSendString);
         params.ActualChatHistoryTokens = params.mesSendStringTokens - (params.allAnchorsTokens - (params.beforeScenarioAnchorTokens + params.afterScenarioAnchorTokens)) + power_user.token_padding;
-        params.instructionTokens = getTokenCount(itemizedPrompts[thisPromptSet].instruction);
-        params.promptBiasTokens = getTokenCount(itemizedPrompts[thisPromptSet].promptBias);
+        params.instructionTokens = await getTokenCountAsync(itemizedPrompts[thisPromptSet].instruction);
+        params.promptBiasTokens = await getTokenCountAsync(itemizedPrompts[thisPromptSet].promptBias);
 
         params.totalTokensInPrompt =
             params.storyStringTokens +     //chardefs total
@@ -4735,12 +4707,46 @@ function promptItemize(itemizedPrompts, requestedMesId) {
         params.allAnchorsTokensPercentage = ((params.allAnchorsTokens / (params.totalTokensInPrompt)) * 100).toFixed(2);
         params.selectedTokenizer = getFriendlyTokenizerName(params.this_main_api).tokenizerName;
     }
+    return params;
+}
+
+function findItemizedPromptSet(itemizedPrompts, incomingMesId) {
+    var thisPromptSet = undefined;
+
+    for (var i = 0; i < itemizedPrompts.length; i++) {
+        console.log(`looking for ${incomingMesId} vs ${itemizedPrompts[i].mesId}`);
+        if (itemizedPrompts[i].mesId === incomingMesId) {
+            console.log(`found matching mesID ${i}`);
+            thisPromptSet = i;
+            PromptArrayItemForRawPromptDisplay = i;
+            console.log(`wanting to raw display of ArrayItem: ${PromptArrayItemForRawPromptDisplay} which is mesID ${incomingMesId}`);
+            console.log(itemizedPrompts[thisPromptSet]);
+        }
+    }
+    return thisPromptSet;
+}
+
+async function promptItemize(itemizedPrompts, requestedMesId) {
+    console.log('PROMPT ITEMIZE ENTERED');
+    var incomingMesId = Number(requestedMesId);
+    console.debug(`looking for MesId ${incomingMesId}`);
+    var thisPromptSet = findItemizedPromptSet(itemizedPrompts, incomingMesId);
+
+    if (thisPromptSet === undefined) {
+        console.log(`couldnt find the right mesId. looked for ${incomingMesId}`);
+        console.log(itemizedPrompts);
+        return null;
+    }
+
+    const params = await itemizedParams(itemizedPrompts, thisPromptSet);
 
     if (params.this_main_api == 'openai') {
-        callPopup(renderTemplate('itemizationChat', params), 'text');
+        const template = await renderTemplateAsync('itemizationChat', params);
+        callPopup(template, 'text');
 
     } else {
-        callPopup(renderTemplate('itemizationText', params), 'text');
+        const template = await renderTemplateAsync('itemizationText', params);
+        callPopup(template, 'text');
     }
 }
 
@@ -5113,7 +5119,7 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
             chat[chat.length - 1]['extra']['api'] = getGeneratingApi();
             chat[chat.length - 1]['extra']['model'] = getGeneratingModel();
             if (power_user.message_token_count_enabled) {
-                chat[chat.length - 1]['extra']['token_count'] = getTokenCount(chat[chat.length - 1]['mes'], 0);
+                chat[chat.length - 1]['extra']['token_count'] = await getTokenCountAsync(chat[chat.length - 1]['mes'], 0);
             }
             const chat_id = (chat.length - 1);
             await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
@@ -5133,7 +5139,7 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
         chat[chat.length - 1]['extra']['api'] = getGeneratingApi();
         chat[chat.length - 1]['extra']['model'] = getGeneratingModel();
         if (power_user.message_token_count_enabled) {
-            chat[chat.length - 1]['extra']['token_count'] = getTokenCount(chat[chat.length - 1]['mes'], 0);
+            chat[chat.length - 1]['extra']['token_count'] = await getTokenCountAsync(chat[chat.length - 1]['mes'], 0);
         }
         const chat_id = (chat.length - 1);
         await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
@@ -5150,7 +5156,7 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
         chat[chat.length - 1]['extra']['api'] = getGeneratingApi();
         chat[chat.length - 1]['extra']['model'] = getGeneratingModel();
         if (power_user.message_token_count_enabled) {
-            chat[chat.length - 1]['extra']['token_count'] = getTokenCount(chat[chat.length - 1]['mes'], 0);
+            chat[chat.length - 1]['extra']['token_count'] = await getTokenCountAsync(chat[chat.length - 1]['mes'], 0);
         }
         const chat_id = (chat.length - 1);
         await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
@@ -5175,7 +5181,7 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
         chat[chat.length - 1]['gen_finished'] = generationFinished;
 
         if (power_user.message_token_count_enabled) {
-            chat[chat.length - 1]['extra']['token_count'] = getTokenCount(chat[chat.length - 1]['mes'], 0);
+            chat[chat.length - 1]['extra']['token_count'] = await getTokenCountAsync(chat[chat.length - 1]['mes'], 0);
         }
 
         if (selected_group) {
@@ -5309,7 +5315,7 @@ export function deactivateSendButtons() {
 
 function resetChatState() {
     //unsets expected chid before reloading (related to getCharacters/printCharacters from using old arrays)
-    this_chid = 'invalid-safety-id';
+    this_chid = undefined;
     // replaces deleted charcter name with system user since it will be displayed next.
     name2 = systemUserName;
     // sets up system user to tell user about having deleted a character
@@ -5687,7 +5693,7 @@ async function getChat() {
             contentType: 'application/json',
         });
         if (response[0] !== undefined) {
-            chat.push(...response);
+            chat.splice(0, chat.length, ...response);
             chat_create_date = chat[0]['create_date'];
             chat_metadata = chat[0]['chat_metadata'] ?? {};
 
@@ -5881,10 +5887,11 @@ function changeMainAPI() {
 
     if (main_api == 'koboldhorde') {
         getStatusHorde();
-        getHordeModels();
+        getHordeModels(true);
     }
 
     setupChatCompletionPromptManager(oai_settings);
+    forceCharacterEditorTokenize();
 }
 
 ////////////////////////////////////////////////////
@@ -5982,7 +5989,7 @@ function getUserAvatarBlock(name) {
     const personaName = power_user.personas[name];
     const personaDescription = power_user.persona_descriptions[name]?.description;
     template.find('.ch_name').text(personaName || '[Unnamed Persona]');
-    template.find('.ch_description').text(personaDescription || '[No description]').toggleClass('text_muted', !personaDescription);
+    template.find('.ch_description').text(personaDescription || $('#user_avatar_block').attr('no_desc_text')).toggleClass('text_muted', !personaDescription);
     template.attr('imgfile', name);
     template.find('.avatar').attr('imgfile', name).attr('title', name);
     template.toggleClass('default_persona', name === power_user.default_persona);
@@ -6107,7 +6114,7 @@ async function doOnboarding(avatarId) {
     template.find('input[name="enable_simple_mode"]').on('input', function () {
         simpleUiMode = $(this).is(':checked');
     });
-    var userName = await callPopup(template, 'input', name1);
+    let userName = await callPopup(template, 'input', currentUser?.name || name1);
 
     if (userName) {
         userName = userName.replace('\n', ' ');
@@ -6160,6 +6167,8 @@ async function getSettings() {
             name1 = settings.username;
             $('#your_name').val(name1);
         }
+
+        await setUserControls(data.enable_accounts);
 
         // Allow subscribers to mutate settings
         eventSource.emit(event_types.SETTINGS_LOADED_BEFORE, settings);
@@ -6378,14 +6387,20 @@ async function saveSettings(type) {
     });
 }
 
-export function setGenerationParamsFromPreset(preset) {
+export function setGenerationParamsFromPreset(preset, isMancerChange = null) {
     const needsUnlock = (preset.max_length ?? max_context) > MAX_CONTEXT_DEFAULT || (preset.genamt ?? amount_gen) > MAX_RESPONSE_DEFAULT;
     $('#max_context_unlocked').prop('checked', needsUnlock).trigger('change');
 
     if (preset.genamt !== undefined) {
         amount_gen = preset.genamt;
-        $('#amount_gen').val(amount_gen);
-        $('#amount_gen_counter').val(amount_gen);
+        if (isMancerChange) {
+            $('#amount_gen').attr('max', amount_gen);
+            $('#amount_gen_counter').val($('#amount_gen').val());
+        }
+        else {
+            $('#amount_gen').val(amount_gen);
+            $('#amount_gen_counter').val(amount_gen);
+        }
     }
 
     if (preset.max_length !== undefined) {
@@ -6490,6 +6505,8 @@ async function messageEditDone(div) {
         text = substituteParams(text);
     }
 
+    await eventSource.emit(event_types.MESSAGE_EDITED, this_edit_mes_id);
+    text = chat[this_edit_mes_id]?.mes ?? text;
     mesBlock.find('.mes_text').empty();
     mesBlock.find('.mes_edit_buttons').css('display', 'none');
     mesBlock.find('.mes_buttons').css('display', '');
@@ -6506,7 +6523,6 @@ async function messageEditDone(div) {
     mesBlock.find('.mes_bias').append(messageFormatting(bias, '', false, false, -1));
     appendMediaToMessage(mes, div.closest('.mes'));
     addCopyToCodeBlocks(div.closest('.mes'));
-    await eventSource.emit(event_types.MESSAGE_EDITED, this_edit_mes_id);
 
     this_edit_mes_id = undefined;
     await saveChatConditional();
@@ -6716,7 +6732,7 @@ export async function displayPastChats() {
 
     const debouncedDisplay = debounce((searchQuery) => {
         displayChats(searchQuery);
-    }, 300);
+    });
 
     // Define the search input listener
     $('#select_chat_search').on('input', function () {
@@ -6790,8 +6806,9 @@ function select_rm_info(type, charId, previousCharId = null) {
     importFlashTimeout = setTimeout(function () {
         if (type === 'char_import' || type === 'char_create') {
             // Find the page at which the character is located
+            const avatarFileName = `${charId}.png`;
             const charData = getEntitiesList({ doFilter: true });
-            const charIndex = charData.findIndex((x) => x?.item?.avatar?.startsWith(charId));
+            const charIndex = charData.findIndex((x) => x?.item?.avatar?.startsWith(avatarFileName));
 
             if (charIndex === -1) {
                 console.log(`Could not find character ${charId} in the list`);
@@ -6801,7 +6818,7 @@ function select_rm_info(type, charId, previousCharId = null) {
             try {
                 const perPage = Number(localStorage.getItem('Characters_PerPage')) || per_page_default;
                 const page = Math.floor(charIndex / perPage) + 1;
-                const selector = `#rm_print_characters_block [title^="${charId}"]`;
+                const selector = `#rm_print_characters_block [title*="${avatarFileName}"]`;
                 $('#rm_print_characters_pagination').pagination('go', page);
 
                 waitUntilCondition(() => document.querySelector(selector) !== null).then(() => {
@@ -6814,10 +6831,7 @@ function select_rm_info(type, charId, previousCharId = null) {
 
                     const scrollOffset = element.offset().top - element.parent().offset().top;
                     element.parent().scrollTop(scrollOffset);
-                    element.addClass('flash animated');
-                    setTimeout(function () {
-                        element.removeClass('flash animated');
-                    }, 5000);
+                    flashHighlight(element, 5000);
                 });
             } catch (e) {
                 console.error(e);
@@ -6843,10 +6857,7 @@ function select_rm_info(type, charId, previousCharId = null) {
                     const element = $(selector);
                     const scrollOffset = element.offset().top - element.parent().offset().top;
                     element.parent().scrollTop(scrollOffset);
-                    $(element).addClass('flash animated');
-                    setTimeout(function () {
-                        $(element).removeClass('flash animated');
-                    }, 5000);
+                    flashHighlight(element, 5000);
                 });
             } catch (e) {
                 console.error(e);
@@ -7111,67 +7122,59 @@ function onScenarioOverrideRemoveClick() {
  * @param {string} type
  * @param {string} inputValue - Value to set the input to.
  * @param {PopupOptions} options - Options for the popup.
- * @typedef {{okButton?: string, rows?: number, wide?: boolean, large?: boolean, allowHorizontalScrolling?: boolean, allowVerticalScrolling?: boolean }} PopupOptions - Options for the popup.
+ * @typedef {{okButton?: string, rows?: number, wide?: boolean, large?: boolean, allowHorizontalScrolling?: boolean, allowVerticalScrolling?: boolean, cropAspect?: number }} PopupOptions - Options for the popup.
  * @returns
  */
-function callPopup(text, type, inputValue = '', { okButton, rows, wide, large, allowHorizontalScrolling, allowVerticalScrolling } = {}) {
+function callPopup(text, type, inputValue = '', { okButton, rows, wide, large, allowHorizontalScrolling, allowVerticalScrolling, cropAspect } = {}) {
+    function getOkButtonText() {
+        if (['avatarToCrop'].includes(popup_type)) {
+            return okButton ?? 'Accept';
+        } else if (['text', 'alternate_greeting', 'char_not_selected'].includes(popup_type)) {
+            $dialoguePopupCancel.css('display', 'none');
+            return okButton ?? 'Ok';
+        } else if (['delete_extension'].includes(popup_type)) {
+            return okButton ?? 'Ok';
+        } else if (['new_chat', 'confirm'].includes(popup_type)) {
+            return okButton ?? 'Yes';
+        } else if (['input'].includes(popup_type)) {
+            return okButton ?? 'Save';
+        }
+        return okButton ?? 'Delete';
+    }
+
     dialogueCloseStop = true;
     if (type) {
         popup_type = type;
     }
 
-    $('#dialogue_popup').toggleClass('wide_dialogue_popup', !!wide);
-    $('#dialogue_popup').toggleClass('large_dialogue_popup', !!large);
-    $('#dialogue_popup').toggleClass('horizontal_scrolling_dialogue_popup', !!allowHorizontalScrolling);
-    $('#dialogue_popup').toggleClass('vertical_scrolling_dialogue_popup', !!allowVerticalScrolling);
+    const $dialoguePopup = $('#dialogue_popup');
+    const $dialoguePopupCancel = $('#dialogue_popup_cancel');
+    const $dialoguePopupOk = $('#dialogue_popup_ok');
+    const $dialoguePopupInput = $('#dialogue_popup_input');
+    const $dialoguePopupText = $('#dialogue_popup_text');
+    const $shadowPopup = $('#shadow_popup');
 
-    $('#dialogue_popup_cancel').css('display', 'inline-block');
-    switch (popup_type) {
-        case 'avatarToCrop':
-            $('#dialogue_popup_ok').text(okButton ?? 'Accept');
-            break;
-        case 'text':
-        case 'alternate_greeting':
-        case 'char_not_selected':
-            $('#dialogue_popup_ok').text(okButton ?? 'Ok');
-            $('#dialogue_popup_cancel').css('display', 'none');
-            break;
-        case 'delete_extension':
-            $('#dialogue_popup_ok').text(okButton ?? 'Ok');
-            break;
-        case 'new_chat':
-        case 'confirm':
-            $('#dialogue_popup_ok').text(okButton ?? 'Yes');
-            break;
-        case 'del_group':
-        case 'rename_chat':
-        case 'del_chat':
-        default:
-            $('#dialogue_popup_ok').text(okButton ?? 'Delete');
-    }
+    $dialoguePopup.toggleClass('wide_dialogue_popup', !!wide)
+        .toggleClass('large_dialogue_popup', !!large)
+        .toggleClass('horizontal_scrolling_dialogue_popup', !!allowHorizontalScrolling)
+        .toggleClass('vertical_scrolling_dialogue_popup', !!allowVerticalScrolling);
 
-    $('#dialogue_popup_input').val(inputValue);
-    $('#dialogue_popup_input').attr('rows', rows ?? 1);
+    $dialoguePopupCancel.css('display', 'inline-block');
+    $dialoguePopupOk.text(getOkButtonText());
+    $dialoguePopupInput.toggle(popup_type === 'input').val(inputValue).attr('rows', rows ?? 1);
+    $dialoguePopupText.empty().append(text);
+    $shadowPopup.css('display', 'block');
 
     if (popup_type == 'input') {
-        $('#dialogue_popup_input').css('display', 'block');
-        $('#dialogue_popup_ok').text(okButton ?? 'Save');
-    }
-    else {
-        $('#dialogue_popup_input').css('display', 'none');
+        $dialoguePopupInput.trigger('focus');
     }
 
-    $('#dialogue_popup_text').empty().append(text);
-    $('#shadow_popup').css('display', 'block');
-    if (popup_type == 'input') {
-        $('#dialogue_popup_input').focus();
-    }
     if (popup_type == 'avatarToCrop') {
         // unset existing data
         crop_data = undefined;
 
         $('#avatarToCrop').cropper({
-            aspectRatio: 2 / 3,
+            aspectRatio: cropAspect ?? 2 / 3,
             autoCropArea: 1,
             viewMode: 2,
             rotatable: false,
@@ -7181,7 +7184,8 @@ function callPopup(text, type, inputValue = '', { okButton, rows, wide, large, a
             },
         });
     }
-    $('#shadow_popup').transition({
+
+    $shadowPopup.transition({
         opacity: 1,
         duration: animation_duration,
         easing: animation_easing,
@@ -7381,47 +7385,6 @@ export function cancelTtsPlay() {
     if ('speechSynthesis' in window) {
         speechSynthesis.cancel();
     }
-}
-
-async function deleteMessageImage() {
-    const value = await callPopup('<h3>Delete image from message?<br>This action can\'t be undone.</h3>', 'confirm');
-
-    if (!value) {
-        return;
-    }
-
-    const mesBlock = $(this).closest('.mes');
-    const mesId = mesBlock.attr('mesid');
-    const message = chat[mesId];
-    delete message.extra.image;
-    delete message.extra.inline_image;
-    mesBlock.find('.mes_img_container').removeClass('img_extra');
-    mesBlock.find('.mes_img').attr('src', '');
-    await saveChatConditional();
-}
-
-function enlargeMessageImage() {
-    const mesBlock = $(this).closest('.mes');
-    const mesId = mesBlock.attr('mesid');
-    const message = chat[mesId];
-    const imgSrc = message?.extra?.image;
-    const title = message?.extra?.title;
-
-    if (!imgSrc) {
-        return;
-    }
-
-    const img = document.createElement('img');
-    img.classList.add('img_enlarged');
-    img.src = imgSrc;
-    const imgContainer = $('<div><pre><code></code></pre></div>');
-    imgContainer.prepend(img);
-    imgContainer.addClass('img_enlarged_container');
-    imgContainer.find('code').addClass('txt').text(title);
-    const titleEmpty = !title || title.trim().length === 0;
-    imgContainer.find('pre').toggle(!titleEmpty);
-    addCopyToCodeBlocks(imgContainer);
-    callPopup(imgContainer, 'text', '', { wide: true, large: true });
 }
 
 function updateAlternateGreetingsHintVisibility(root) {
@@ -7692,7 +7655,7 @@ async function createOrEditCharacter(e) {
 
                     $('#create_button').attr('value', '✅');
                     let oldSelectedChar = null;
-                    if (this_chid != undefined && this_chid != 'invalid-safety-id') {
+                    if (this_chid !== undefined) {
                         oldSelectedChar = characters[this_chid].avatar;
                     }
 
@@ -7814,7 +7777,12 @@ window['SillyTavern'].getContext = function () {
          */
         registerHelper: () => { },
         registedDebugFunction: registerDebugFunction,
+        /**
+         * @deprecated Use renderExtensionTemplateAsync instead.
+         */
         renderExtensionTemplate: renderExtensionTemplate,
+        renderExtensionTemplateAsync: renderExtensionTemplateAsync,
+        registerDataBankScraper: ScraperManager.registerDataBankScraper,
         callPopup: callPopup,
         callGenericPopup: callGenericPopup,
         mainApi: main_api,
@@ -7888,7 +7856,7 @@ function swipe_left() {      // when we swipe left..but no generation.
             duration: swipe_duration,
             easing: animation_easing,
             queue: false,
-            complete: function () {
+            complete: async function () {
                 const is_animation_scroll = ($('#chat').scrollTop() >= ($('#chat').prop('scrollHeight') - $('#chat').outerHeight()) - 10);
                 //console.log('on left swipe click calling addOneMessage');
                 addOneMessage(chat[chat.length - 1], { type: 'swipe' });
@@ -7899,7 +7867,7 @@ function swipe_left() {      // when we swipe left..but no generation.
                     }
 
                     const swipeMessage = $('#chat').find(`[mesid="${chat.length - 1}"]`);
-                    const tokenCount = getTokenCount(chat[chat.length - 1].mes, 0);
+                    const tokenCount = await getTokenCountAsync(chat[chat.length - 1].mes, 0);
                     chat[chat.length - 1]['extra']['token_count'] = tokenCount;
                     swipeMessage.find('.tokenCounterDisplay').text(`${tokenCount}t`);
                 }
@@ -8064,7 +8032,7 @@ const swipe_right = () => {
             duration: swipe_duration,
             easing: animation_easing,
             queue: false,
-            complete: function () {
+            complete: async function () {
                 /*if (!selected_group) {
                     var typingIndicator = $("#typing_indicator_template .typing_indicator").clone();
                     typingIndicator.find(".typing_indicator_name").text(characters[this_chid].name);
@@ -8090,7 +8058,7 @@ const swipe_right = () => {
                             chat[chat.length - 1].extra = {};
                         }
 
-                        const tokenCount = getTokenCount(chat[chat.length - 1].mes, 0);
+                        const tokenCount = await getTokenCountAsync(chat[chat.length - 1].mes, 0);
                         chat[chat.length - 1]['extra']['token_count'] = tokenCount;
                         swipeMessage.find('.tokenCounterDisplay').text(`${tokenCount}t`);
                     }
@@ -8265,9 +8233,14 @@ const CONNECT_API_MAP = {
         source: chat_completion_sources.CUSTOM,
     },
     'cohere': {
-        selected: 'cohere',
+        selected: 'openai',
         button: '#api_button_openai',
         source: chat_completion_sources.COHERE,
+    },
+    'perplexity': {
+        selected: 'openai',
+        button: '#api_button_openai',
+        source: chat_completion_sources.PERPLEXITY,
     },
     'infermaticai': {
         selected: 'textgenerationwebui',
@@ -8439,7 +8412,7 @@ async function importCharacter(file, preserveFileName = false) {
         $('#character_search_bar').val('').trigger('input');
 
         let oldSelectedChar = null;
-        if (this_chid != undefined && this_chid != 'invalid-safety-id') {
+        if (this_chid !== undefined) {
             oldSelectedChar = characters[this_chid].avatar;
         }
 
@@ -8570,7 +8543,7 @@ export async function handleDeleteCharacter(popup_type, this_chid, delete_chats)
 export async function deleteCharacter(name, avatar, reloadCharacters = true) {
     await clearChat();
     $('#character_cross').click();
-    this_chid = 'invalid-safety-id';
+    this_chid = undefined;
     characters.length = 0;
     name2 = systemUserName;
     chat = [...safetychat];
@@ -8600,7 +8573,7 @@ function addDebugFunctions() {
                 message.extra = {};
             }
 
-            message.extra.token_count = getTokenCount(message.mes, 0);
+            message.extra.token_count = await getTokenCountAsync(message.mes, 0);
         }
 
         await saveChatConditional();
@@ -8713,14 +8686,20 @@ jQuery(async function () {
 
     $(document).on('click', '.swipe_left', swipe_left);
 
+    const debouncedCharacterSearch = debounce((searchQuery) => {
+        entitiesFilter.setFilterData(FILTER_TYPES.SEARCH, searchQuery);
+    });
     $('#character_search_bar').on('input', function () {
-        const searchValue = String($(this).val()).toLowerCase();
-        entitiesFilter.setFilterData(FILTER_TYPES.SEARCH, searchValue);
+        const searchQuery = String($(this).val()).toLowerCase();
+        debouncedCharacterSearch(searchQuery);
     });
 
+    const debouncedPersonaSearch = debounce((searchQuery) => {
+        personasFilter.setFilterData(FILTER_TYPES.PERSONA_SEARCH, searchQuery);
+    });
     $('#persona_search_bar').on('input', function () {
-        const searchValue = String($(this).val()).toLowerCase();
-        personasFilter.setFilterData(FILTER_TYPES.PERSONA_SEARCH, searchValue);
+        const searchQuery = String($(this).val()).toLowerCase();
+        debouncedPersonaSearch(searchQuery);
     });
 
     $('#mes_continue').on('click', function () {
@@ -10174,6 +10153,7 @@ jQuery(async function () {
             '#character_cross',
             '#avatar-and-name-block',
             '#shadow_popup',
+            '.shadow_popup',
             '#world_popup',
             '.ui-widget',
             '.text_pole',
@@ -10248,7 +10228,9 @@ jQuery(async function () {
         const avatarSrc = isDataURL(thumbURL) ? thumbURL : charsPath + targetAvatarImg;
         if ($(`.zoomed_avatar[forChar="${charname}"]`).length) {
             console.debug('removing container as it already existed');
-            $(`.zoomed_avatar[forChar="${charname}"]`).remove();
+            $(`.zoomed_avatar[forChar="${charname}"]`).fadeOut(animation_duration, () => {
+                $(`.zoomed_avatar[forChar="${charname}"]`).remove();
+            });
         } else {
             console.debug('making new container from template');
             const template = $('#zoomed_avatar_template').html();
@@ -10259,18 +10241,43 @@ jQuery(async function () {
             newElement.find('.drag-grabber').attr('id', `zoomFor_${charname}header`);
 
             $('body').append(newElement);
-            if (messageElement.attr('is_user') == 'true') { //handle user avatars
-                $(`.zoomed_avatar[forChar="${charname}"] img`).attr('src', thumbURL);
-            } else if (messageElement.attr('is_system') == 'true' && !isValidCharacter) { //handle system avatars
-                $(`.zoomed_avatar[forChar="${charname}"] img`).attr('src', thumbURL);
+            newElement.fadeIn(animation_duration);
+            const zoomedAvatarImgElement = $(`.zoomed_avatar[forChar="${charname}"] img`);
+            if (messageElement.attr('is_user') == 'true' || (messageElement.attr('is_system') == 'true' && !isValidCharacter)) { //handle user and system avatars
+                zoomedAvatarImgElement.attr('src', thumbURL);
+                zoomedAvatarImgElement.attr('data-izoomify-url', thumbURL);
             } else if (messageElement.attr('is_user') == 'false') { //handle char avatars
-                $(`.zoomed_avatar[forChar="${charname}"] img`).attr('src', avatarSrc);
+                zoomedAvatarImgElement.attr('src', avatarSrc);
+                zoomedAvatarImgElement.attr('data-izoomify-url', avatarSrc);
             }
             loadMovingUIState();
-            $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'block');
+            $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'flex');
             dragElement(newElement);
 
-            $(`.zoomed_avatar[forChar="${charname}"] img`).on('dragstart', (e) => {
+            if (power_user.zoomed_avatar_magnification) {
+                $('.zoomed_avatar_container').izoomify();
+            } else {
+                $(`.zoomed_avatar[forChar="${charname}"] .dragClose`).hide();
+            }
+
+            $('.zoomed_avatar').on('mouseup', (e) => {
+                if (e.target.closest('.drag-grabber') || e.button !== 0) {
+                    return;
+                }
+                $(`.zoomed_avatar[forChar="${charname}"]`).fadeOut(animation_duration, () => {
+                    $(`.zoomed_avatar[forChar="${charname}"]`).remove();
+                });
+            });
+
+            $('.zoomed_avatar, .zoomed_avatar .dragClose').on('click touchend', (e) => {
+                if (e.target.closest('.dragClose')) {
+                    $(`.zoomed_avatar[forChar="${charname}"]`).fadeOut(animation_duration, () => {
+                        $(`.zoomed_avatar[forChar="${charname}"]`).remove();
+                    });
+                }
+            });
+
+            zoomedAvatarImgElement.on('dragstart', (e) => {
                 console.log('saw drag on avatar!');
                 e.preventDefault();
                 return false;
@@ -10381,9 +10388,6 @@ jQuery(async function () {
         }
         $('#char-management-dropdown').prop('selectedIndex', 0);
     });
-
-    $(document).on('click', '.mes_img_enlarge', enlargeMessageImage);
-    $(document).on('click', '.mes_img_delete', deleteMessageImage);
 
     $(window).on('beforeunload', () => {
         cancelTtsPlay();
@@ -10537,6 +10541,7 @@ jQuery(async function () {
             <li>Chub Lorebook (Direct Link or ID)<br>Example: <tt>lorebooks/bartleby/example-lorebook</tt></li>
             <li>JanitorAI Character (Direct Link or UUID)<br>Example: <tt>ddd1498a-a370-4136-b138-a8cd9461fdfe_character-aqua-the-useless-goddess</tt></li>
             <li>Pygmalion.chat Character (Direct Link or UUID)<br>Example: <tt>a7ca95a1-0c88-4e23-91b3-149db1e78ab9</tt></li>
+            <li>AICharacterCard.com Character (Direct Link or ID)<br>Example: <tt>AICC/aicharcards/the-game-master</tt></li>
             <li>More coming soon...</li>
         <ul>`;
         const input = await callPopup(html, 'input', '', { okButton: 'Import', rows: 4 });

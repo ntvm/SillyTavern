@@ -71,7 +71,7 @@ export class Popup {
         this.ok.textContent = okButton ?? 'OK';
         this.cancel.textContent = cancelButton ?? 'Cancel';
 
-        switch(type) {
+        switch (type) {
             case POPUP_TYPE.TEXT: {
                 this.input.style.display = 'none';
                 this.cancel.style.display = 'none';
@@ -107,16 +107,27 @@ export class Popup {
             // illegal argument
         }
 
-        this.ok.addEventListener('click', ()=>this.completeAffirmative());
-        this.cancel.addEventListener('click', ()=>this.completeNegative());
-        const keyListener = (evt)=>{
+        this.input.addEventListener('keydown', (evt) => {
+            if (evt.key != 'Enter' || evt.altKey || evt.ctrlKey || evt.shiftKey) return;
+            evt.preventDefault();
+            evt.stopPropagation();
+            this.completeAffirmative();
+        });
+
+        this.ok.addEventListener('click', () => this.completeAffirmative());
+        this.cancel.addEventListener('click', () => this.completeNegative());
+        const keyListener = (evt) => {
             switch (evt.key) {
                 case 'Escape': {
-                    evt.preventDefault();
-                    evt.stopPropagation();
-                    this.completeCancelled();
-                    window.removeEventListener('keydown', keyListenerBound);
-                    break;
+                    // does it really matter where we check?
+                    const topModal = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)?.closest('.shadow_popup');
+                    if (topModal == this.dom) {
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                        this.completeCancelled();
+                        window.removeEventListener('keydown', keyListenerBound);
+                        break;
+                    }
                 }
             }
         };
@@ -127,7 +138,7 @@ export class Popup {
     async show() {
         document.body.append(this.dom);
         this.dom.style.display = 'block';
-        switch(this.type) {
+        switch (this.type) {
             case POPUP_TYPE.INPUT: {
                 this.input.focus();
                 break;
@@ -196,7 +207,7 @@ export class Popup {
             duration: animation_duration,
             easing: animation_easing,
         });
-        delay(animation_duration).then(()=>{
+        delay(animation_duration).then(() => {
             this.dom.remove();
         });
 
@@ -219,7 +230,7 @@ export function callGenericPopup(text, type, inputValue = '', { okButton, cancel
         text,
         type,
         inputValue,
-        { okButton, rows, wide, large, allowHorizontalScrolling, allowVerticalScrolling },
+        { okButton, cancelButton, rows, wide, large, allowHorizontalScrolling, allowVerticalScrolling },
     );
     return popup.show();
 }

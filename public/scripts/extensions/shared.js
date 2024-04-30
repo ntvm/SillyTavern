@@ -23,7 +23,6 @@ export async function getMultimodalCaption(base64Img, prompt) {
     // OpenRouter has a payload limit of ~2MB. Google is 4MB, but we love democracy.
     // Ooba requires all images to be JPEGs. Koboldcpp just asked nicely.
     const isGoogle = extension_settings.caption.multimodal_api === 'google';
-    const isClaude = extension_settings.caption.multimodal_api === 'anthropic';
     const isOllama = extension_settings.caption.multimodal_api === 'ollama';
     const isLlamaCpp = extension_settings.caption.multimodal_api === 'llamacpp';
     const isCustom = extension_settings.caption.multimodal_api === 'custom';
@@ -56,7 +55,7 @@ export async function getMultimodalCaption(base64Img, prompt) {
 
     if (!isGoogle) {
         requestBody.api = extension_settings.caption.multimodal_api || 'openai';
-        requestBody.model = extension_settings.caption.multimodal_model || 'gpt-4-vision-preview';
+        requestBody.model = extension_settings.caption.multimodal_model || 'gpt-4-turbo';
         requestBody.reverse_proxy = proxyUrl;
         requestBody.proxy_password = proxyPassword;
     }
@@ -83,7 +82,7 @@ export async function getMultimodalCaption(base64Img, prompt) {
 
     if (isCustom) {
         requestBody.server_url = oai_settings.custom_url;
-        requestBody.model = oai_settings.custom_model || 'gpt-4-vision-preview';
+        requestBody.model = oai_settings.custom_model || 'gpt-4-turbo';
         requestBody.custom_include_headers = oai_settings.custom_include_headers;
         requestBody.custom_include_body = oai_settings.custom_include_body;
         requestBody.custom_exclude_body = oai_settings.custom_exclude_body;

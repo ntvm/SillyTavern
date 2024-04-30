@@ -129,8 +129,8 @@ function addKeyboardProps(element) {
  * selected token highlighted. If no token is selected, the subview is hidden.
  */
 function renderTopLogprobs() {
+    $('#logprobs_top_logprobs_hint').hide();
     const view = $('.logprobs_candidate_list');
-    const hint = $('#logprobs_top_logprobs_hint').hide();
     view.empty();
 
     if (!state.selectedTokenLogprobs) {
@@ -221,7 +221,7 @@ function onAlternativeClicked(tokenLogprobs, alternative) {
     }
 
     if (getGeneratingApi() === 'openai') {
-        return callPopup(`<h3>Feature unavailable</h3><p>Due to API limitations, rerolling a token is not supported with OpenAI. Try switching to a different API.</p>`, 'text');
+        return callPopup('<h3>Feature unavailable</h3><p>Due to API limitations, rerolling a token is not supported with OpenAI. Try switching to a different API.</p>', 'text');
     }
 
     const { messageLogprobs, continueFrom } = getActiveMessageLogprobData();
@@ -261,7 +261,7 @@ function onPrefixClicked() {
 
 function checkGenerateReady() {
     if (is_send_press) {
-        toastr.warning(`Please wait for the current generation to complete.`);
+        toastr.warning('Please wait for the current generation to complete.');
         return false;
     }
     return true;
@@ -292,13 +292,13 @@ function onToggleLogprobsPanel() {
     } else {
         logprobsViewer.addClass('resizing');
         logprobsViewer.transition({
-                opacity: 0.0,
-                duration: animation_duration,
-            },
-            async function () {
-                await delay(50);
-                logprobsViewer.removeClass('resizing');
-            });
+            opacity: 0.0,
+            duration: animation_duration,
+        },
+        async function () {
+            await delay(50);
+            logprobsViewer.removeClass('resizing');
+        });
         setTimeout(function () {
             logprobsViewer.hide();
         }, animation_duration);
@@ -407,7 +407,7 @@ export function saveLogprobsForActiveMessage(logprobs, continueFrom) {
         messageLogprobs: logprobs,
         continueFrom,
         hash: getMessageHash(chat[msgId]),
-    }
+    };
 
     state.messageLogprobs.set(data.hash, data);
 
@@ -458,7 +458,7 @@ function convertTokenIdLogprobsToText(input) {
 
     // Flatten unique token IDs across all logprobs
     const tokenIds = Array.from(new Set(input.flatMap(logprobs =>
-        logprobs.topLogprobs.map(([token]) => token).concat(logprobs.token)
+        logprobs.topLogprobs.map(([token]) => token).concat(logprobs.token),
     )));
 
     // Submit token IDs to tokenizer to get token text, then build ID->text map
@@ -469,13 +469,13 @@ function convertTokenIdLogprobsToText(input) {
     input.forEach(logprobs => {
         logprobs.token = tokenIdText.get(logprobs.token);
         logprobs.topLogprobs = logprobs.topLogprobs.map(([token, logprob]) =>
-            [tokenIdText.get(token), logprob]
+            [tokenIdText.get(token), logprob],
         );
     });
 }
 
 export function initLogprobs() {
-    const debouncedRender = debounce(renderAlternativeTokensView, 500);
+    const debouncedRender = debounce(renderAlternativeTokensView);
     $('#logprobsViewerClose').click(onToggleLogprobsPanel);
     $('#option_toggle_logprobs').click(onToggleLogprobsPanel);
     eventSource.on(event_types.CHAT_CHANGED, debouncedRender);

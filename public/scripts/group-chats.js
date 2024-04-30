@@ -14,6 +14,7 @@ import {
 } from './utils.js';
 import { RA_CountCharTokens, humanizedDateTime, dragElement, favsToHotswap, getMessageTimeStamp } from './RossAscends-mods.js';
 import { power_user, loadMovingUIState, sortEntitiesList } from './power-user.js';
+import { debounce_timeout } from './constants.js';
 
 import {
     chat,
@@ -118,9 +119,9 @@ export const group_generation_mode = {
 
 const DEFAULT_AUTO_MODE_DELAY = 5;
 
-export const groupCandidatesFilter = new FilterHelper(debounce(printGroupCandidates, 100));
+export const groupCandidatesFilter = new FilterHelper(debounce(printGroupCandidates, debounce_timeout.quick));
 let autoModeWorker = null;
-const saveGroupDebounced = debounce(async (group, reload) => await _save(group, reload), 500);
+const saveGroupDebounced = debounce(async (group, reload) => await _save(group, reload), debounce_timeout.relaxed);
 
 function setAutoModeWorker() {
     clearInterval(autoModeWorker);
@@ -188,9 +189,7 @@ export async function getGroupChat(groupId, reload = false) {
 
     if (Array.isArray(data) && data.length) {
         data[0].is_group = true;
-        for (let key of data) {
-            chat.push(key);
-        }
+        chat.splice(0, chat.length, ...data);
         await printMessages();
     } else {
         sendSystemMessage(system_message_types.GROUP, '', { isSmallSys: true });

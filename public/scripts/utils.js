@@ -2,6 +2,7 @@ import { getContext } from './extensions.js';
 import { getRequestHeaders } from '../script.js';
 import { isMobile } from './RossAscends-mods.js';
 import { collapseNewlines } from './power-user.js';
+import { debounce_timeout } from './constants.js';
 
 /**
  * Pagination status string template.
@@ -256,10 +257,10 @@ export function getStringHash(str, seed = 0) {
 /**
  * Creates a debounced function that delays invoking func until after wait milliseconds have elapsed since the last time the debounced function was invoked.
  * @param {function} func The function to debounce.
- * @param {number} [timeout=300] The timeout in milliseconds.
+ * @param {debounce_timeout|number} [timeout=debounce_timeout.default] The timeout based on the common enum values, or in milliseconds.
  * @returns {function} The debounced function.
  */
-export function debounce(func, timeout = 300) {
+export function debounce(func, timeout = debounce_timeout.standard) {
     let timer;
     return (...args) => {
         clearTimeout(timer);
@@ -685,12 +686,17 @@ export function sortMoments(a, b) {
  * splitRecursive('Hello, world!', 3); // ['Hel', 'lo,', 'wor', 'ld!']
 */
 export function splitRecursive(input, length, delimiters = ['\n\n', '\n', ' ', '']) {
+    // Invalid length
+    if (length <= 0) {
+        return [input];
+    }
+
     const delim = delimiters[0] ?? '';
     const parts = input.split(delim);
 
     const flatParts = parts.flatMap(p => {
         if (p.length < length) return p;
-        return splitRecursive(input, length, delimiters.slice(1));
+        return splitRecursive(p, length, delimiters.slice(1));
     });
 
     // Merge short chunks
@@ -1180,16 +1186,23 @@ export function uuidv4() {
 }
 
 function postProcessText(text, collapse = true) {
+    // Remove carriage returns
+    text = text.replace(/\r/g, '');
+    // Replace tabs with spaces
+    text = text.replace(/\t/g, ' ');
+    // Normalize unicode spaces
+    text = text.replace(/\u00A0/g, ' ');
     // Collapse multiple newlines into one
     if (collapse) {
         text = collapseNewlines(text);
         // Trim leading and trailing whitespace, and remove empty lines
         text = text.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+    } else {
+        // Replace more than 4 newlines with 4 newlines
+        text = text.replace(/\n{4,}/g, '\n\n\n\n');
+        // Trim lines that contain nothing but whitespace
+        text = text.split('\n').map(l => /^\s+$/.test(l) ? '' : l).join('\n');
     }
-    // Remove carriage returns
-    text = text.replace(/\r/g, '');
-    // Normalize unicode spaces
-    text = text.replace(/\u00A0/g, ' ');
     // Collapse multiple spaces into one (except for newlines)
     text = text.replace(/ {2,}/g, ' ');
     // Remove leading and trailing spaces
@@ -1295,6 +1308,95 @@ export async function extractTextFromMarkdown(blob) {
     return text;
 }
 
+export async function extractTextFromEpub(blob) {
+    async function initEpubJs() {
+        const epubScript = new Promise((resolve, reject) => {
+            const epubScript = document.createElement('script');
+            epubScript.async = true;
+            epubScript.src = 'lib/epub.min.js';
+            epubScript.onload = resolve;
+            epubScript.onerror = reject;
+            document.head.appendChild(epubScript);
+        });
+
+        const jszipScript = new Promise((resolve, reject) => {
+            const jszipScript = document.createElement('script');
+            jszipScript.async = true;
+            jszipScript.src = 'lib/jszip.min.js';
+            jszipScript.onload = resolve;
+            jszipScript.onerror = reject;
+            document.head.appendChild(jszipScript);
+        });
+
+        return Promise.all([epubScript, jszipScript]);
+    }
+
+    if (!('ePub' in window)) {
+        await initEpubJs();
+    }
+
+    const book = ePub(blob);
+    await book.ready;
+    const sectionPromises = [];
+
+    book.spine.each((section) => {
+        const sectionPromise = (async () => {
+            const chapter = await book.load(section.href);
+            if (!(chapter instanceof Document) || !chapter.body?.textContent) {
+                return '';
+            }
+            return chapter.body.textContent.trim();
+        })();
+
+        sectionPromises.push(sectionPromise);
+    });
+
+    const content = await Promise.all(sectionPromises);
+    const text = content.filter(text => text);
+    return postProcessText(text.join('\n'), false);
+}
+
+/**
+ * Extracts text from an Office document using the server plugin.
+ * @param {File} blob File to extract text from
+ * @returns {Promise<string>} A promise that resolves to the extracted text.
+ */
+export async function extractTextFromOffice(blob) {
+    async function checkPluginAvailability() {
+        try {
+            const result = await fetch('/api/plugins/office/probe', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+            });
+
+            return result.ok;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    const isPluginAvailable = await checkPluginAvailability();
+
+    if (!isPluginAvailable) {
+        throw new Error('Importing Office documents requires a server plugin. Please refer to the documentation for more information.');
+    }
+
+    const base64 = await getBase64Async(blob);
+
+    const response = await fetch('/api/plugins/office/parse', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ data: base64 }),
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to parse the Office document');
+    }
+
+    const data = await response.text();
+    return postProcessText(data, false);
+}
+
 /**
  * Sets a value in an object by a path.
  * @param {object} obj Object to set value in
@@ -1317,4 +1419,14 @@ export function setValueByPath(obj, path, value) {
     }
 
     currentObject[keyParts[keyParts.length - 1]] = value;
+}
+
+/**
+ * Flashes the given HTML element via CSS flash animation for a defined period
+ * @param {JQuery<HTMLElement>} element - The element to flash
+ * @param {number} timespan - A numer in milliseconds how the flash should last
+ */
+export function flashHighlight(element, timespan = 2000) {
+    element.addClass('flash animated');
+    setTimeout(() => element.removeClass('flash animated'), timespan);
 }
