@@ -316,12 +316,6 @@ export function evaluateMacros(content, env) {
     content = content.replace(/{{currentSwipeId}}/gi, () => String(getCurrentSwipeId() ?? ''));
     content = content.replace(/{{lastMesID}}/gi, () => (chat?.length - 1));
 
-    // Legacy non-macro substitutions
-    content = content.replace(/<USER>/gi, typeof env.user === 'function' ? env.user() : env.user);
-    content = content.replace(/<BOT>/gi, typeof env.char === 'function' ? env.char() : env.char);
-    content = content.replace(/<CHARIFNOTGROUP>/gi, typeof env.group === 'function' ? env.group() : env.group);
-    content = content.replace(/<GROUP>/gi, typeof env.group === 'function' ? env.group() : env.group);
-
     content = content.replace(/\{\{\/\/([\s\S]*?)\}\}/gm, '');
 
     content = content.replace(/{{time}}/gi, () => moment().format('LT'));

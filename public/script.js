@@ -1278,14 +1278,6 @@ function getCharacterBlock(item, id) {
  * @param {boolean} fullRefresh - If true, the list is fully refreshed and the navigation is being reset
  */
 async function printCharacters(fullRefresh = false) {
-    if (fullRefresh) {
-        saveCharactersPage = 0;
-        printTagFilters(tag_filter_types.character);
-        printTagFilters(tag_filter_types.group_member);
-
-        await delay(1);
-    }
-
     const storageKey = 'Characters_PerPage';
     const listId = '#rm_print_characters_block';
     const entities = getEntitiesList({ doFilter: true });
@@ -1361,6 +1353,8 @@ async function printCharacters(fullRefresh = false) {
     favsToHotswap();
 }
 
+/** @typedef {object} Character - A character */
+/** @typedef {object} Group - A group */
 /**
  * @typedef {object} Entity - Object representing a display entity
  * @property {Character|Group|import('./scripts/tags.js').Tag|*} item - The item
@@ -3453,7 +3447,6 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     // Add persona description to prompt
     addPersonaDescriptionExtensionPrompt();
     // Call combined AN into Generate
-    let allAnchors = getAllExtensionPrompts();
     const beforeScenarioAnchor = getExtensionPrompt(extension_prompt_types.BEFORE_PROMPT).trimStart();
     const afterScenarioAnchor = getExtensionPrompt(extension_prompt_types.IN_PROMPT);
 
@@ -3500,10 +3493,11 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
 
     async function getMessagesTokenCount() {
         const encodeString = [
+            beforeScenarioAnchor,
             storyString,
+            afterScenarioAnchor,
             examplesString,
             chatString,
-            allAnchors,
             quiet_prompt,
             cyclePrompt,
             userAlignmentMessage,
@@ -3764,12 +3758,13 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         console.debug('---checking Prompt size');
         setPromptString();
         const prompt = [
+            beforeScenarioAnchor,
             storyString,
+            afterScenarioAnchor,
             mesExmString,
             mesSend.map((e) => `${e.extensionPrompts.join('')}${e.message}`).join(''),
             '\n',
             generatedPromptCache,
-            allAnchors,
             quiet_prompt,
         ].join('').replace(/\r/gm, '');
         let thisPromptContextSize = await getTokenCountAsync(prompt, power_user.token_padding);
@@ -8084,8 +8079,8 @@ const swipe_right = () => {
             duration: swipe_duration,
             easing: animation_easing,
             queue: false,
-            complete: async function (run_generate) {
-                favoriteSwipeDealer();
+            complete: async function () {
+                favoriteSwipeDealer(run_generate);
                 /*if (!selected_group) {
                     var typingIndicator = $("#typing_indicator_template .typing_indicator").clone();
                     typingIndicator.find(".typing_indicator_name").text(characters[this_chid].name);

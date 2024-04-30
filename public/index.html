@@ -184,7 +184,6 @@
                                             <option value="gui" data-i18n="default">Default</option>
                                         </select>
                                         <i id="update_oai_preset" class="menu_button fa-solid fa-save" title="Update current preset" data-i18n="[title]Update current preset"></i>
-                                        <input id="openai_preset_import_file" type="file" accept=".json,.settings" hidden />
                                         <i id="new_oai_preset" class="menu_button fa-solid fa-plus" title="Create new preset" data-i18n="[title]Create new preset"></i>
                                         <i data-newbie-hidden title="Import preset" id="import_oai_preset" class="menu_button fa-solid fa-file-import" data-i18n="[title]Import preset"></i>
                                         <i data-newbie-hidden title="Export preset" id="export_oai_preset" class="menu_button fa-solid fa-file-export" data-i18n="[title]Export preset"></i>
@@ -2909,15 +2908,17 @@
             <div class="drawer-content">
                 <h3 class="margin0" data-i18n="Advanced Formatting">
                     Advanced Formatting
-                    <a href="https://docs.sillytavern.app/usage/core-concepts/advancedformatting/" class="notes-link" target="_blank">
-                        <span class="fa-solid fa-circle-question note-link-span"></span>
-                    </a>
                 </h3>
                 <div class="flex-container">
                     <div id="PygOverrides">
                         <div>
                             <h4 class="standoutHeader title_restorable">
-                                <span data-i18n="Context Template">Context Template</span>
+                                <div>
+                                    <span data-i18n="Context Template">Context Template</span>
+                                    <a href="https://docs.sillytavern.app/usage/core-concepts/advancedformatting/#context-template" class="notes-link" target="_blank">
+                                        <span class="fa-solid fa-circle-question note-link-span"></span>
+                                    </a>
+                                </div>
                                 <div class="flex-container">
                                     <i data-newbie-hidden data-preset-manager-import="context" class="margin0 menu_button fa-solid fa-file-import" title="Import preset" data-i18n="[title]Import preset"></i>
                                     <i data-newbie-hidden data-preset-manager-export="context" class="margin0 menu_button fa-solid fa-file-export" title="Export preset" data-i18n="[title]Export preset"></i>

@@ -713,7 +713,7 @@ async function sendCohereRequest(request, response) {
             frequency_penalty: request.body.frequency_penalty,
             presence_penalty: request.body.presence_penalty,
             prompt_truncation: 'AUTO_PRESERVE_ORDER',
-            connectors: [], // TODO
+            connectors: connectors,
             documents: [],
             tools: [],
             tool_results: [],

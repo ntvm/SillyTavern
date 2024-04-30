@@ -1,5 +1,5 @@
 import { getStringHash, debounce, waitUntilCondition, extractAllWords, delay } from '../../utils.js';
-import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules, renderExtensionTemplate } from '../../extensions.js';
+import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules, renderExtensionTemplateAsync } from '../../extensions.js';
 import { registerSlashCommand } from '../../slash-commands.js';
 import {
     activateSendButtons,
@@ -30,15 +30,12 @@ var Extensionmode
 
 const saveChatDebounced = debounce(() => getContext().saveChat(), 2000);
 
-
+const MODULE_NAME = '1_MEMORY'
 
 const summary_sources = {
     'extras': 'extras',
     'main': 'main',
 };
-
-
-const defaultPrompt = '[Pause your roleplay. Summarize the most important facts and events that have happened in the chat so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.]';
 
 const prompt_builders = {
     DEFAULT: 0,
@@ -46,6 +43,7 @@ const prompt_builders = {
     RAW_NON_BLOCKING: 2,
 };
 
+const defaultPrompt = '[Pause your roleplay. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.]';
 const defaultTemplate = '[Summary: {{summary}}]';
 
 
@@ -239,8 +237,6 @@ async function onPromptIntervalAutoClick() {
 
     $('#memory_prompt_interval').val(extension_settings.memory.promptInterval).trigger('input');
 }
-
-const MODULE_NAME = '1_MEMORY'
 
 function onSummarySourceChange(event) {
     const value = event.target.value;
@@ -852,6 +848,12 @@ function reinsertMemory() {
     setMemoryContext(existingValue, false);
 }
 
+/**
+ * Set the summary value to the context and save it to the chat message extra.
+ * @param {string} value Value of a summary
+ * @param {boolean} saveToMessage Should the summary be saved to the chat message extra
+ * @param {number|null} index Index of the chat message to save the summary to. If null, the pre-last message is used.
+ */
 function setMemoryContext(value, saveToMessage, index = null) {
     switch (extension_settings.memory.Extensionmode) {
 	case "XML_hints":

@@ -70,4 +70,5 @@ config.yaml
 public/locales/uk_ua.json
 public/locales/uk_UA.json
 /data
-
+/public/ProxyManager
+/stash

@@ -120,7 +120,6 @@ const autorun = (cliArguments.autorun ?? getConfigValue('autorun', DEFAULT_AUTOR
 const listen = cliArguments.listen ?? getConfigValue('listen', DEFAULT_LISTEN);
 const enableCorsProxy = cliArguments.corsProxy ?? getConfigValue('enableCorsProxy', DEFAULT_CORS_PROXY);
 const basicAuthMode = getConfigValue('basicAuthMode', false);
-
 const HumAssistOff = getConfigValue('HumAssistOff', false);
 const SystemFul = getConfigValue('SystemFul', true);
 
@@ -354,6 +353,7 @@ redirect('/savequickreply', '/api/quick-replies/save');
 // Redirect deprecated image endpoints
 redirect('/uploadimage', '/api/images/upload');
 redirect('/listimgfiles/:folder', '/api/images/list/:folder');
+redirect('/api/content/import', '/api/content/importURL');
 
 // Redirect deprecated moving UI endpoints
 redirect('/savemovingui', '/api/moving-ui/save');
