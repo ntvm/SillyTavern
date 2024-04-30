@@ -3307,7 +3307,6 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
     if (mesExamples.replace(/<START>/gi, '').trim().length === 0) {
         mesExamples = '';
     }
-    const mesExamplesRaw = mesExamples;
     /**
      * Adds a block heading to the examples string.
      * @param {string} examplesStr

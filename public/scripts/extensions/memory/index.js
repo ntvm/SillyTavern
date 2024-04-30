@@ -1,6 +1,6 @@
 import { getStringHash, debounce, waitUntilCondition, extractAllWords, delay } from '../../utils.js';
 import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules, renderExtensionTemplate } from '../../extensions.js';
-import { animation_duration, eventSource, event_types, extension_prompt_roles, extension_prompt_types, generateQuietPrompt, is_send_press, saveSettingsDebounced, saveSettings, substituteParams } from '../../../script.js';
+import { registerSlashCommand } from '../../slash-commands.js';
 import {
     activateSendButtons,
     deactivateSendButtons,
@@ -110,7 +110,7 @@ function loadSettings() {
         }
     }
 
-    
+
 
     $('#summary_source').val(extension_settings.memory.source).trigger('change');
     $('#Extensionmode').val(extension_settings.memory.Extensionmode).trigger('change');
@@ -139,8 +139,8 @@ switch (extension_settings.memory.Extensionmode) {
 	case "XML_hints":
 		var formatMemoryValue = (value) => value ? `[Hints]\n${value.trim()}` : '';
 		break
-		
-	default: 
+
+	default:
 		var formatMemoryValue = function (value) {
 			if (!value) {
 				return '';
@@ -235,6 +235,8 @@ async function onPromptIntervalAutoClick() {
     $('#memory_prompt_interval').val(extension_settings.memory.promptInterval).trigger('input');
 }
 
+const MODULE_NAME = '1_MEMORY'
+
 function onSummarySourceChange(event) {
     const value = event.target.value;
     extension_settings.memory.source = value;
@@ -255,7 +257,7 @@ function onExtensionmodeChange(event) {
     extension_settings.memory.Extensionmode = value;
     $('#memory_settings [data-source]').each((_, element) => {
         const source = $(element).data('source');
-    });    
+    });
     saveSettingsDebounced();
 }
 
@@ -490,11 +492,11 @@ async function onChatEvent() {
             switch (extension_settings.memory.Extensionmode) {
                 case "XML_hints":
                     break
-                default: 
+                default:
                     delete chat[chat.length - 1].extra.memory;
                     break
 	}
-		
+
     }
 
     try {
@@ -860,16 +862,16 @@ function setMemoryContext(value, saveToMessage, index = null) {
 		if (saveToMessage && context.chat.length) {
 			const idx = context.chat.length - 2;
 			const mes = context.chat[idx < 0 ? 0 : idx];
-	
+
 			if (!mes.extra) {
 				mes.extra = {};
 			}
-	
+
 			mes.extra.memory = value;
 			saveChatDebounced();
 		}
 		break
-	default: 
+	default:
 		var context = getContext();
 		context.setExtensionPrompt(MODULE_NAME, formatMemoryValue(value), extension_settings.memory.position, extension_settings.memory.depth, false, extension_settings.memory.role);
 		$('#memory_contents').val(value);
@@ -891,10 +893,10 @@ function setMemoryContext(value, saveToMessage, index = null) {
 		}
 		break
 }
-}	
-	
-	
-	
+}
+
+
+
 
 
 function doPopout(e) {
@@ -975,8 +977,8 @@ function setupListeners() {
     $('#summarySettingsBlockToggle').off('click').on('click', function () {
         console.log('saw settings button click');
         $("#summarySettingsBlock").slideToggle(200, "swing"); //toggleClass("hidden");
-    });
-}
+    })})};
+
 
 jQuery(function () {
     function addExtensionControls() {

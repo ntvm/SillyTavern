@@ -1826,7 +1826,6 @@ async function sendOpenAIRequest(type, messages, signal) {
                 }
                 break;
         }
-    }
 
     // Add logprobs request (currently OpenAI only, max 5 on their side)
     if (useLogprobs && (isOAI || isCustom)) {

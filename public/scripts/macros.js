@@ -92,42 +92,6 @@ function getLastCharMessage() {
 }
 
 /**
- * Returns the last message from the user.
- * @returns {string} The last message from the user.
- */
-function getLastUserMessage() {
-    if (!Array.isArray(chat) || chat.length === 0) {
-        return '';
-    }
-
-    for (let i = chat.length - 1; i >= 0; i--) {
-        if (chat[i].is_user && !chat[i].is_system) {
-            return chat[i].mes;
-        }
-    }
-
-    return '';
-}
-
-/**
- * Returns the last message from the bot.
- * @returns {string} The last message from the bot.
- */
-function getLastCharMessage() {
-    if (!Array.isArray(chat) || chat.length === 0) {
-        return '';
-    }
-
-    for (let i = chat.length - 1; i >= 0; i--) {
-        if (!chat[i].is_user && !chat[i].is_system) {
-            return chat[i].mes;
-        }
-    }
-
-    return '';
-}
-
-/**
  * Returns the ID of the last swipe.
  * @returns {string} The 1-based ID of the last swipe
  */
