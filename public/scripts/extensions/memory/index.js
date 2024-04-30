@@ -30,7 +30,14 @@ var Extensionmode
 
 const saveChatDebounced = debounce(() => getContext().saveChat(), 2000);
 
-const MODULE_NAME = '1_MEMORY'
+const MODULE_NAME = '1_memory';
+
+let lastCharacterId = null;
+let lastGroupId = null;
+let lastChatId = null;
+let lastMessageHash = null;
+let lastMessageId = null;
+let inApiCall = false;
 
 const summary_sources = {
     'extras': 'extras',
