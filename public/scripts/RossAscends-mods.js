@@ -662,16 +662,18 @@ export async function initMovingUI() {
 
 /**@type {HTMLTextAreaElement} */
 const sendTextArea = document.querySelector('#send_textarea');
+const chatBlock = document.getElementById('chat');
+const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+
 /**
  * this makes the chat input text area resize vertically to match the text size (limited by CSS at 50% window height)
  */
 function autoFitSendTextArea() {
-    const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
-    /**@type {HTMLDivElement} */
-    const chatBlock = document.querySelector('#chat');
     const originalScrollBottom = chatBlock.scrollHeight - (chatBlock.scrollTop + chatBlock.offsetHeight);
     if (sendTextArea.scrollHeight == sendTextArea.offsetHeight) {
-        sendTextArea.style.height = window.getComputedStyle(sendTextArea).getPropertyValue('min-height');
+        // Needs to be pulled dynamically because it is affected by font size changes
+        const sendTextAreaMinHeight = window.getComputedStyle(sendTextArea).getPropertyValue('min-height');
+        sendTextArea.style.height = sendTextAreaMinHeight;
     }
     sendTextArea.style.height = sendTextArea.scrollHeight + 0.3 + 'px';
 
@@ -844,8 +846,8 @@ export function initRossMods() {
         saveSettingsDebounced();
     });
 
-    $(sendTextArea).on('input', ()=>{
-        if (sendTextArea.scrollHeight > sendTextArea.offsetHeight) {
+    $(sendTextArea).on('input', () => {
+        if (sendTextArea.scrollHeight > sendTextArea.offsetHeight || sendTextArea.value === '') {
             autoFitSendTextArea();
         } else {
             autoFitSendTextAreaDebounced();
@@ -902,9 +904,8 @@ export function initRossMods() {
     }
 
     $(document).on('keydown', function (event) {
-        processHotkeysDebounced(event.originalEvent);
+        processHotkeys(event.originalEvent);
     });
-    const processHotkeysDebounced = debounce(processHotkeys);
 
     const hotkeyTargets = {
         'send_textarea': sendTextArea,

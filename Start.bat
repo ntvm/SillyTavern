@@ -1,3 +1,4 @@
+@echo off
 pushd %~dp0
 call npm install
 node server.js %*
