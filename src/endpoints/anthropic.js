@@ -6,7 +6,7 @@ const { jsonParser } = require('../express-common');
 const router = express.Router();
 
 function Proxystuff(Uscase){
-    var array = readSecret(SECRET_KEYS.OAIPROXY);
+    var array = readSecret(request.user.directories, SECRET_KEYS.OAIPROXY);
     if (array == undefined) { allowProxy = false; return allowProxy;}
     var passw = array.pop();
     var url = array.pop();
@@ -40,7 +40,7 @@ router.post('/caption-image', jsonParser, async (request, response) => {
             apikey = request.body.proxy_password;
         } else {
             url = 'https://api.anthropic.com/v1/messages';
-            apikey = readSecret(SECRET_KEYS.CLAUDE);
+            apikey = readSecret(request.user.directories, SECRET_KEYS.CLAUDE);
         }
         if (allowProxy == true) {
             rn = 'getURL';

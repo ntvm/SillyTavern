@@ -10,19 +10,17 @@ export function showLoader() {
 	const loader = 'useless';
 }
 
-export function hideLoader() {
+export async function hideLoader() {
     //Sets up a 2-step animation. Spinner blurs/fades out, and then the loader shadow does the same.
     /*
-	$(`#load-spinner`).on("transitionend webkitTransitionEnd oTransitionEnd MSTransitionEnd", function () {
-        //console.log('FADING BLUR SCREEN')
+    $('#load-spinner').on('transitionend webkitTransitionEnd oTransitionEnd MSTransitionEnd', function () {
         $(`#${ELEMENT_ID}`)
+            //only fade out the spinner and replace with login screen
             .animate({ opacity: 0 }, 300, function () {
-                //console.log('REMOVING LOADER')
                 $(`#${ELEMENT_ID}`).remove();
             });
     });
 
-    //console.log('BLURRING SPINNER')
     $('#load-spinner')
         .css({
             'filter': 'blur(15px)',
