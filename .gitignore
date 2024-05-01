@@ -69,3 +69,4 @@ config.yaml
 /plugins/
 public/locales/uk_ua.json
 public/locales/uk_UA.json
+/data
