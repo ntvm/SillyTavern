@@ -275,6 +275,7 @@ const default_settings = {
     claude_use_sysprompt: false,
     claude_exclude_prefixes: false,
     claude_allow_plaintext: true,
+    names_in_completion: false,
     exclude_assistant: false,
     use_makersuite_sysprompt: true,
     use_alt_scale: false,
@@ -2847,6 +2848,7 @@ function loadOpenAISettings(data, settings) {
 
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
     if (settings.claude_allow_plaintext !== undefined) oai_settings.claude_allow_plaintext = !!settings.claude_allow_plaintext;
+    if (settings.claude_exclude_prefixes !== undefined) oai_settings.claude_exclude_prefixes = !!settings.claude_exclude_prefixes;
     if (settings.names_in_completion !== undefined) oai_settings.names_in_completion = !!settings.names_in_completion;
     if (settings.openai_model !== undefined) oai_settings.openai_model = settings.openai_model;
     if (settings.use_ai21_tokenizer !== undefined) { oai_settings.use_ai21_tokenizer = !!settings.use_ai21_tokenizer; oai_settings.use_ai21_tokenizer ? ai21_max = 8191 : ai21_max = 9200; }
@@ -2896,6 +2898,7 @@ function loadOpenAISettings(data, settings) {
     $('#use_google_tokenizer').prop('checked', oai_settings.use_google_tokenizer);
     $('#exclude_assistant').prop('checked', oai_settings.exclude_assistant);
     $('#claude_allow_plaintext').prop('checked', oai_settings.claude_allow_plaintext);
+    $('#claude_exclude_prefixes').prop('checked', oai_settings.claude_exclude_prefixes);
     $('#claude_use_sysprompt').prop('checked', oai_settings.claude_use_sysprompt);
     $('#use_makersuite_sysprompt').prop('checked', oai_settings.use_makersuite_sysprompt);
     $('#scale-alt').prop('checked', oai_settings.use_alt_scale);
@@ -3180,7 +3183,8 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         use_ai21_tokenizer: settings.use_ai21_tokenizer,
         use_google_tokenizer: settings.use_google_tokenizer,
         exclude_assistant: settings.exclude_assistant,
-		claude_allow_plaintext: settings.claude_allow_plaintext,
+        claude_allow_plaintext: settings.claude_allow_plaintext,
+        claude_exclude_prefixes: settings.claude_exclude_prefixes,
         claude_use_sysprompt: settings.claude_use_sysprompt,
         exclude_assistant: settings.exclude_assistant,
         exclude_h_a_prompt: settings.exclude_h_a_prompt,
@@ -3568,6 +3572,7 @@ function onSettingsPresetChange() {
         use_ai21_tokenizer: ['#use_ai21_tokenizer', 'use_ai21_tokenizer', true],
         use_google_tokenizer: ['#use_google_tokenizer', 'use_google_tokenizer', true],
         claude_allow_plaintext: ['#claude_allow_plaintext', 'claude_allow_plaintext', true],
+        claude_exclude_prefixes: ['#claude_exclude_prefixes', 'claude_exclude_prefixes', true],
         exclude_assistant: ['#exclude_assistant', 'exclude_assistant', true],
         claude_use_sysprompt: ['#claude_use_sysprompt', 'claude_use_sysprompt', true],
         use_makersuite_sysprompt: ['#use_makersuite_sysprompt', 'use_makersuite_sysprompt', true],
@@ -4555,6 +4560,11 @@ $(document).ready(async function () {
 
     $('#claude_allow_plaintext').on('change', function () {
         oai_settings.claude_allow_plaintext = !!$('#claude_allow_plaintext').prop('checked');
+        saveSettingsDebounced();
+    });
+	
+    $('#claude_exclude_prefixes').on('change', function () {
+        oai_settings.claude_exclude_prefixes = !!$('#claude_exclude_prefixes').prop('checked');
         saveSettingsDebounced();
     });
 
