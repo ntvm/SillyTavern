@@ -855,5 +855,18 @@ jQuery(function () {
     addExtensionControls();
     loadSettings();
     eventSource.on(event_types.CHAT_CHANGED, onChatEvent);
+	
+	
+/*    $(document).on('click', '.mes_text p', function() {
+        var index = $(this).index();
+        alert("Вы нажали на параграф номер " + (index + 1) + "Сообщения " + ());
+    });
+
+    $(document).on('click', '.mes_text p', function() {
+        var index = $(this).index();
+        var mesid = $(this).closest('.mes').attr('mesid');
+        alert("Вы нажали на параграф номер " + (index + 1) + ", mesid: " + mesid);
+    });*/
+	
 });
 
