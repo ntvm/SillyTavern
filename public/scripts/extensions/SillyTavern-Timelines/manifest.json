@@ -1,12 +1,11 @@
 {
     "display_name": "Timelines",
     "loading_order": 9,
-    "requires": [],
     "optional": [],
+    "requires": [],
     "js": "index.js",
     "css": "tl_style.css",
     "author": "city-unit",
     "version": "1.2.0",
     "homePage": "https://github.com/SillyTavern/SillyTavern-Timelines",
-    "auto_update": true
-}
+    "auto_update": false

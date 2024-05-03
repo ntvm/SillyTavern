@@ -183,8 +183,20 @@ let extension_settings = {
     variables: {
         global: {},
     },
+    /**
+     * @type {import('./chats.js').FileAttachment[]}
+     */
     attachments: [],
+    /**
+     * @type {Record<string, import('./chats.js').FileAttachment[]>}
+     */
     character_attachments: {},
+    chub: {},
+    timeline: {},
+    /**
+     * @type {string[]}
+     */
+    disabled_attachments: [],
 };
 
 let modules = [];

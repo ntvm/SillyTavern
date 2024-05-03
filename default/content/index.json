@@ -564,6 +564,10 @@
         "type": "context"
     },
     {
+        "filename": "presets/context/Phi.json",
+        "type": "context"
+    },
+    {
         "filename": "presets/instruct/Adventure.json",
         "type": "instruct"
     },
@@ -656,6 +660,10 @@
         "type": "instruct"
     },
     {
+        "filename": "presets/instruct/Phi.json",
+        "type": "instruct"
+    },
+    {
         "filename": "presets/moving-ui/Default.json",
         "type": "moving_ui"
     },
@@ -667,7 +675,7 @@
         "filename": "presets/quick-replies/Default.json",
         "type": "quick_replies"
     },
-        {
+    {
         "filename": "presets/NvSettings/Default.json",
         "type": "NvSettings"
     },
@@ -682,5 +690,21 @@
     {
         "filename": "presets/OpenAI_Settings/Default.json",
         "type": "openai_preset"
+    },
+    {
+        "filename": "presets/instruct/Llama-3-Instruct-Names.json",
+        "type": "instruct"
+    },
+    {
+        "filename": "presets/instruct/ChatML-Names.json",
+        "type": "instruct"
+    },
+    {
+        "filename": "presets/context/Llama-3-Instruct-Names.json",
+        "type": "context"
+    },
+    {
+        "filename": "presets/context/ChatML-Names.json",
+        "type": "context"
     }
 ]

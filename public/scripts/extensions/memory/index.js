@@ -20,6 +20,7 @@ import { is_group_generating, selected_group } from '../../group-chats.js';
 import { loadMovingUIState } from '../../power-user.js';
 import { dragElement } from '../../RossAscends-mods.js';
 import { getTextTokens, getTokenCountAsync, tokenizers } from '../../tokenizers.js';
+import { debounce_timeout } from '../../constants.js';
 export { MODULE_NAME };
 
 
@@ -27,8 +28,7 @@ export { MODULE_NAME };
 var Extensionmode
 
 
-
-const saveChatDebounced = debounce(() => getContext().saveChat(), 2000);
+const saveChatDebounced = debounce(() => getContext().saveChat(), debounce_timeout.relaxed);
 
 const MODULE_NAME = '1_memory';
 
@@ -144,6 +144,7 @@ function loadSettings() {
     $('#memory_max_messages_per_request').val(extension_settings.memory.maxMessagesPerRequest).trigger('input');
     switchSourceControls(extension_settings.memory.source);
 }
+
 
 switch (extension_settings.memory.Extensionmode) {
 	case "XML_hints":
