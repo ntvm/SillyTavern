@@ -2031,7 +2031,7 @@
                             <div>
                                 <h4 data-i18n="API Type">API Type</h4>
                                 <select id="textgen_type">
-                                    <option value="ooba" data-i18n="Default (oobabooga)">Default (oobabooga)</option>
+                                    <option value="ooba" data-i18n="Default (completions compatible)">Default [OpenAI /completions compatible: oobabooga, vLLM, LM Studio, etc.]</option>
                                     <option value="aphrodite">Aphrodite</option>
                                     <option value="dreamgen">DreamGen</option>
                                     <option value="infermaticai">InfermaticAI</option>
@@ -3513,6 +3513,7 @@
                             <div id="world_popup_delete" class="menu_button fa-solid fa-trash-can redWarningBG" title="Delete World Info" data-i18n="[title]Delete World Info"></div>
                             <input type="search" class="text_pole textarea_compact" data-i18n="[placeholder]Search..." id="world_info_search" placeholder="Search...">
                             <select id="world_info_sort_order" class="margin0">
+                                <option data-rule="search" value="14" data-i18n="Search" hidden>Search</option>
                                 <option data-rule="priority" value="0" data-i18n="Priority">Priority</option>
                                 <option data-rule="custom" value="13" data-i18n="Custom">Custom</option>
                                 <option data-order="asc" data-field="comment" value="1" data-i18n="Title A-Z">Title A-Z</option>
@@ -4289,6 +4290,7 @@
                                 </div>
                                 <input id="persona_search_bar" class="text_pole width100p flex1 margin0" type="search" data-i18n="[placeholder]Search..." placeholder="Search..." maxlength="100">
                                 <select id="persona_sort_order" class="margin0">
+                                    <option value="search" data-i18n="Search" hidden>Search</option>
                                     <option value="asc">A-Z</option>
                                     <option value="desc">Z-A</option>
                                 </select>
@@ -4677,6 +4679,7 @@
                             <div id="rm_button_group_chats" title="Create New Chat Group" data-i18n="[title]Create New Chat Group" class="menu_button fa-solid fa-users-gear "></div>
                             <input id="character_search_bar" class="text_pole width100p" type="search" data-i18n="[placeholder]Search..." placeholder="Search..." maxlength="100" />
                             <select id="character_sort_order" title="Characters sorting order" data-i18n="[title]Characters sorting order">
+                                <option data-field="search" data-order="desc" data-i18n="Search" hidden>Search</option>
                                 <option data-field="name" data-order="asc" data-i18n="A-Z">A-Z</option>
                                 <option data-field="name" data-order="desc" data-i18n="Z-A">Z-A</option>
                                 <option data-field="create_date" data-order="desc" data-i18n="Newest">Newest</option>
@@ -4749,8 +4752,9 @@
         <div id="character_cross" class="fa-solid fa-circle-xmark"></div>
         <div class="inline-drawer">
             <div class="inline-drawer-toggle inline-drawer-header">
-                <h4 data-i18n="Prompt Overrides (For OpenAI/Claude/Scale APIs, Window/OpenRouter, and Instruct Mode)"><!-- This data-i18n attribute on the left is kept for backward compatibility, use the ones below when translating -->
-                    <span data-i18n="Prompt Overrides">Prompt Overrides</span> <small data-i18n="(For OpenAI/Claude/Scale APIs, Window/OpenRouter, and Instruct Mode)">(For OpenAI/Claude/Scale APIs, Window/OpenRouter, and Instruct Mode)</small>
+                <h4>
+                    <span data-i18n="Prompt Overrides">Prompt Overrides</span>
+                    <small data-i18n="(For Chat Completion and Instruct Mode)">(For Chat Completion and Instruct Mode)</small>
                 </h4>
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
             </div>
