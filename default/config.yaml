@@ -45,7 +45,7 @@ avatarThumbnailsPng: false
 # Allow secret keys exposure via API
 allowKeysExposure: false
 # Skip new default content checks
-skipContentCheck: true
+skipContentCheck: false
 # Disable automatic chats backup
 disableChatBackup: false
 # Allowed hosts for card downloads
