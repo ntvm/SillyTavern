@@ -37,7 +37,6 @@ const SECRET_KEYS = {
     NOMICAI: 'api_key_nomicai',
     KOBOLDCPP: 'api_key_koboldcpp',
     LLAMACPP: 'api_key_llamacpp',
-    COHERE: 'api_key_cohere',
     PERPLEXITY: 'api_key_perplexity',
 };
 

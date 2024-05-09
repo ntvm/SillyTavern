@@ -273,7 +273,8 @@ const default_settings = {
     use_ai21_tokenizer: false,
     use_google_tokenizer: false,
     claude_use_sysprompt: false,
-    claude_exclude_prefixes: false,
+    claude_exclude_prefixes_asSysOrPlain: false,
+    claude_exclude_prefixes_asPrefill: false,
     claude_allow_plaintext: true,
     names_in_completion: false,
     exclude_assistant: false,
@@ -357,7 +358,8 @@ const oai_settings = {
     use_ai21_tokenizer: false,
     use_google_tokenizer: false,
     claude_use_sysprompt: false,
-    claude_exclude_prefixes: false,
+    claude_exclude_prefixes_asSysOrPlain: false,
+    claude_exclude_prefixes_asPrefill: false,
     claude_allow_plaintext: false,
     names_in_completion: false,
     exclude_assistant: false,
@@ -1858,27 +1860,27 @@ async function sendOpenAIRequest(type, messages, signal) {
     }
 
     // Proxy is only supported for Claude, Gemini? and OpenAI
-        switch (extension_settings.ProxyManager.ProxyPrior) {
-            default:
-                if (oai_settings.reverse_proxy && [chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI].includes(oai_settings.chat_completion_source)) {
-                    validateReverseProxy();
+    switch (extension_settings.ProxyManager.ProxyPrior) {
+        default:
+            if (oai_settings.reverse_proxy && [chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI].includes(oai_settings.chat_completion_source)) {
+                validateReverseProxy();
+                generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
+                generate_data['proxy_password'] = oai_settings.proxy_password;
+            }
+            break;
+
+        case true:
+            if ([chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI].includes(oai_settings.chat_completion_source)) {
+                if (!extension_settings.ProxyManager.ProxyURL && !extension_settings.ProxyManager.ProxyPassword) {
                     generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
                     generate_data['proxy_password'] = oai_settings.proxy_password;
+                    break;
                 }
-                break;
-
-            case true:
-                if ([chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI].includes(oai_settings.chat_completion_source)) {
-                    if (!extension_settings.ProxyManager.ProxyURL && !extension_settings.ProxyManager.ProxyPassword) {
-                        generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
-                        generate_data['proxy_password'] = oai_settings.proxy_password;
-                        break
-                    }
-                    generate_data['reverse_proxy'] = extension_settings.ProxyManager.ProxyURL;
-                    generate_data['proxy_password'] = extension_settings.ProxyManager.ProxyPassword;
-                }
-                break;
-        }
+                generate_data['reverse_proxy'] = extension_settings.ProxyManager.ProxyURL;
+                generate_data['proxy_password'] = extension_settings.ProxyManager.ProxyPassword;
+            }
+            break;
+    }
 
     // Add logprobs request (currently OpenAI only, max 5 on their side)
     if (useLogprobs && (isOAI || isCustom)) {
@@ -1896,7 +1898,8 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['claude_use_sysprompt'] = oai_settings.claude_use_sysprompt;
         generate_data['claude_allow_plaintext'] = oai_settings.claude_allow_plaintext;
-        generate_data['claude_exclude_prefixes'] = oai_settings.claude_exclude_prefixes;
+        generate_data['claude_exclude_prefixes_asSysOrPlain'] = oai_settings.claude_exclude_prefixes_asSysOrPlain;
+        generate_data['claude_exclude_prefixes_asPrefill'] = oai_settings.claude_exclude_prefixes_asPrefill;
         generate_data['stop'] = getCustomStoppingStrings(); // Claude shouldn't have limits on stop strings.
         generate_data['human_sysprompt_message'] = substituteParams(oai_settings.human_sysprompt_message);
         generate_data['exclude_h_a_prompt'] = substituteParams(oai_settings.exclude_h_a_prompt);
@@ -2870,7 +2873,8 @@ function loadOpenAISettings(data, settings) {
 
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
     if (settings.claude_allow_plaintext !== undefined) oai_settings.claude_allow_plaintext = !!settings.claude_allow_plaintext;
-    if (settings.claude_exclude_prefixes !== undefined) oai_settings.claude_exclude_prefixes = !!settings.claude_exclude_prefixes;
+    if (settings.claude_exclude_prefixes_asSysOrPlain !== undefined) oai_settings.claude_exclude_prefixes_asSysOrPlain = !!settings.claude_exclude_prefixes_asSysOrPlain;
+    if (settings.claude_exclude_prefixes_asPrefill !== undefined) oai_settings.claude_exclude_prefixes_asPrefill = !!settings.claude_exclude_prefixes_asPrefill;
     if (settings.names_in_completion !== undefined) oai_settings.names_in_completion = !!settings.names_in_completion;
     if (settings.openai_model !== undefined) oai_settings.openai_model = settings.openai_model;
     if (settings.use_ai21_tokenizer !== undefined) { oai_settings.use_ai21_tokenizer = !!settings.use_ai21_tokenizer; oai_settings.use_ai21_tokenizer ? ai21_max = 8191 : ai21_max = 9200; }
@@ -2920,7 +2924,8 @@ function loadOpenAISettings(data, settings) {
     $('#use_google_tokenizer').prop('checked', oai_settings.use_google_tokenizer);
     $('#exclude_assistant').prop('checked', oai_settings.exclude_assistant);
     $('#claude_allow_plaintext').prop('checked', oai_settings.claude_allow_plaintext);
-    $('#claude_exclude_prefixes').prop('checked', oai_settings.claude_exclude_prefixes);
+    $('#claude_exclude_prefixes_asSysOrPlain').prop('checked', oai_settings.claude_exclude_prefixes_asSysOrPlain);
+    $('#claude_exclude_prefixes_asPrefill').prop('checked', oai_settings.claude_exclude_prefixes_asPrefill);
     $('#claude_use_sysprompt').prop('checked', oai_settings.claude_use_sysprompt);
     $('#use_makersuite_sysprompt').prop('checked', oai_settings.use_makersuite_sysprompt);
     $('#scale-alt').prop('checked', oai_settings.use_alt_scale);
@@ -3206,11 +3211,9 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         use_google_tokenizer: settings.use_google_tokenizer,
         exclude_assistant: settings.exclude_assistant,
         claude_allow_plaintext: settings.claude_allow_plaintext,
-        claude_exclude_prefixes: settings.claude_exclude_prefixes,
+        claude_exclude_prefixes_asSysOrPlain: settings.claude_exclude_prefixes_asSysOrPlain,
+        claude_exclude_prefixes_asPrefill: settings.claude_exclude_prefixes_asPrefill,
         claude_use_sysprompt: settings.claude_use_sysprompt,
-        exclude_assistant: settings.exclude_assistant,
-        exclude_h_a_prompt: settings.exclude_h_a_prompt,
-        claude_exclude_prefixes: settings.claude_exclude_prefixes,
         use_makersuite_sysprompt: settings.use_makersuite_sysprompt,
         use_alt_scale: settings.use_alt_scale,
         squash_system_messages: settings.squash_system_messages,
@@ -3596,7 +3599,8 @@ function onSettingsPresetChange() {
         use_ai21_tokenizer: ['#use_ai21_tokenizer', 'use_ai21_tokenizer', true],
         use_google_tokenizer: ['#use_google_tokenizer', 'use_google_tokenizer', true],
         claude_allow_plaintext: ['#claude_allow_plaintext', 'claude_allow_plaintext', true],
-        claude_exclude_prefixes: ['#claude_exclude_prefixes', 'claude_exclude_prefixes', true],
+        claude_exclude_prefixes_asSysOrPlain: ['#claude_exclude_prefixes_asSysOrPlain', 'claude_exclude_prefixes_asSysOrPlain', true],
+        claude_exclude_prefixes_asPrefill: ['#claude_exclude_prefixes_asPrefill', 'claude_exclude_prefixes_asPrefill', true],
         exclude_assistant: ['#exclude_assistant', 'exclude_assistant', true],
         claude_use_sysprompt: ['#claude_use_sysprompt', 'claude_use_sysprompt', true],
         use_makersuite_sysprompt: ['#use_makersuite_sysprompt', 'use_makersuite_sysprompt', true],
@@ -4589,11 +4593,31 @@ $(document).ready(async function () {
         oai_settings.claude_allow_plaintext = !!$('#claude_allow_plaintext').prop('checked');
         saveSettingsDebounced();
     });
-	
-    $('#claude_exclude_prefixes').on('change', function () {
-        oai_settings.claude_exclude_prefixes = !!$('#claude_exclude_prefixes').prop('checked');
+
+    $('#claude_exclude_prefixes_asSysOrPlain').on('change', function () {
+        oai_settings.claude_exclude_prefixes_asSysOrPlain = !!$('#claude_exclude_prefixes_asSysOrPlain').prop('checked');
+        //Then, forcefully disable counterpart if both enable
+        if ( oai_settings.claude_exclude_prefixes_asSysOrPlain
+            && oai_settings.claude_exclude_prefixes_asPrefill) {
+            $('#claude_exclude_prefixes_asPrefill').prop('checked', false);
+            oai_settings.claude_exclude_prefixes_asPrefill = false;
+            console.log(`Prefill prefixes ${oai_settings.claude_exclude_prefixes_asSysOrPlain}, system/plain prefixes  ${oai_settings.claude_exclude_prefixes_asSysOrPlain}`);
+        }
         saveSettingsDebounced();
     });
+
+    $('#claude_exclude_prefixes_asPrefill').on('change', function () {
+        oai_settings.claude_exclude_prefixes_asPrefill = !!$('#claude_exclude_prefixes_asPrefill').prop('checked');
+        //Then, forcefully disable counterpart if both enabled
+        if ( oai_settings.claude_exclude_prefixes_asSysOrPlain
+             && oai_settings.claude_exclude_prefixes_asPrefill) {
+            $('#claude_exclude_prefixes_asSysOrPlain').prop('checked', false);
+            oai_settings.claude_exclude_prefixes_asSysOrPlain = false;
+            console.log(`Prefill prefixes ${oai_settings.claude_exclude_prefixes_asSysOrPlain}, system/plain prefixes  ${oai_settings.claude_exclude_prefixes_asSysOrPlain}`);
+        }
+        saveSettingsDebounced();
+    });
+
 
     $('#claude_use_sysprompt').on('change', function () {
         oai_settings.claude_use_sysprompt = !!$('#claude_use_sysprompt').prop('checked');
@@ -4708,13 +4732,13 @@ $(document).ready(async function () {
         saveSettingsDebounced();
     });
 
-    $("#lookaround_nudge_prompt_restore").on('click', function () {
+    $('#lookaround_nudge_prompt_restore').on('click', function () {
         oai_settings.lookaround_nudge_prompt = default_lookaround_nudge_prompt;
         $('#lookaround_nudge_prompt_textarea').val(oai_settings.lookaround_nudge_prompt);
         saveSettingsDebounced();
     });
 
-    $("#wi_format_restore").on('click', function () {
+    $('#wi_format_restore').on('click', function () {
         oai_settings.wi_format = default_wi_format;
         $('#wi_format_textarea').val(oai_settings.wi_format);
         saveSettingsDebounced();

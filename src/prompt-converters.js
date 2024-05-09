@@ -238,7 +238,7 @@ function convertClaudeMessages(messages, prefillString, useSysPrompt, humanMsgFi
     return { messages: mergedMessages, systemPrompt: systemPrompt.trim() };
 }
 
-function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAssistantPrefill, withSysPromptSupport, useSystemPrompt, addSysHumanMsg, HumAssistOff, SystemFul, excludePrefixes){
+function convertClaudeExperementalMesIntoSys(messages, addAssistantPostfix, addAssistantPrefill, withSysPromptSupport, useSystemPrompt, addSysHumanMsg, HumAssistOff, SystemFul, excludePrefixes){
 
     //Prepare messages for claude.
     //When 'Exclude Human/Assistant prefixes' checked, setting messages role to the 'system'(last message is exception).
@@ -266,63 +266,35 @@ function convertClaudeExperementalMessages(messages, addAssistantPostfix, addAss
     return { messages: Twosteps, systemPrompt: requestPrompt.trim() };
 }
 
-/**
- * Convert a prompt from the ChatML objects to the format used by Cohere.
- * @param {object[]} messages Array of messages
- * @param {string}   charName Character name
- * @param {string}   userName User name
- * @returns {{systemPrompt: string, chatHistory: object[], userPrompt: string}} Prompt for Cohere
- */
-function convertCohereMessages(messages, charName = '', userName = '') {
-    const roleMap = {
-        'system': 'SYSTEM',
-        'user': 'USER',
-        'assistant': 'CHATBOT',
-    };
-    const placeholder = '[Start a new chat]';
-    let systemPrompt = '';
-
-    // Collect all the system messages up until the first instance of a non-system message, and then remove them from the messages array.
-    let i;
-    for (i = 0; i < messages.length; i++) {
-        if (messages[i].role !== 'system') {
-            break;
-        }
-        // Append example names if not already done by the frontend (e.g. for group chats).
-        if (userName && messages[i].name === 'example_user') {
-            if (!messages[i].content.startsWith(`${userName}: `)) {
-                messages[i].content = `${userName}: ${messages[i].content}`;
+function postconvertClaudeIntoPrefill(messages, userName, charName){
+    var withreturn = [];
+    //use function also for extra variant of convertion
+    if (messages.length > 1) {
+        const chatHistory = // Собираем из истории чата огромный префил
+        messages[1].content + // Первое сообщение ассистента от роли ассистента, "\n\n{{char}}:" в начало не добавляем
+        messages.slice(2).map(message => {
+            const prefix = message.role === 'user' ? userName : charName;
+            if (prefix == '\n\n') {
+                return `${prefix}${message.content}`;
+            } else if (prefix == userName) {
+                return `\n\n${prefix} ${message.content}`;
+            } else {
+                return `${prefix} ${message.content}`;
             }
-        }
-        if (charName && messages[i].name === 'example_assistant') {
-            if (!messages[i].content.startsWith(`${charName}: `)) {
-                messages[i].content = `${charName}: ${messages[i].content}`;
-            }
-        }
-        systemPrompt += `${messages[i].content}\n\n`;
+        }).join('') +
+        (messages[messages.length - 1].role === 'assistant' ? '' : charName); // Если префила нет пихаем "\n\n{{char}}:" в конец
+        withreturn = [
+            messages[0], // Оставляем первую мессагу хумана как есть
+            {
+                role: 'assistant',
+                content: chatHistory,
+            },
+        ];
     }
-
-    messages.splice(0, i);
-
-    if (messages.length === 0) {
-        messages.unshift({
-            role: 'user',
-            content: placeholder,
-        });
-    }
-
-    const lastNonSystemMessageIndex = messages.findLastIndex(msg => msg.role === 'user' || msg.role === 'assistant');
-    const userPrompt = messages.slice(lastNonSystemMessageIndex).map(msg => msg.content).join('\n\n') || placeholder;
-
-    const chatHistory = messages.slice(0, lastNonSystemMessageIndex).map(msg => {
-        return {
-            role: roleMap[msg.role] || 'USER',
-            message: msg.content,
-        };
-    });
-
-    return { systemPrompt: systemPrompt.trim(), chatHistory, userPrompt };
+    console.log('converted into prefilled');
+    return withreturn;
 }
+
 
 /**
  * Convert a prompt from the ChatML objects to the format used by Cohere.
@@ -518,6 +490,7 @@ module.exports = {
     convertClaudeMessages,
     convertGooglePrompt,
     convertTextCompletionPrompt,
-    convertClaudeExperementalMessages,
+    convertClaudeExperementalMesIntoSys,
+    postconvertClaudeIntoPrefill,
     convertCohereMessages,
 };

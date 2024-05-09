@@ -5,7 +5,7 @@ const Readable = require('stream').Readable;
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
 const { forwardFetchResponse, getConfigValue, tryParse, uuidv4, mergeObjectWithYaml, excludeKeysByYaml, color } = require('../../util');
-const {convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMessages, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages } = require('../../prompt-converters');
+const { convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMesIntoSys, postconvertClaudeIntoPrefill, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages } = require('../../prompt-converters');
 
 const { readSecret, SECRET_KEYS } = require('../secrets');
 const { getTokenizerModel, getSentencepiceTokenizer, getTiktokenTokenizer, sentencepieceTokenizers, TEXT_COMPLETION_MODELS } = require('../tokenizers');
@@ -116,17 +116,49 @@ async function sendClaudeRequest(request, response) {
         request.socket.on('close', function () {
             controller.abort();
         });
-        let use_system_prompt = (request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-3')) && request.body.claude_use_sysprompt;
-        const isSysPromptSupported = request.body.model === 'claude-2' || request.body.model === 'claude-2.1' || request.body.model.startsWith('claude-3');
-        const requestRoute = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? 'plain' : 'messages';
+
+        let use_system_prompt = (request.body.model.startsWith('claude-2')
+        || request.body.model.startsWith('claude-3')
+        ) && request.body.claude_use_sysprompt;
+
+        const isSysPromptSupported = request.body.model === 'claude-2'
+        || request.body.model === 'claude-2.1'
+        || request.body.model.startsWith('claude-3');
+
+        const requestRoute = (request.body.claude_allow_plaintext == true
+        && !request.body.model.startsWith('claude-3')) ? 'plain' : 'messages';
+
         let converted_prompt;
-        let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes == true);
+        let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes_asSysOrPlain == true);
         switch (IsExperemental){
             default:
-                converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? (convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes)) : convertClaudeMessages(request.body.messages, request.body.assistant_prefill, use_system_prompt, request.body.human_sysprompt_message, request.body.char_name, request.body.user_name);
+                converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3'))
+                    ? (convertClaudePrompt(request.body.messages,
+                        !request.body.exclude_assistant,
+                        request.body.assistant_prefill,
+                        isSysPromptSupported,
+                        request.body.claude_use_sysprompt,
+                        request.body.human_sysprompt_message,
+                        HumAssistOff,
+                        SystemFul,
+                        request.body.claude_exclude_prefixes_asSysOrPlain))
+                    : convertClaudeMessages(request.body.messages,
+                        request.body.assistant_prefill,
+                        use_system_prompt,
+                        request.body.human_sysprompt_message,
+                        request.body.char_name,
+                        request.body.user_name);
                 break;
             case true:
-                converted_prompt = convertClaudeExperementalMessages(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, request.body.exclude_h_a_prompt, SystemFul, request.body.claude_exclude_prefixes);
+                converted_prompt = convertClaudeExperementalMesIntoSys(request.body.messages,
+                    !request.body.exclude_assistant,
+                    request.body.assistant_prefill,
+                    isSysPromptSupported,
+                    request.body.claude_use_sysprompt,
+                    request.body.human_sysprompt_message,
+                    request.body.exclude_h_a_prompt,
+                    SystemFul,
+                    request.body.claude_exclude_prefixes_asSysOrPlain);
                 break;
         }
 
@@ -185,6 +217,13 @@ async function sendClaudeRequest(request, response) {
         if (Array.isArray(request.body.stop)) {
             stopSequences.push(...request.body.stop);
         }
+        if (request.body.claude_exclude_prefixes_asPrefill == true){
+            if (IsExperemental !== true) {
+                let userName = '\n\n' + request.body.user_name; // "\n\n{{user}}:"
+                let charName = '\n\n' + request.body.char_name; // "\n\n{{char}}:"
+                converted_prompt.messages = postconvertClaudeIntoPrefill ( converted_prompt.messages, userName, charName );
+            }}
+
         let bufferresposne;
         var requestjson;
         var requestBody;

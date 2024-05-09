@@ -1816,9 +1816,9 @@
                                                         </span>
                                                     </div>
 
-                                                    <label for="claude_exclude_prefixes" title="Exclude Human/Assistant prefixes" class="checkbox_label widthFreeExpand">
-                                                        <input id="claude_exclude_prefixes" type="checkbox" />
-                                                        <span data-i18n="Exclude Human/Assistant prefixes">Exclude Human/Assistant prefixes</span>
+                                                    <label for="claude_exclude_prefixes_asSysOrPlain" title="Exclude Human/Assistant prefixes" class="checkbox_label widthFreeExpand">
+                                                        <input id="claude_exclude_prefixes_asSysOrPlain" type="checkbox" />
+                                                        <span data-i18n="Exclude Human/Assistant prefixes">Exclude Human/Assistant (As SystmPrmpt)</span>
                                                     </label>
                                                     <div class="toggle-description justifyLeft marginBot5">
                                                         <span data-i18n="Exclude Human/Assistant prefixes from being added to the prompt.">
@@ -1836,6 +1836,15 @@
                                                     <div class="toggle-description justifyLeft marginBot5">
                                                         <span data-i18n="Exclude the assistant suffix from being added to the end of prompt.">
                                                         Exclude the assistant suffix from being added to the end of prompt. Requires 'Allow plain format' checked and jailbreak with 'Assistant:' in it.
+                                                        </span>
+                                                    </div>
+                                                    <label for="claude_exclude_prefixes_asPrefill" title="Exclude Human/Assistant, put as prefill" class="checkbox_label widthFreeExpand">
+                                                        <input id="claude_exclude_prefixes_asPrefill" type="checkbox" />
+                                                        <span data-i18n="">Exclude Human/Assistant (As prefill)</span>
+                                                    </label>
+                                                    <div class="toggle-description justifyLeft marginBot5">
+                                                        <span data-i18n="">
+                                                            Experemental Input format. Put chathistory as prefill (todo: describe more)
                                                         </span>
                                                     </div>
                                                 </div>
