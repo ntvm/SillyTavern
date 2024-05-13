@@ -3475,7 +3475,7 @@ function getMaxContextOpenAI(value) {
     if (oai_settings.max_context_unlocked) {
         return unlocked_max;
     }
-    else if (value.includes('gpt-4-turbo') || value.includes('gpt-4-1106') || value.includes('gpt-4-0125') || value.includes('gpt-4-vision') || value.includes('gpt-4o')) {
+    else if (value.includes('gpt-4-turbo') || value.includes('gpt-4o') || value.includes('gpt-4-1106') || value.includes('gpt-4-0125') || value.includes('gpt-4-vision')) {
         return max_128k;
     }
     else if (value.includes('gpt-3.5-turbo-1106')) {
@@ -4105,7 +4105,7 @@ export function isImageInliningSupported() {
 
     switch (oai_settings.chat_completion_source) {
         case chat_completion_sources.OPENAI:
-            return oai_settings.openai_model.includes(gpt4v);
+            return (oai_settings.openai_model.includes(gpt4v) || oai_settings.openai_model.includes('gpt-4o'));
         case chat_completion_sources.MAKERSUITE:
             return oai_settings.google_model.includes(geminiProV);
         case chat_completion_sources.CLAUDE:
