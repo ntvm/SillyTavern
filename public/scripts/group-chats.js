@@ -480,7 +480,8 @@ export function getGroupCharacterCards(groupId, characterId) {
 
     switch (extension_settings.Nvkun.SubPromptsUsage){
         case true:
-            var Df1Prompt = '### This section contains characters descriptions. The AI should accurately convey the original descriptions provided by the system, while consider fact, that characters may be written by various peoples, and had very different styles.';
+            //var Df1Prompt = '### This section contains characters descriptions. The AI should accurately convey the original descriptions provided by the system, while consider fact, that characters may be written by various peoples, and had very different styles.';
+            var Df1Prompt = '### This section contains characters descriptions. The AI should accurately convey the original descriptions provided by the system.';
             var Df2Prompt = '### This section contains characters personalities.';
             var Df3Prompt = '### [Story buildup and other miscellaneous information.]';
             var Df4Prompt = '### [The information within <Characters_MessagesExamples> is not to be taken literally as what happens within the current story.]';
