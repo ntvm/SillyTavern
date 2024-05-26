@@ -5,8 +5,8 @@ const { jsonParser } = require('../express-common');
 
 const router = express.Router();
 
-function Proxystuff(Uscase){
-    var array = readSecret(request.user.directories, SECRET_KEYS.OAIPROXY);
+function Proxystuff(Uscase, dir){
+    var array = readSecret(dir, SECRET_KEYS.OAIPROXY);
     if (array == undefined) { allowProxy = false; return allowProxy;}
     var passw = array.pop();
     var url = array.pop();
@@ -30,7 +30,8 @@ router.post('/caption-image', jsonParser, async (request, response) => {
         const mimeType = request.body.image.split(';')[0].split(':')[1];
         const base64Data = request.body.image.split(',')[1];
         var rn = 'useproxy';
-        var allowProxy = Proxystuff(rn);
+        const dir = request.user.directories;
+        var allowProxy = Proxystuff(rn, dir);
 
         var url;
         var apikey;
