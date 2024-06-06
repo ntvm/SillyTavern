@@ -268,19 +268,41 @@ function convertClaudeExperementalMesIntoSys(messages, addAssistantPostfix, addA
 
 function postconvertClaudeIntoPrefill(messages, userName, charName){
     var withreturn = [];
+    let newstroke = '';
+    let Userchecknaming = userName.length - 2;
+    let Charchecknaming = charName.length - 2;
     //use function also for extra variant of convertion
     if (messages.length > 1) {
         const chatHistory = // Собираем из истории чата огромный префил
         messages[1].content + // Первое сообщение ассистента от роли ассистента, "\n\n{{char}}:" в начало не добавляем
         messages.slice(2).map(message => {
-            const prefix = message.role === 'user' ? userName : charName;
+            switch (message.role) {
+                case 'user':
+                    if (('\n\n' + message.content.substring(0, Userchecknaming)) == userName){
+                        return '\n\n' + message.content;
+                    }
+                    //if (userName == '\n\n') newstroke = '\n\n';
+                    (userName == '\n\n') ? (newstroke = '\n\n') : (newstroke = '');
+                    return `${newstroke}${userName}: ${message.content}`;
+                case 'assistant':
+                    if (('\n\n' + message.content.substring(0, Charchecknaming)) == charName){
+                        return '\n\n' + message.content;
+                    }
+                    (charName == '\n\n') ? (newstroke = '\n\n') : (newstroke = '');
+                    return `${newstroke}${charName}: ${message.content}`;
+                case'system':
+                    return `${message.content}`;
+                default:
+                    return `${message.content}`;
+            }
+            /*const prefix = message.role === 'user' ? userName : charName;
             if (prefix == '\n\n') {
                 return `${prefix}${message.content}`;
             } else if (prefix == userName) {
                 return `\n\n${prefix} ${message.content}`;
             } else {
                 return `${prefix} ${message.content}`;
-            }
+            }*/
         }).join('') +
         (messages[messages.length - 1].role === 'assistant' ? '' : charName); // Если префила нет пихаем "\n\n{{char}}:" в конец
         withreturn = [
