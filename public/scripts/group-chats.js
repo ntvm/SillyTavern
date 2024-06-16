@@ -408,8 +408,6 @@ export function getGroupCharacterCards(groupId, characterId) {
         const index = characters.findIndex(x => x.avatar === member);
         const character = characters[index];
 
-
-
         if (index === -1 || !character) {
             console.debug(`Skipping missing member: ${member}`);
             continue;
@@ -445,7 +443,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 descriptions.push('');
                 break;
             default:
-                descriptions.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + '\n' + character.description.trim() + '\n' + CharEnd + '\n- - -' + '\n', name1, character.name));
+                descriptions.push(baseChatReplace(group.generation_mode_join_prefix + '\n#' + Chnm + '\n' + CharStart + '\n' + character.description.trim() + '\n' + CharEnd + '\n- - -' + '\n' + group.generation_mode_join_suffix, name1, character.name));
                 break;
         }
 
@@ -454,7 +452,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 personalities.push('');
                 break;
             default:
-                personalities.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + '\n' + character.personality.trim() + '\n' + CharEnd + '\n- - -' + '\n' , name1, character.name));
+                personalities.push(baseChatReplace(group.generation_mode_join_prefix + '\n#' + Chnm + '\n' + CharStart + '\n' + character.personality.trim() + '\n' + CharEnd + '\n- - -' + '\n' + group.generation_mode_join_suffix, name1, character.name));
                 break;
         }
 
@@ -463,7 +461,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 scenarios.push('');
                 break;
             default:
-                scenarios.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + character.scenario.trim() + CharEnd + '\n- - -' + '\n', name1, character.name));
+                scenarios.push(baseChatReplace(group.generation_mode_join_prefix + '\n#' + Chnm + '\n' + CharStart + character.scenario.trim() + CharEnd + '\n- - -' + '\n' + group.generation_mode_join_suffix, name1, character.name));
                 break;
         }
 
@@ -472,7 +470,7 @@ export function getGroupCharacterCards(groupId, characterId) {
                 mesExamplesArray.push('');
                 break;
             default:
-                mesExamplesArray.push(baseChatReplace('\n#' + Chnm + '\n' + CharStart + character.mes_example.trim() + CharEnd + '\n- - -' + '\n', name1, character.name));
+                mesExamplesArray.push(baseChatReplace(group.generation_mode_join_prefix + '\n#' + Chnm + '\n' + CharStart + character.mes_example.trim() + CharEnd + '\n- - -' + '\n' + group.generation_mode_join_suffix, name1, character.name));
                 break;
         }
 
