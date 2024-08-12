@@ -3916,11 +3916,23 @@ async function onModelChange() {
         $('#temp_openai').attr('max', oai_max_temp).val(oai_settings.temp_openai).trigger('input');
     }
 
+
     if (oai_settings.chat_completion_source === chat_completion_sources.MISTRALAI) {
-        $('#openai_max_context').attr('max', max_32k);
+        if (oai_settings.max_context_unlocked) {
+            $('#openai_max_context').attr('max', unlocked_max);
+        } else if (oai_settings.mistralai_model.includes('codestral-mamba')) {
+            $('#openai_max_context').attr('max', max_256k);
+        } else if (['mistral-large-2407', 'mistral-large-latest'].includes(oai_settings.mistralai_model)) {
+            $('#openai_max_context').attr('max', max_128k);
+        } else if (oai_settings.mistralai_model.includes('mistral-nemo')) {
+            $('#openai_max_context').attr('max', max_128k);
+        } else if (oai_settings.mistralai_model.includes('mixtral-8x22b')) {
+            $('#openai_max_context').attr('max', max_64k);
+        } else {
+            $('#openai_max_context').attr('max', max_32k);
+        }
         oai_settings.openai_max_context = Math.min(oai_settings.openai_max_context, Number($('#openai_max_context').attr('max')));
         $('#openai_max_context').val(oai_settings.openai_max_context).trigger('input');
-
         //mistral also caps temp at 1.0
         oai_settings.temp_openai = Math.min(claude_max_temp, oai_settings.temp_openai);
         $('#temp_openai').attr('max', claude_max_temp).val(oai_settings.temp_openai).trigger('input');

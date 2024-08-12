@@ -38,7 +38,7 @@ const CONTENT_TYPES = {
     MOVING_UI: 'moving_ui',
     QUICK_REPLIES: 'quick_replies',
     PROXY_MANAGER: 'ProxyManager',
-    NV: 'NvSettings'
+    NV: 'NvSettings',
 };
 
 /**

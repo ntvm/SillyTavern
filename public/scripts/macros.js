@@ -137,6 +137,14 @@ function getCurrentSwipeId() {
     return swipeId ? swipeId + 1 : null;
 }
 
+
+function getLastSwipeText(){ 
+    let step1 = chat[chat.length-1];
+    let step2 = step1?.swipes;
+    if (step2 == undefined) return ''
+    return step2[step2.length - 1];
+}
+
 /**
  * Replaces banned words in macros with an empty string.
  * Adds them to textgenerationwebui ban list.
@@ -315,6 +323,7 @@ export function evaluateMacros(content, env) {
     content = content.replace(/{{lastSwipeId}}/gi, () => String(getLastSwipeId() ?? ''));
     content = content.replace(/{{currentSwipeId}}/gi, () => String(getCurrentSwipeId() ?? ''));
     content = content.replace(/{{lastMesID}}/gi, () => (chat?.length - 1));
+    content = content.replace(/{{pastswipe}}/gi, () => String(getLastSwipeText() ?? 'lolkek'));
 
     content = content.replace(/\{\{\/\/([\s\S]*?)\}\}/gm, '');
 
