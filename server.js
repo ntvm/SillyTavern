@@ -120,6 +120,26 @@ const cliArguments = yargs(hideBin(process.argv))
         type: 'boolean',
         default: null,
         describe: 'Enables basic authentication',
+    }).option('proxingRequests', {
+        type: 'boolean',
+        default: null,
+        describe: 'Proxing requests',
+    }).option('proxyHost', {
+        type: 'string',
+        default: null,
+        describe: 'proxyHost',
+    }).option('ProxyLogin', {
+        type: 'string',
+        default: null,
+        describe: 'ProxyLogin',
+    }).option('ProxyPassword', {
+        type: 'string',
+        default: null,
+        describe: 'ProxyPassword',
+    }).option('proxyPort', {
+        type: 'number',
+        default: null,
+        describe: 'proxyPort',
     }).parseSync();
 
 // change all relative paths

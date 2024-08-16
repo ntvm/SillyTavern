@@ -1,6 +1,9 @@
 const express = require('express');
 const fetch = require('node-fetch').default;
 const Readable = require('stream').Readable;
+const fs = require('fs');
+const path = require('path');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
@@ -15,6 +18,25 @@ const API_CLAUDE = 'https://api.anthropic.com/v1';
 const API_MISTRAL = 'https://api.mistral.ai/v1';
 const API_COHERE = 'https://api.cohere.ai/v1';
 const API_PERPLEXITY = 'https://api.perplexity.ai';
+const proxingRequests = getConfigValue('proxingRequests', false);
+const proxyHost = getConfigValue('proxyHost', '');
+const proxyPort = getConfigValue('proxyPort', '');
+const proxyProxyLogin = getConfigValue('ProxyLogin', '');
+const proxyProxyPassword = getConfigValue('ProxyPassword', '');
+
+function readProxyConfig() {
+    try {
+        return {
+            host: proxyHost,
+            port: proxyPort,
+            login: proxyProxyLogin,
+            password: proxyProxyPassword,
+        };
+    } catch (error) {
+        console.error('Error reading proxy configuration:', error);
+    }
+    return null;
+}
 
 /**
  * Applies a post-processing step to the generated messages.
@@ -103,7 +125,6 @@ async function sendClaudeRequest(request, response) {
     const divider = '-'.repeat(process.stdout.columns);
     const HumAssistOff = getConfigValue('HumAssistOff', false);
     const SystemFul = getConfigValue('SystemFul', true);
-
 
     if (!apiKey) {
         console.log(color.red(`Claude API key is missing.\n${divider}`));
@@ -228,6 +249,7 @@ async function sendClaudeRequest(request, response) {
         var requestjson;
         var requestBody;
         var generateResponse;
+
         switch (requestRoute) {
             case "plain":
                 requestBody = {
@@ -252,6 +274,12 @@ async function sendClaudeRequest(request, response) {
                     },
                     timeout: 0,
                 };
+                if (proxingRequests) {
+                    const proxyConfig = readProxyConfig();
+                    const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+                    const proxyAgent = new HttpsProxyAgent(proxyUrl);
+                    requestjson.agent = proxyAgent;
+                }
 
                 generateResponse = await fetch(apiUrl + '/complete', requestjson);
                 break;
@@ -283,6 +311,12 @@ async function sendClaudeRequest(request, response) {
                     },
                     timeout: 0,
                 };
+                if (proxingRequests) {
+                    const proxyConfig = readProxyConfig();
+                    const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+                    const proxyAgent = new HttpsProxyAgent(proxyUrl);
+                    requestjson.agent = proxyAgent;
+                }
 
                 generateResponse = await fetch(apiUrl + '/messages', requestjson );
                 break;
@@ -357,7 +391,7 @@ async function sendScaleRequest(request, response) {
             controller.abort();
         });
 
-        const generateResponse = await fetch(apiUrl, {
+        let requestjson = {
             method: 'POST',
             body: JSON.stringify({ input: { input: converted_prompt } }),
             headers: {
@@ -365,7 +399,15 @@ async function sendScaleRequest(request, response) {
                 'Authorization': `Basic ${apiKey}`,
             },
             timeout: 0,
-        });
+        };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig()
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            requestjson.agent = proxyAgent;
+        }
+
+        const generateResponse = await fetch(apiUrl, requestjson);
 
         if (!generateResponse.ok) {
             console.log(`Scale API returned error: ${generateResponse.status} ${generateResponse.statusText} ${await generateResponse.text()}`);
@@ -475,7 +517,7 @@ async function sendMakerSuiteRequest(request, response) {
             ? (stream ? 'streamGenerateContent' : 'generateContent')
             : (isText ? 'generateText' : 'generateMessage');
 
-        const generateResponse = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`, {
+        let requestjson = {
             body: JSON.stringify(body),
             method: 'POST',
             headers: {
@@ -483,7 +525,15 @@ async function sendMakerSuiteRequest(request, response) {
             },
             signal: controller.signal,
             timeout: 0,
-        });
+        };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig()
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            requestjson.agent = proxyAgent;
+        }
+
+        const generateResponse = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`, requestjson);
         // have to do this because of their busted ass streaming endpoint
         if (stream) {
             try {
@@ -591,6 +641,12 @@ async function sendAI21Request(request, response) {
         }),
         signal: controller.signal,
     };
+    if (proxingRequests) {
+        const proxyConfig = readProxyConfig()
+        const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+        const proxyAgent = new HttpsProxyAgent(proxyUrl);
+        options.agent = proxyAgent;
+    }
 
     fetch(`https://api.ai21.com/studio/v1/${request.body.model}/complete`, options)
         .then(r => r.json())
@@ -681,6 +737,12 @@ async function sendMistralAIRequest(request, response) {
             signal: controller.signal,
             timeout: 0,
         };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig()
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            config.agent = proxyAgent;
+        }
 
         console.log('MisralAI request:', requestBody);
 
@@ -771,6 +833,12 @@ async function sendCohereRequest(request, response) {
             signal: controller.signal,
             timeout: 0,
         };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig()
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            config.agent = proxyAgent;
+        }
 
         const apiUrl = API_COHERE + '/chat';
 
@@ -841,13 +909,22 @@ router.post('/status', jsonParser, async function (request, response_getstatus_o
     }
 
     try {
-        const response = await fetch(api_url + '/models', {
+
+        let requestjson = {
             method: 'GET',
             headers: {
                 'Authorization': 'Bearer ' + api_key_openai,
                 ...headers,
             },
-        });
+        };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig();
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            requestjson.agent = proxyAgent;
+        }
+
+        const response = await fetch(api_url + '/models', requestjson);
 
         if (response.ok) {
             const data = await response.json();
@@ -1123,6 +1200,12 @@ router.post('/generate', jsonParser, function (request, response) {
         signal: controller.signal,
         timeout: 0,
     };
+    if (proxingRequests) {
+        const proxyConfig = readProxyConfig();
+        const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+        const proxyAgent = new HttpsProxyAgent(proxyUrl);
+        config.agent = proxyAgent;
+    }
 
     console.log(requestBody);
 

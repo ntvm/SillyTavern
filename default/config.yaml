@@ -65,6 +65,12 @@ enableExtensions: true
 # Extension settings
 HumAssistOff: false # There is existing "In-Tavern" analog of this feature. This one still work tho. probably
 SystemFul: true
+proxingRequests: false
+proxyHost: ''
+ProxyLogin: ''
+ProxyPassword: ''
+proxyPort: 0
+
 extras:
   # Disables automatic model download from HuggingFace
   disableAutoDownload: false

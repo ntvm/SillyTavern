@@ -19,6 +19,7 @@
         "gpt3-tokenizer": "^1.1.5",
         "he": "^1.2.0",
         "helmet": "^7.1.0",
+        "https-proxy-agent": "^7.0.5",
         "ip-matching": "^2.1.2",
         "ipaddr.js": "^2.0.1",
         "jimp": "^0.22.12",
