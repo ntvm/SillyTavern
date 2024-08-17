@@ -9604,7 +9604,7 @@ jQuery(async function () {
 
     if (navigator.clipboard === undefined) {
         // No clipboard support
-        $('.mes_copy').remove();
+        //$('.mes_copy').remove();
     }
     else {
         $(document).on('pointerup', '.mes_copy', function () {
