@@ -4355,6 +4355,7 @@ export function isImageInliningSupported() {
         'claude-3',
         'gpt-4-turbo',
         'gpt-4o',
+        'chatgpt-4o-latest'
     ];
 
     switch (oai_settings.chat_completion_source) {
