@@ -1812,7 +1812,7 @@ function getMessageFromTemplate({
         'bookmark_link': bookmarkLink,
         'force_avatar': !!forceAvatar,
         'timestamp': timestamp,
-        'is_favorite': extra.is_favorite ?? 'false',
+        'is_favorite': extra?.is_favorite ?? 'false',
     });
     mes.find('.avatar img').attr('src', avatarImg);
     mes.find('.ch_name .name_text').text(characterName);
