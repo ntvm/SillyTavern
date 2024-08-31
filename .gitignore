@@ -26,6 +26,7 @@ public/stats.json
 /docker/config
 /docker/user
 /docker/extensions
+/docker/data
 .DS_Store
 public/settings.json
 /thumbnails
@@ -68,3 +69,4 @@ public/ProxyManager/
 config.yaml
 /plugins/
 /data
+/stash

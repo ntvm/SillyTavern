@@ -5,11 +5,12 @@ const FormData = require('form-data');
 const fs = require('fs');
 const { jsonParser, urlencodedParser } = require('../express-common');
 const { getConfigValue, mergeObjectWithYaml, excludeKeysByYaml, trimV1 } = require('../util');
+const { setAdditionalHeaders } = require('../additional-headers');
 
-var Uscase
-var apiURL
-function Proxystuff(Uscase){
-    var array = readSecret(SECRET_KEYS.OAIPROXY);
+var Uscase;
+var apiURL;
+function Proxystuff(Uscase, dir){
+    var array = readSecret(dir, SECRET_KEYS.OAIPROXY);
     if (array == undefined) { allowProxy = false; return allowProxy;}
     var passw = array.pop();
     var url = array.pop();
@@ -32,21 +33,22 @@ const router = express.Router();
 
 router.post('/caption-image', jsonParser, async (request, response) => {
     try {
-        var proxy
+        var proxy;
         let key = '';
         let headers = {};
         let bodyParams = {};
         var rn = 'useproxy';
-        var allowProxy = Proxystuff(rn);
+        const dir = request.user.directories;
+        var allowProxy = Proxystuff(rn, dir);
 
-        if (allowProxy == true) {proxy = true};
+        if (allowProxy == true) {proxy = true;}
 
         if (request.body.api === 'openai' && !request.body.reverse_proxy && (proxy !== true) ) {
-            key = readSecret(SECRET_KEYS.OPENAI);
+            key = readSecret(request.user.directories, SECRET_KEYS.OPENAI);
         }
 
         if (request.body.api === 'openrouter' && !request.body.reverse_proxy && (proxy !== true)) {
-            key = readSecret(SECRET_KEYS.OPENROUTER);
+            key = readSecret(request.user.directories, SECRET_KEYS.OPENROUTER);
         }
 
         if (request.body.reverse_proxy && request.body.proxy_password) {
@@ -54,22 +56,26 @@ router.post('/caption-image', jsonParser, async (request, response) => {
         }
 
         if (request.body.api === 'custom') {
-            key = readSecret(SECRET_KEYS.CUSTOM);
+            key = readSecret(request.user.directories, SECRET_KEYS.CUSTOM);
             mergeObjectWithYaml(bodyParams, request.body.custom_include_body);
             mergeObjectWithYaml(headers, request.body.custom_include_headers);
         }
 
         if (proxy == true) {
             rn = 'getkey';
-            key = Proxystuff(rn);
+            key = Proxystuff(rn, dir);
         }
 
         if (request.body.api === 'ooba') {
-            key = readSecret(SECRET_KEYS.OOBA);
+            key = readSecret(request.user.directories, SECRET_KEYS.OOBA);
             bodyParams.temperature = 0.1;
         }
 
-        if (!key && !request.body.reverse_proxy && request.body.api !== 'custom' && request.body.api !== 'ooba' && proxy == false) {
+        if (request.body.api === 'koboldcpp') {
+            key = readSecret(request.user.directories, SECRET_KEYS.KOBOLDCPP);
+        }
+
+        if (!key && !request.body.reverse_proxy && ['custom', 'ooba', 'koboldcpp'].includes(request.body.api) === false) {
             console.log('No key found for API', request.body.api);
             return response.sendStatus(400);
         }
@@ -85,7 +91,7 @@ router.post('/caption-image', jsonParser, async (request, response) => {
                     ],
                 },
             ],
-            max_tokens: 500,
+            max_tokens: 1000,
             ...bodyParams,
         };
 
@@ -115,14 +121,14 @@ router.post('/caption-image', jsonParser, async (request, response) => {
             apiUrl = 'https://api.openai.com/v1/chat/completions';
         }
 
-        if (proxy == true) {
-            rn = 'getURL';
-            apiUrl = Proxystuff(rn);
-            apiUrl = apiUrl + '/openai/chat/completions';
-        }
-
         if (request.body.reverse_proxy) {
             apiUrl = `${request.body.reverse_proxy}/chat/completions`;
+        }
+
+        if (proxy == true) {
+            rn = 'getURL';
+            apiUrl = Proxystuff(rn, dir);
+            apiUrl = apiUrl + '/openai/chat/completions';
         }
 
         if (request.body.api === 'custom') {
@@ -142,6 +148,12 @@ router.post('/caption-image', jsonParser, async (request, response) => {
                 image_url: imgMessage?.content?.[1]?.image_url?.url,
             });
         }
+
+        if (request.body.api === 'koboldcpp') {
+            apiUrl = `${trimV1(request.body.server_url)}/v1/chat/completions`;
+        }
+
+        setAdditionalHeaders(request, { headers }, apiUrl);
 
         const result = await fetch(apiUrl, {
             method: 'POST',
@@ -178,7 +190,7 @@ router.post('/caption-image', jsonParser, async (request, response) => {
 
 router.post('/transcribe-audio', urlencodedParser, async (request, response) => {
     try {
-        const key = readSecret(SECRET_KEYS.OPENAI);
+        const key = readSecret(request.user.directories, SECRET_KEYS.OPENAI);
 
         if (!key) {
             console.log('No OpenAI key found');
@@ -226,7 +238,7 @@ router.post('/transcribe-audio', urlencodedParser, async (request, response) => 
 
 router.post('/generate-voice', jsonParser, async (request, response) => {
     try {
-        const key = readSecret(SECRET_KEYS.OPENAI);
+        const key = readSecret(request.user.directories, SECRET_KEYS.OPENAI);
 
         if (!key) {
             console.log('No OpenAI key found');
@@ -266,17 +278,18 @@ router.post('/generate-voice', jsonParser, async (request, response) => {
 router.post('/generate-image', jsonParser, async (request, response) => {
     try {
         var rn = 'useproxy';
-        var allowProxy = Proxystuff(rn);
+        const dir = request.user.directories;
+        var allowProxy = Proxystuff(rn, dir);
         var proxy;
-        if (allowProxy == true) {proxy = true};
-        if (proxy !== true) {var key = readSecret(SECRET_KEYS.OPENAI);}
+        if (allowProxy == true) {proxy = true;}
+        if (proxy !== true) {var key = readSecret(request.user.directories, SECRET_KEYS.OPENAI);}
         switch (allowProxy) {
             case false:
-                key = readSecret(SECRET_KEYS.OPENAI);
+                key = readSecret(request.user.directories, SECRET_KEYS.OPENAI);
                 break;
             case true:
                 rn = 'getkey';
-                key = Proxystuff(rn);
+                key = Proxystuff(rn, dir);
                 break;
         }
 
@@ -290,7 +303,7 @@ router.post('/generate-image', jsonParser, async (request, response) => {
         switch (allowProxy) {
             case true:
                 rn = 'getURL';
-                apiURL = Proxystuff(rn);
+                apiURL = Proxystuff(rn, dir);
                 apiURL = apiURL + '/openai-image/images/generations';
                 break;
             default:

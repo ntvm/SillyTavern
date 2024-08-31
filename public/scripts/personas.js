@@ -16,10 +16,10 @@ import {
     this_chid,
     user_avatar,
 } from '../script.js';
-import { getContext } from './extensions.js';
 import { persona_description_positions, power_user } from './power-user.js';
-import { getTokenCount } from './tokenizers.js';
+import { getTokenCountAsync } from './tokenizers.js';
 import { debounce, delay, download, parseJsonFile } from './utils.js';
+import { debounce_timeout } from './constants.js';
 
 const GRID_STORAGE_KEY = 'Personas_GridView';
 
@@ -47,7 +47,7 @@ async function uploadUserAvatar(url, name) {
 
     return jQuery.ajax({
         type: 'POST',
-        url: '/uploaduseravatar',
+        url: '/api/avatars/upload',
         data: formData,
         beforeSend: () => { },
         cache: false,
@@ -172,11 +172,11 @@ export async function convertCharacterToPersona(characterId = null) {
 /**
  * Counts the number of tokens in a persona description.
  */
-const countPersonaDescriptionTokens = debounce(() => {
+const countPersonaDescriptionTokens = debounce(async () => {
     const description = String($('#persona_description').val());
-    const count = getTokenCount(description);
+    const count = await getTokenCountAsync(description);
     $('#persona_description_token_count').text(String(count));
-}, 1000);
+}, debounce_timeout.relaxed);
 
 export function setPersonaDescription() {
     if (power_user.persona_description_position === persona_description_positions.AFTER_CHAR) {
@@ -296,12 +296,6 @@ export function selectCurrentPersona() {
         }
 
         setPersonaDescription();
-
-        // force firstMes {{user}} update on persona switch
-        const context = getContext();
-        if (context.characterId >= 0 && !context.groupId && context.chat.length === 1) {
-            $('#firstmessage_textarea').trigger('input');
-        }
     }
 }
 
@@ -362,7 +356,7 @@ async function deleteUserAvatar(e) {
         return;
     }
 
-    const request = await fetch('/deleteuseravatar', {
+    const request = await fetch('/api/avatars/delete', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({
@@ -411,7 +405,7 @@ function onPersonaDescriptionInput() {
     }
 
     $(`.avatar-container[imgfile="${user_avatar}"] .ch_description`)
-        .text(power_user.persona_description || '[No description]')
+        .text(power_user.persona_description || $('#user_avatar_block').attr('no_desc_text'))
         .toggleClass('text_muted', !power_user.persona_description);
     saveSettingsDebounced();
 }

@@ -309,12 +309,15 @@ class PresetManager {
             'mancer_model',
             'togetherai_model',
             'ollama_model',
+            'aphrodite_model',
             'server_urls',
             'type',
             'custom_model',
             'bypass_status_check',
             'infermaticai_model',
+            'dreamgen_model',
             'openrouter_model',
+            'max_tokens_second',
         ];
         const settings = Object.assign({}, getSettingsByApiId(this.apiId));
 
@@ -467,7 +470,7 @@ async function waitForConnection() {
 export async function initPresetManager() {
     eventSource.on(event_types.CHAT_CHANGED, autoSelectPreset);
     registerPresetManagers();
-    registerSlashCommand('preset', presetCommandCallback, [], '<span class="monospace">(name)</span> – sets a preset by name for the current API', true, true);
+    registerSlashCommand('preset', presetCommandCallback, [], '<span class="monospace">(name)</span> – sets a preset by name for the current API. Gets the current preset if no name is provided', true, true);
 
     $(document).on('click', '[data-preset-manager-update]', async function () {
         const apiId = $(this).data('preset-manager-update');

@@ -1,11 +1,14 @@
 const express = require('express');
 const fetch = require('node-fetch').default;
 const Readable = require('stream').Readable;
+const fs = require('fs');
+const path = require('path');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
 const { forwardFetchResponse, getConfigValue, tryParse, uuidv4, mergeObjectWithYaml, excludeKeysByYaml, color } = require('../../util');
-const {convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMessages, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages } = require('../prompt-converters');
+const { convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMesIntoSys, postconvertClaudeIntoPrefill, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages } = require('../../prompt-converters');
 
 const { readSecret, SECRET_KEYS } = require('../secrets');
 const { getTokenizerModel, getSentencepiceTokenizer, getTiktokenTokenizer, sentencepieceTokenizers, TEXT_COMPLETION_MODELS } = require('../tokenizers');
@@ -14,6 +17,43 @@ const API_OPENAI = 'https://api.openai.com/v1';
 const API_CLAUDE = 'https://api.anthropic.com/v1';
 const API_MISTRAL = 'https://api.mistral.ai/v1';
 const API_COHERE = 'https://api.cohere.ai/v1';
+const API_PERPLEXITY = 'https://api.perplexity.ai';
+const proxingRequests = getConfigValue('proxingRequests', false);
+const proxyHost = getConfigValue('proxyHost', '');
+const proxyPort = getConfigValue('proxyPort', '');
+const proxyProxyLogin = getConfigValue('ProxyLogin', '');
+const proxyProxyPassword = getConfigValue('ProxyPassword', '');
+
+function readProxyConfig() {
+    try {
+        return {
+            host: proxyHost,
+            port: proxyPort,
+            login: proxyProxyLogin,
+            password: proxyProxyPassword,
+        };
+    } catch (error) {
+        console.error('Error reading proxy configuration:', error);
+    }
+    return null;
+}
+
+/**
+ * Applies a post-processing step to the generated messages.
+ * @param {object[]} messages Messages to post-process
+ * @param {string} type Prompt conversion type
+ * @param {string} charName Character name
+ * @param {string} userName User name
+ * @returns
+ */
+function postProcessPrompt(messages, type, charName, userName) {
+    switch (type) {
+        case 'claude':
+            return convertClaudeMessages(messages, '', false, '', charName, userName).messages;
+        default:
+            return messages;
+    }
+}
 
 /**
  * Ollama strikes back. Special boy #2's steaming routine.
@@ -36,7 +76,13 @@ async function parseCohereStream(jsonStream, request, response) {
                 } catch (e) {
                     break;
                 }
-                if (json.event_type === 'text-generation') {
+                if (json.message) {
+                    const message = json.message || 'Unknown error';
+                    const chunk = { error: { message: message } };
+                    response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                    partialData = '';
+                    break;
+                } else if (json.event_type === 'text-generation') {
                     const text = json.text || '';
                     const chunk = { choices: [{ text }] };
                     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
@@ -75,11 +121,10 @@ async function parseCohereStream(jsonStream, request, response) {
  */
 async function sendClaudeRequest(request, response) {
     const apiUrl = new URL(request.body.reverse_proxy || API_CLAUDE).toString();
-    const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(SECRET_KEYS.CLAUDE);
+    const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.CLAUDE);
     const divider = '-'.repeat(process.stdout.columns);
     const HumAssistOff = getConfigValue('HumAssistOff', false);
     const SystemFul = getConfigValue('SystemFul', true);
-
 
     if (!apiKey) {
         console.log(color.red(`Claude API key is missing.\n${divider}`));
@@ -92,17 +137,49 @@ async function sendClaudeRequest(request, response) {
         request.socket.on('close', function () {
             controller.abort();
         });
-        let use_system_prompt = (request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-3')) && request.body.claude_use_sysprompt;
-        const isSysPromptSupported = request.body.model === 'claude-2' || request.body.model === 'claude-2.1' || request.body.model.startsWith('claude-3');
-        const requestRoute = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? 'plain' : 'messages';
+
+        let use_system_prompt = (request.body.model.startsWith('claude-2')
+        || request.body.model.startsWith('claude-3')
+        ) && request.body.claude_use_sysprompt;
+
+        const isSysPromptSupported = request.body.model === 'claude-2'
+        || request.body.model === 'claude-2.1'
+        || request.body.model.startsWith('claude-3');
+
+        const requestRoute = (request.body.claude_allow_plaintext == true
+        && !request.body.model.startsWith('claude-3')) ? 'plain' : 'messages';
+
         let converted_prompt;
-        let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes == true);
+        let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes_asSysOrPlain == true);
         switch (IsExperemental){
             default:
-                converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3')) ? (convertClaudePrompt(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, HumAssistOff, SystemFul, request.body.claude_exclude_prefixes)) : convertClaudeMessages(request.body.messages, request.body.assistant_prefill, use_system_prompt, request.body.human_sysprompt_message);
+                converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3'))
+                    ? (convertClaudePrompt(request.body.messages,
+                        !request.body.exclude_assistant,
+                        request.body.assistant_prefill,
+                        isSysPromptSupported,
+                        request.body.claude_use_sysprompt,
+                        request.body.human_sysprompt_message,
+                        HumAssistOff,
+                        SystemFul,
+                        request.body.claude_exclude_prefixes_asSysOrPlain))
+                    : convertClaudeMessages(request.body.messages,
+                        request.body.assistant_prefill,
+                        use_system_prompt,
+                        request.body.human_sysprompt_message,
+                        request.body.char_name,
+                        request.body.user_name);
                 break;
             case true:
-                converted_prompt = convertClaudeExperementalMessages(request.body.messages, !request.body.exclude_assistant, request.body.assistant_prefill, isSysPromptSupported, request.body.claude_use_sysprompt, request.body.human_sysprompt_message, request.body.exclude_h_a_prompt, SystemFul, request.body.claude_exclude_prefixes);
+                converted_prompt = convertClaudeExperementalMesIntoSys(request.body.messages,
+                    !request.body.exclude_assistant,
+                    request.body.assistant_prefill,
+                    isSysPromptSupported,
+                    request.body.claude_use_sysprompt,
+                    request.body.human_sysprompt_message,
+                    request.body.exclude_h_a_prompt,
+                    SystemFul,
+                    request.body.claude_exclude_prefixes_asSysOrPlain);
                 break;
         }
 
@@ -161,10 +238,18 @@ async function sendClaudeRequest(request, response) {
         if (Array.isArray(request.body.stop)) {
             stopSequences.push(...request.body.stop);
         }
+        if (request.body.claude_exclude_prefixes_asPrefill == true){
+            if (IsExperemental !== true) {
+                let userName = '\n\n' + request.body.user_name; // "\n\n{{user}}:"
+                let charName = '\n\n' + request.body.char_name; // "\n\n{{char}}:"
+                converted_prompt.messages = postconvertClaudeIntoPrefill ( converted_prompt.messages, userName, charName );
+            }}
+
         let bufferresposne;
         var requestjson;
         var requestBody;
         var generateResponse;
+
         switch (requestRoute) {
             case "plain":
                 requestBody = {
@@ -189,6 +274,12 @@ async function sendClaudeRequest(request, response) {
                     },
                     timeout: 0,
                 };
+                if (proxingRequests) {
+                    const proxyConfig = readProxyConfig();
+                    const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+                    const proxyAgent = new HttpsProxyAgent(proxyUrl);
+                    requestjson.agent = proxyAgent;
+                }
 
                 generateResponse = await fetch(apiUrl + '/complete', requestjson);
                 break;
@@ -220,6 +311,12 @@ async function sendClaudeRequest(request, response) {
                     },
                     timeout: 0,
                 };
+                if (proxingRequests) {
+                    const proxyConfig = readProxyConfig();
+                    const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+                    const proxyAgent = new HttpsProxyAgent(proxyUrl);
+                    requestjson.agent = proxyAgent;
+                }
 
                 generateResponse = await fetch(apiUrl + '/messages', requestjson );
                 break;
@@ -237,11 +334,11 @@ async function sendClaudeRequest(request, response) {
             let statusCode = generateResponse.status;
             let statusText = generateResponse.statusText;
             if (generateResponse.ok == false && Attempts < 3) {
-                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 4 seconds...`);
-                await new Promise(r => setTimeout(r, 4000));
+                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 6 seconds...`);
+                await new Promise(r => setTimeout(r, 6000));
             } else if (generateResponse.ok == false && Attempts < 5) {
-                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 8 seconds...`);
-                await new Promise(r => setTimeout(r, 8000));
+                console.log(`Streaming request failed with status ${statusCode} ${statusText}. Retrying in 9 seconds...`);
+                await new Promise(r => setTimeout(r, 9000));
             }
             Attempts++;
         }
@@ -277,7 +374,7 @@ async function sendClaudeRequest(request, response) {
  */
 async function sendScaleRequest(request, response) {
     const apiUrl = new URL(request.body.api_url_scale).toString();
-    const apiKey = readSecret(SECRET_KEYS.SCALE);
+    const apiKey = readSecret(request.user.directories, SECRET_KEYS.SCALE);
 
     if (!apiKey) {
         console.log('Scale API key is missing.');
@@ -294,7 +391,7 @@ async function sendScaleRequest(request, response) {
             controller.abort();
         });
 
-        const generateResponse = await fetch(apiUrl, {
+        let requestjson = {
             method: 'POST',
             body: JSON.stringify({ input: { input: converted_prompt } }),
             headers: {
@@ -302,7 +399,15 @@ async function sendScaleRequest(request, response) {
                 'Authorization': `Basic ${apiKey}`,
             },
             timeout: 0,
-        });
+        };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig()
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            requestjson.agent = proxyAgent;
+        }
+
+        const generateResponse = await fetch(apiUrl, requestjson);
 
         if (!generateResponse.ok) {
             console.log(`Scale API returned error: ${generateResponse.status} ${generateResponse.statusText} ${await generateResponse.text()}`);
@@ -328,7 +433,7 @@ async function sendScaleRequest(request, response) {
  * @param {express.Response} response Express response
  */
 async function sendMakerSuiteRequest(request, response) {
-    const apiKey = readSecret(SECRET_KEYS.MAKERSUITE);
+    const apiKey = readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE);
 
     if (!apiKey) {
         console.log('MakerSuite API key is missing.');
@@ -350,17 +455,25 @@ async function sendMakerSuiteRequest(request, response) {
     };
 
     function getGeminiBody() {
-        return {
-            contents: convertGooglePrompt(request.body.messages, model),
+        const should_use_system_prompt = model === 'gemini-1.5-pro-latest' && request.body.use_makersuite_sysprompt;
+        const prompt = convertGooglePrompt(request.body.messages, model, should_use_system_prompt, request.body.char_name, request.body.user_name);
+        let body = {
+            contents: prompt.contents,
             safetySettings: GEMINI_SAFETY,
             generationConfig: generationConfig,
         };
+
+        if (should_use_system_prompt) {
+            body.system_instruction = prompt.system_instruction;
+        }
+
+        return body;
     }
 
     function getBisonBody() {
         const prompt = isText
             ? ({ text: convertTextCompletionPrompt(request.body.messages) })
-            : ({ messages: convertGooglePrompt(request.body.messages, model) });
+            : ({ messages: convertGooglePrompt(request.body.messages, model).contents });
 
         /** @type {any} Shut the lint up */
         const bisonBody = {
@@ -404,7 +517,7 @@ async function sendMakerSuiteRequest(request, response) {
             ? (stream ? 'streamGenerateContent' : 'generateContent')
             : (isText ? 'generateText' : 'generateMessage');
 
-        const generateResponse = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`, {
+        let requestjson = {
             body: JSON.stringify(body),
             method: 'POST',
             headers: {
@@ -412,7 +525,15 @@ async function sendMakerSuiteRequest(request, response) {
             },
             signal: controller.signal,
             timeout: 0,
-        });
+        };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig()
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            requestjson.agent = proxyAgent;
+        }
+
+        const generateResponse = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`, requestjson);
         // have to do this because of their busted ass streaming endpoint
         if (stream) {
             try {
@@ -482,7 +603,7 @@ async function sendAI21Request(request, response) {
         headers: {
             accept: 'application/json',
             'content-type': 'application/json',
-            Authorization: `Bearer ${readSecret(SECRET_KEYS.AI21)}`,
+            Authorization: `Bearer ${readSecret(request.user.directories, SECRET_KEYS.AI21)}`,
         },
         body: JSON.stringify({
             numResults: 1,
@@ -520,6 +641,12 @@ async function sendAI21Request(request, response) {
         }),
         signal: controller.signal,
     };
+    if (proxingRequests) {
+        const proxyConfig = readProxyConfig()
+        const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+        const proxyAgent = new HttpsProxyAgent(proxyUrl);
+        options.agent = proxyAgent;
+    }
 
     fetch(`https://api.ai21.com/studio/v1/${request.body.model}/complete`, options)
         .then(r => r.json())
@@ -529,7 +656,7 @@ async function sendAI21Request(request, response) {
             } else {
                 console.log(r.completions[0].data.text);
             }
-            const reply = { choices: [{ 'message': { 'content': r.completions[0].data.text } }] };
+            const reply = { choices: [{ 'message': { 'content': r.completions?.[0]?.data?.text } }] };
             return response.send(reply);
         })
         .catch(err => {
@@ -546,7 +673,7 @@ async function sendAI21Request(request, response) {
  */
 async function sendMistralAIRequest(request, response) {
     const apiUrl = new URL(request.body.reverse_proxy || API_MISTRAL).toString();
-    const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(SECRET_KEYS.MISTRALAI);
+    const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MISTRALAI);
 
     if (!apiKey) {
         console.log('MistralAI API key is missing.');
@@ -610,6 +737,12 @@ async function sendMistralAIRequest(request, response) {
             signal: controller.signal,
             timeout: 0,
         };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig()
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            config.agent = proxyAgent;
+        }
 
         console.log('MisralAI request:', requestBody);
 
@@ -637,8 +770,13 @@ async function sendMistralAIRequest(request, response) {
     }
 }
 
+/**
+ * Sends a request to Cohere API.
+ * @param {express.Request} request Express request
+ * @param {express.Response} response Express response
+ */
 async function sendCohereRequest(request, response) {
-    const apiKey = readSecret(SECRET_KEYS.COHERE);
+    const apiKey = readSecret(request.user.directories, SECRET_KEYS.COHERE);
     const controller = new AbortController();
     request.socket.removeAllListeners('close');
     request.socket.on('close', function () {
@@ -651,7 +789,14 @@ async function sendCohereRequest(request, response) {
     }
 
     try {
-        const convertedHistory = convertCohereMessages(request.body.messages);
+        const convertedHistory = convertCohereMessages(request.body.messages, request.body.char_name, request.body.user_name);
+        const connectors = [];
+
+        if (request.body.websearch) {
+            connectors.push({
+                id: 'web-search',
+            });
+        }
 
         // https://docs.cohere.com/reference/chat
         const requestBody = {
@@ -669,7 +814,7 @@ async function sendCohereRequest(request, response) {
             frequency_penalty: request.body.frequency_penalty,
             presence_penalty: request.body.presence_penalty,
             prompt_truncation: 'AUTO_PRESERVE_ORDER',
-            connectors: [], // TODO
+            connectors: connectors,
             documents: [],
             tools: [],
             tool_results: [],
@@ -688,6 +833,12 @@ async function sendCohereRequest(request, response) {
             signal: controller.signal,
             timeout: 0,
         };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig()
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            config.agent = proxyAgent;
+        }
 
         const apiUrl = API_COHERE + '/chat';
 
@@ -727,25 +878,25 @@ router.post('/status', jsonParser, async function (request, response_getstatus_o
 
     if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI) {
         api_url = new URL(request.body.reverse_proxy || API_OPENAI).toString();
-        api_key_openai = request.body.reverse_proxy ? request.body.proxy_password : readSecret(SECRET_KEYS.OPENAI);
+        api_key_openai = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.OPENAI);
         headers = {};
     } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENROUTER) {
         api_url = 'https://openrouter.ai/api/v1';
-        api_key_openai = readSecret(SECRET_KEYS.OPENROUTER);
+        api_key_openai = readSecret(request.user.directories, SECRET_KEYS.OPENROUTER);
         // OpenRouter needs to pass the Referer and X-Title: https://openrouter.ai/docs#requests
         headers = { ...OPENROUTER_HEADERS };
     } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.MISTRALAI) {
         api_url = new URL(request.body.reverse_proxy || API_MISTRAL).toString();
-        api_key_openai = request.body.reverse_proxy ? request.body.proxy_password : readSecret(SECRET_KEYS.MISTRALAI);
+        api_key_openai = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MISTRALAI);
         headers = {};
     } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CUSTOM) {
         api_url = request.body.custom_url;
-        api_key_openai = readSecret(SECRET_KEYS.CUSTOM);
+        api_key_openai = readSecret(request.user.directories, SECRET_KEYS.CUSTOM);
         headers = {};
         mergeObjectWithYaml(headers, request.body.custom_include_headers);
     } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.COHERE) {
         api_url = API_COHERE;
-        api_key_openai = readSecret(SECRET_KEYS.COHERE);
+        api_key_openai = readSecret(request.user.directories, SECRET_KEYS.COHERE);
         headers = {};
     } else {
         console.log('This chat completion source is not supported yet.');
@@ -758,13 +909,22 @@ router.post('/status', jsonParser, async function (request, response_getstatus_o
     }
 
     try {
-        const response = await fetch(api_url + '/models', {
+
+        let requestjson = {
             method: 'GET',
             headers: {
                 'Authorization': 'Bearer ' + api_key_openai,
                 ...headers,
             },
-        });
+        };
+        if (proxingRequests) {
+            const proxyConfig = readProxyConfig();
+            const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+            requestjson.agent = proxyAgent;
+        }
+
+        const response = await fetch(api_url + '/models', requestjson);
 
         if (response.ok) {
             const data = await response.json();
@@ -910,10 +1070,11 @@ router.post('/generate', jsonParser, function (request, response) {
 
     if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI) {
         apiUrl = new URL(request.body.reverse_proxy || API_OPENAI).toString();
-        apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(SECRET_KEYS.OPENAI);
+        apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.OPENAI);
         headers = {};
         bodyParams = {
             logprobs: request.body.logprobs,
+            top_logprobs: undefined,
         };
 
         // Adjust logprobs params for Chat Completions API, which expects { top_logprobs: number; logprobs: boolean; }
@@ -927,7 +1088,7 @@ router.post('/generate', jsonParser, function (request, response) {
         }
     } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENROUTER) {
         apiUrl = 'https://openrouter.ai/api/v1';
-        apiKey = readSecret(SECRET_KEYS.OPENROUTER);
+        apiKey = readSecret(request.user.directories, SECRET_KEYS.OPENROUTER);
         // OpenRouter needs to pass the Referer and X-Title: https://openrouter.ai/docs#requests
         headers = { ...OPENROUTER_HEADERS };
         bodyParams = { 'transforms': ['middle-out'] };
@@ -949,10 +1110,11 @@ router.post('/generate', jsonParser, function (request, response) {
         }
     } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CUSTOM) {
         apiUrl = request.body.custom_url;
-        apiKey = readSecret(SECRET_KEYS.CUSTOM);
+        apiKey = readSecret(request.user.directories, SECRET_KEYS.CUSTOM);
         headers = {};
         bodyParams = {
             logprobs: request.body.logprobs,
+            top_logprobs: undefined,
         };
 
         // Adjust logprobs params for Chat Completions API, which expects { top_logprobs: number; logprobs: boolean; }
@@ -963,6 +1125,21 @@ router.post('/generate', jsonParser, function (request, response) {
 
         mergeObjectWithYaml(bodyParams, request.body.custom_include_body);
         mergeObjectWithYaml(headers, request.body.custom_include_headers);
+
+        if (request.body.custom_prompt_post_processing) {
+            console.log('Applying custom prompt post-processing of type', request.body.custom_prompt_post_processing);
+            request.body.messages = postProcessPrompt(
+                request.body.messages,
+                request.body.custom_prompt_post_processing,
+                request.body.char_name,
+                request.body.user_name);
+        }
+    } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.PERPLEXITY) {
+        apiUrl = API_PERPLEXITY;
+        apiKey = readSecret(request.user.directories, SECRET_KEYS.PERPLEXITY);
+        headers = {};
+        bodyParams = {};
+        request.body.messages = postProcessPrompt(request.body.messages, 'claude', request.body.char_name, request.body.user_name);
     } else {
         console.log('This chat completion source is not supported yet.');
         return response.status(400).send({ error: true });
@@ -1023,6 +1200,12 @@ router.post('/generate', jsonParser, function (request, response) {
         signal: controller.signal,
         timeout: 0,
     };
+    if (proxingRequests) {
+        const proxyConfig = readProxyConfig();
+        const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+        const proxyAgent = new HttpsProxyAgent(proxyUrl);
+        config.agent = proxyAgent;
+    }
 
     console.log(requestBody);
 
