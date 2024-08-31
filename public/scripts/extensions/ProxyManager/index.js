@@ -63,7 +63,7 @@ function getBaseproxy(baseproxy){
         return baseproxy
     };
     baseproxy.pop();
-    if (baseproxy[4] == 'aws' || baseproxy[4] == 'azure' || baseproxy[4] == 'openai' ) {baseproxy.pop();}
+    if (baseproxy[4] == 'aws' || baseproxy[4] == 'azure' || baseproxy[4] == 'openai' || baseproxy[4] == 'gcp' ) {baseproxy.pop();}
     baseproxy = baseproxy.join('/');
     return baseproxy;
 }
@@ -96,6 +96,12 @@ function onProxytypeChange(){
             break;
         case 'awsclaude':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/aws/claude';
+            break;
+        case 'awsmistral':
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/aws/mistral';
+            break;
+        case 'gcpclaude':
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/gcp/claude';
             break;
         case 'google':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/google-ai';
@@ -287,8 +293,10 @@ jQuery(function () {
                         <option value="oai">Openai</option>
                         <option value="oai2">Openai instruct</option>
                         <option value="azure">Openai Azure</option>
-						<option value="claude">Claude</option>
+                        <option value="claude">Claude</option>
                         <option value="awsclaude">AWS Claude</option>
+                        <option value="awsmistral">AWS Mistral</option>
+                        <option value="gcpclaude">Vertex Claude</option>
                         <option value="google">Google AI</option>
                         <option value="mixtral">Mixtral</option>
                     </select>
