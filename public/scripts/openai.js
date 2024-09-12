@@ -518,7 +518,8 @@ function setOpenAIMessages(chat) {
     let j = 0;
     // clean openai msgs
     let names_behavior_x = oai_settings.names_behavior;
-    switch (extension_settings.Nvkun.AlwaysCharnames) {
+	
+	switch (extension_settings.Nvkun.AlwaysCharnames) {
         case 'true':
             names_behavior_x = 3;
             break;
@@ -1979,6 +1980,26 @@ async function sendOpenAIRequest(type, messages, signal) {
     if ((isOAI || isOpenRouter || isMistral || isCustom || isCohere) && oai_settings.seed >= 0) {
         generate_data['seed'] = oai_settings.seed;
     }
+
+    if (isOAI && oai_settings.openai_model.includes('o1') || isCustom && oai_settings.custom_model.includes('o1')){
+        generate_data['max_completion_tokens'] = generate_data['max_tokens'];
+        delete generate_data.max_tokens;
+        delete generate_data.logprobs;
+        delete generate_data.stream;
+        delete generate_data.temperature;
+        delete generate_data.frequency_penalty;
+        delete generate_data.presence_penalty;
+        delete generate_data.top_p;
+        var messages_for_desystemize = generate_data.messages
+        for (let i = 0; i <= messages_for_desystemize.length - 1; i++){
+            if (messages_for_desystemize[i].role == 'system') {
+                messages_for_desystemize[i].role = 'user'
+            }
+        }
+        generate_data['messages'] = messages_for_desystemize;
+	}
+
+
 
     const generate_url = '/api/backends/chat-completions/generate';
     const response = await fetch(generate_url, {
