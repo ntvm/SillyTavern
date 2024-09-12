@@ -1875,7 +1875,7 @@ async function sendOpenAIRequest(type, messages, signal) {
             break;
 
         case true:
-            if ([chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI].includes(oai_settings.chat_completion_source)) {
+            if ([chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI, chat_completion_sources.MAKERSUITE].includes(oai_settings.chat_completion_source)) {
                 if (!extension_settings.ProxyManager.ProxyURL && !extension_settings.ProxyManager.ProxyPassword) {
                     generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
                     generate_data['proxy_password'] = oai_settings.proxy_password;
