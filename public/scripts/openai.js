@@ -1985,11 +1985,15 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['max_completion_tokens'] = generate_data['max_tokens'];
         delete generate_data.max_tokens;
         delete generate_data.logprobs;
-        delete generate_data.stream;
+        if (extension_settings.ProxyManager.ProxyPrior == false && oai_settings.stream_openai == true
+        || extension_settings.ProxyManager.ProxyPrior == false && oai_settings.stream_openai == true && !oai_settings.reverse_proxy ||
+        extension_settings.ProxyManager.ProxyPrior == false && !oai_settings.proxy_password && oai_settings.stream_openai == true) {
+            alert('STREAMING NOT SUPPORTED BY o1') }
         delete generate_data.temperature;
         delete generate_data.frequency_penalty;
         delete generate_data.presence_penalty;
         delete generate_data.top_p;
+        delete generate_data.stop;
         var messages_for_desystemize = generate_data.messages
         for (let i = 0; i <= messages_for_desystemize.length - 1; i++){
             if (messages_for_desystemize[i].role == 'system') {
