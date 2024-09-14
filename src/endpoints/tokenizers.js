@@ -262,6 +262,10 @@ function getWebTokenizersChunks(tokenizer, ids) {
  */
 function getTokenizerModel(requestModel) {
 
+    if (requestModel.includes('o1')) {
+        return 'gpt-4o';
+    }
+
     if (requestModel.includes('gpt-4o')) {
         return 'gpt-4o';
     }
