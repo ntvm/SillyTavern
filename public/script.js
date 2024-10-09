@@ -119,6 +119,7 @@ import {
     createNewBookmark,
     showBookmarksButtons,
     createBranch,
+    Deswipize,
 } from './scripts/bookmarks.js';
 
 import {
@@ -7977,13 +7978,29 @@ async function branchChat(mesId) {
     return fileName;
 }
 
+/**
+ * Creates a deswipized copy of the chat
+ * @returns {Promise<string>} Branch file name
+ */
+export async function DeswipizeChat() {
+    const fileName = await Deswipize();
+
+    if (selected_group) {
+        await openGroupChat(selected_group, fileName);
+    } else {
+        await openCharacterChat(fileName);
+    }
+
+    return fileName;
+}
+
 function favoriteSwipeDealer(usageCase,isEnabled){
     if (usageCase == true) {document.querySelector('.last_mes').setAttribute("is_favorite",'false'); return;}
     const chatId = getCurrentChatId();
     if (!chatId) {return;}
     const mes = chat[chat.length - 1];
-    if (mes.swipe_info[mes.swipe_id] == undefined) return
-	
+    if (mes.swipe_info[mes.swipe_id] == undefined) return;
+
     if (chat.length > 1) {
         let checkswipeFavorism = (mes.swipe_info[mes.swipe_id].extra.is_favorite) ?? "false";
         document.querySelector('.last_mes').setAttribute("is_favorite", checkswipeFavorism);
