@@ -165,6 +165,40 @@ export async function createBranch(mesId) {
     return name;
 }
 
+export async function Deswipize() {
+    if (!chat.length) {
+        toastr.warning('The chat is empty.', 'Cannot deswipize');
+        return;
+    }
+
+    const mainChat = selected_group ? groups?.find(x => x.id == selected_group)?.chat_id : characters[this_chid].chat;
+    const newMetadata = { main_chat: mainChat };
+    const lastMes = chat[chat.length - 1];
+    let name = `Deswipized #${chat.length - 1} - ${humanizedDateTime()}`;
+
+    for (let i = 1; i < chat.length - 1; i++) {
+        //chat[i]. // delete from chat swipes and swipe_info and swipe_id
+        chat[i].swipes = [chat[i].mes];
+        chat[i].swipe_info = [{ extra:[] } ];
+        chat[i].swipe_id = 0;
+    }
+    if (selected_group) {
+        await saveGroupBookmarkChat(selected_group, name, newMetadata, chat.length - 1);
+    } else {
+        await saveChat(name, newMetadata, chat.length - 1);
+    }
+    // append to branches list if it exists
+    // otherwise create it
+    if (typeof lastMes.extra !== 'object') {
+        lastMes.extra = {};
+    }
+    if (typeof lastMes.extra['branches'] !== 'object') {
+        lastMes.extra['branches'] = [];
+    }
+    lastMes.extra['branches'].push(name);
+    return name;
+}
+
 async function createNewBookmark(mesId) {
     if (!chat.length) {
         toastr.warning('The chat is empty.', 'Checkpoint creation failed');

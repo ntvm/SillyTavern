@@ -38,6 +38,7 @@ import {
     system_message_types,
     this_chid,
     getRequestHeaders,
+    DeswipizeChat,
 } from '../script.js';
 import { getMessageTimeStamp } from './RossAscends-mods.js';
 import { hideChatMessageRange } from './chats.js';
@@ -291,6 +292,7 @@ parser.addCommand('trimend', trimEndCallback, [], '<span class="monospace">(text
 parser.addCommand('lookaround', lookChatCallback, ['look'], ' – Look around, and behold beauty of this world', true, true);
 parser.addCommand('UpdateST', Getupdate, [], '<span class="monospace">(text)</span> – Update Silly Tavern', true, true);
 parser.addCommand('RebootST', Getreboot, [], '<span class="monospace">(text)</span> – Reboot Silly Tavern', true, true);
+parser.addCommand('deswipize', DeswipizeChat, [], ' – create new chat without swipes', true, true);
 parser.addCommand('inject', injectCallback, [], '<span class="monospace">id=injectId (position=before/after/chat depth=number scan=true/false role=system/user/assistant [text])</span> – injects a text into the LLM prompt for the current chat. Requires a unique injection ID. Positions: "before" main prompt, "after" main prompt, in-"chat" (default: after). Depth: injection depth for the prompt (default: 4). Role: role for in-chat injections (default: system). Scan: include injection content into World Info scans (default: false).', true, true);
 parser.addCommand('listinjects', listInjectsCallback, [], ' – lists all script injections for the current chat.', true, true);
 parser.addCommand('flushinjects', flushInjectsCallback, [], ' – removes all script injections for the current chat.', true, true);

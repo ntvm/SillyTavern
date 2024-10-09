@@ -12,7 +12,8 @@ import {
     saveSettings,
     substituteParams,
     getCharacters,
-    processDroppedFiles
+    processDroppedFiles,
+    DeswipizeChat,
  } from "../../../script.js";
 import { is_group_generating, selected_group, getGroupChatNames } from "../../group-chats.js";
 import { oai_settings } from "../../openai.js";
@@ -782,7 +783,20 @@ async function updatePresetList() {
         }
     }
 }
+function adddeswiperButton() {
+    const buttonHtml = `
+    <div id="Deswipize" class="list-group-item flex-container flexGap5">
+        <div class="fa-solid fa-highlighter extensionsMenuExtensionButton" title="Deswipize chat" /></div>
+        Deswipize chat
+    </div>
+        `;
 
+    $('#extensionsMenu').prepend(buttonHtml);
+
+    $('#Deswipize').on('click', DeswipizeChat);
+}
+
+adddeswiperButton();
 
 jQuery(function () {
     function addExtensionControls() {
@@ -855,8 +869,8 @@ jQuery(function () {
     addExtensionControls();
     loadSettings();
     eventSource.on(event_types.CHAT_CHANGED, onChatEvent);
-	
-	
+
+
 /*    $(document).on('click', '.mes_text p', function() {
         var index = $(this).index();
         alert("Вы нажали на параграф номер " + (index + 1) + "Сообщения " + ());
@@ -867,6 +881,6 @@ jQuery(function () {
         var mesid = $(this).closest('.mes').attr('mesid');
         alert("Вы нажали на параграф номер " + (index + 1) + ", mesid: " + mesid);
     });*/
-	
+
 });
 
