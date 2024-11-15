@@ -405,12 +405,18 @@ jQuery(function () {
                                 <option data-type="openai" value="gpt-4-vision-preview">gpt-4-vision-preview</option>
                                 <option data-type="openai" value="gpt-4-turbo">gpt-4-turbo</option>
                                 <option data-type="openai" value="gpt-4o">gpt-4o</option>
+                                <option data-type="anthropic" value="claude-3-5-sonnet-20241022">claude-3-5-sonnet-NEW</option>
+                                <option data-type="anthropic" value="claude-3-5-sonnet-20240620">claude-3-5-sonnet</option>
+                                <option data-type="anthropic" value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
                                 <option data-type="anthropic" value="claude-3-opus-20240229">claude-3-opus-20240229</option>
                                 <option data-type="anthropic" value="claude-3-sonnet-20240229">claude-3-sonnet-20240229</option>
                                 <option data-type="anthropic" value="claude-3-haiku-20240307">claude-3-haiku-20240307</option>
                                 <option data-type="google" value="gemini-pro-vision">gemini-pro-vision</option>
                                 <option data-type="openrouter" value="openai/gpt-4-vision-preview">openai/gpt-4-vision-preview</option>
                                 <option data-type="openrouter" value="haotian-liu/llava-13b">haotian-liu/llava-13b</option>
+                                <option data-type="openrouter" value="anthropic/claude-3-5-sonnet-20241022">claude-3-5-sonnet-NEW</option>
+                                <option data-type="openrouter" value="anthropic/claude-3-5-sonnet-20240620">claude-3-5-sonnet</option>
+                                <option data-type="openrouter" value="anthropic/claude-3-5-haiku-20241022">claude-3-5-haiku</option>
                                 <option data-type="openrouter" value="anthropic/claude-3-haiku">anthropic/claude-3-haiku</option>
                                 <option data-type="openrouter" value="anthropic/claude-3-sonnet">anthropic/claude-3-sonnet</option>
                                 <option data-type="openrouter" value="anthropic/claude-3-opus">anthropic/claude-3-opus</option>
