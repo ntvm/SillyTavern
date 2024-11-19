@@ -89,7 +89,8 @@ const STORAGE_KEYS = {
  * @property {string} vectors - The directory where the vectors are stored
  * @property {string} ProxyManager - ProxyManager
  * @property {string} NvSettings - NvSettings
-*/
+ * @property {string} backups - The directory where the backups are stored
+ */
 
 /**
  * Ensures that the content directories exist.

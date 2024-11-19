@@ -1,5 +1,5 @@
 import { getContext } from './extensions.js';
-import { getRequestHeaders } from '../script.js';
+import { callPopup, getRequestHeaders } from '../script.js';
 import { isMobile } from './RossAscends-mods.js';
 import { collapseNewlines } from './power-user.js';
 import { debounce_timeout } from './constants.js';
@@ -139,6 +139,7 @@ export function download(content, fileName, contentType) {
     a.href = URL.createObjectURL(file);
     a.download = fileName;
     a.click();
+    URL.revokeObjectURL(a.href);
 }
 
 /**
@@ -476,7 +477,11 @@ export function sortByCssOrder(a, b) {
  * trimToEndSentence('Hello, world! I am from'); // 'Hello, world!'
  */
 export function trimToEndSentence(input, include_newline = false) {
-    const punctuation = new Set(['.', '!', '?', '*', '"', ')', '}', '`', ']', '$', '。', '！', '？', '”', '）', '】', '’', '」']); // extend this as you see fit
+    if (!input) {
+        return '';
+    }
+
+    const punctuation = new Set(['.', '!', '?', '*', '"', ')', '}', '`', ']', '$', '。', '！', '？', '”', '）', '】', '’', '」', '_']); // extend this as you see fit
     let last = -1;
 
     for (let i = input.length - 1; i >= 0; i--) {
@@ -505,6 +510,10 @@ export function trimToEndSentence(input, include_newline = false) {
 }
 
 export function trimToStartSentence(input) {
+    if (!input) {
+        return '';
+    }
+
     let p1 = input.indexOf('.');
     let p2 = input.indexOf('!');
     let p3 = input.indexOf('?');
@@ -612,8 +621,8 @@ const dateCache = new Map();
 /**
  * Cached version of moment() to avoid re-parsing the same date strings.
  * Important: Moment objects are mutable, so use clone() before modifying them!
- * @param {any} timestamp String or number representing a date.
- * @returns {*} Moment object
+ * @param {string|number} timestamp String or number representing a date.
+ * @returns {moment.Moment} Moment object
  */
 export function timestampToMoment(timestamp) {
     if (dateCache.has(timestamp)) {
@@ -632,6 +641,9 @@ function parseTimestamp(timestamp) {
 
     // Unix time (legacy TAI / tags)
     if (typeof timestamp === 'number') {
+        if (isNaN(timestamp) || !isFinite(timestamp) || timestamp < 0) {
+            return moment.invalid();
+        }
         return moment(timestamp);
     }
 
@@ -663,8 +675,8 @@ function parseTimestamp(timestamp) {
 
 /**
  * Compare two moment objects for sorting.
- * @param {*} a The first moment object.
- * @param {*} b The second moment object.
+ * @param {moment.Moment} a The first moment object.
+ * @param {moment.Moment} b The second moment object.
  * @returns {number} A negative number if a is before b, a positive number if a is after b, or 0 if they are equal.
  */
 export function sortMoments(a, b) {
@@ -732,6 +744,24 @@ export function isDataURL(str) {
     return regex.test(str);
 }
 
+/**
+ * Gets the size of an image from a data URL.
+ * @param {string} dataUrl Image data URL
+ * @returns {Promise<{ width: number, height: number }>} Image size
+ */
+export function getImageSizeFromDataURL(dataUrl) {
+    const image = new Image();
+    image.src = dataUrl;
+    return new Promise((resolve, reject) => {
+        image.onload = function () {
+            resolve({ width: image.width, height: image.height });
+        };
+        image.onerror = function () {
+            reject(new Error('Failed to load image'));
+        };
+    });
+}
+
 export function getCharaFilename(chid) {
     const context = getContext();
     const fileName = context.characters[chid ?? context.characterId].avatar;
@@ -771,6 +801,29 @@ export function extractAllWords(value) {
  */
 export function escapeRegex(string) {
     return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+/**
+ * Instantiates a regular expression from a string.
+ * @param {string} input The input string.
+ * @returns {RegExp} The regular expression instance.
+ * @copyright Originally from: https://github.com/IonicaBizau/regex-parser.js/blob/master/lib/index.js
+ */
+export function regexFromString(input) {
+    try {
+        // Parse input
+        var m = input.match(/(\/?)(.+)\1([a-z]*)/i);
+
+        // Invalid flags
+        if (m[3] && !/^(?!.*?(.).*?\1)[gmixXsuUAJ]+$/.test(m[3])) {
+            return RegExp(input);
+        }
+
+        // Create the regular expression
+        return new RegExp(m[2], m[3]);
+    } catch {
+        return;
+    }
 }
 
 export class Stopwatch {
@@ -976,6 +1029,36 @@ export function extractDataFromPng(data, identifier = 'chara') {
             console.log('Error decoding b64 in image: ' + e);
             return null;
         }
+    }
+}
+
+/**
+ * Sends a request to the server to sanitize a given filename
+ *
+ * @param {string} fileName - The name of the file to sanitize
+ * @returns {Promise<string>} A Promise that resolves to the sanitized filename if successful, or rejects with an error message if unsuccessful
+ */
+export async function getSanitizedFilename(fileName) {
+    try {
+        const result = await fetch('/api/files/sanitize-filename', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({
+                fileName: fileName,
+            }),
+        });
+
+        if (!result.ok) {
+            const error = await result.text();
+            throw new Error(error);
+        }
+
+        const responseData = await result.json();
+        return responseData.fileName;
+    } catch (error) {
+        toastr.error(String(error), 'Could not sanitize fileName');
+        console.error('Could not sanitize fileName', error);
+        throw error;
     }
 }
 
@@ -1300,11 +1383,7 @@ export async function extractTextFromHTML(blob, textSelector = 'body') {
  */
 export async function extractTextFromMarkdown(blob) {
     const markdown = await blob.text();
-    const converter = new showdown.Converter();
-    const html = converter.makeHtml(markdown);
-    const domParser = new DOMParser();
-    const document = domParser.parseFromString(DOMPurify.sanitize(html), 'text/html');
-    const text = postProcessText(document.body.textContent, false);
+    const text = postProcessText(markdown, false);
     return text;
 }
 
@@ -1429,4 +1508,261 @@ export function setValueByPath(obj, path, value) {
 export function flashHighlight(element, timespan = 2000) {
     element.addClass('flash animated');
     setTimeout(() => element.removeClass('flash animated'), timespan);
+}
+
+/**
+ * A common base function for case-insensitive and accent-insensitive string comparisons.
+ *
+ * @param {string} a - The first string to compare.
+ * @param {string} b - The second string to compare.
+ * @param {(a:string,b:string)=>boolean} comparisonFunction - The function to use for the comparison.
+ * @returns {*} - The result of the comparison.
+ */
+export function compareIgnoreCaseAndAccents(a, b, comparisonFunction) {
+    if (!a || !b) return comparisonFunction(a, b); // Return the comparison result if either string is empty
+
+    // Normalize and remove diacritics, then convert to lower case
+    const normalizedA = a.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const normalizedB = b.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+    // Check if the normalized strings are equal
+    return comparisonFunction(normalizedA, normalizedB);
+}
+
+/**
+ * Performs a case-insensitive and accent-insensitive substring search.
+ * This function normalizes the strings to remove diacritical marks and converts them to lowercase to ensure the search is insensitive to case and accents.
+ *
+ * @param {string} text - The text in which to search for the substring
+ * @param {string} searchTerm - The substring to search for in the text
+ * @returns {boolean} true if the searchTerm is found within the text, otherwise returns false
+ */
+export function includesIgnoreCaseAndAccents(text, searchTerm) {
+    return compareIgnoreCaseAndAccents(text, searchTerm, (a, b) => a?.includes(b) === true);
+}
+
+/**
+ * Performs a case-insensitive and accent-insensitive equality check.
+ * This function normalizes the strings to remove diacritical marks and converts them to lowercase to ensure the search is insensitive to case and accents.
+ *
+ * @param {string} a - The first string to compare
+ * @param {string} b - The second string to compare
+ * @returns {boolean} true if the strings are equal, otherwise returns false
+ */
+export function equalsIgnoreCaseAndAccents(a, b) {
+    return compareIgnoreCaseAndAccents(a, b, (a, b) => a === b);
+}
+
+/**
+ * @typedef {object} Select2Option The option object for select2 controls
+ * @property {string} id - The unique ID inside this select
+ * @property {string} text - The text for this option
+ * @property {number?} [count] - Optionally show the count how often that option was chosen already
+ */
+
+/**
+ * Returns a unique hash as ID for a select2 option text
+ *
+ * @param {string} option - The option
+ * @returns {string} A hashed version of that option
+ */
+export function getSelect2OptionId(option) {
+    return String(getStringHash(option));
+}
+
+/**
+ * Modifies the select2 options by adding not existing one and optionally selecting them
+ *
+ * @param {JQuery<HTMLElement>} element - The "select" element to add the options to
+ * @param {string[]|Select2Option[]} items - The option items to build, add or select
+ * @param {object} [options] - Optional arguments
+ * @param {boolean} [options.select=false] - Whether the options should be selected right away
+ * @param {object} [options.changeEventArgs=null] - Optional event args being passed into the "change" event when its triggered because a new options is selected
+ */
+export function select2ModifyOptions(element, items, { select = false, changeEventArgs = null } = {}) {
+    if (!items.length) return;
+    /** @type {Select2Option[]} */
+    const dataItems = items.map(x => typeof x === 'string' ? { id: getSelect2OptionId(x), text: x } : x);
+
+    const existingValues = [];
+    dataItems.forEach(item => {
+        // Set the value, creating a new option if necessary
+        if (element.find('option[value=\'' + item.id + '\']').length) {
+            if (select) existingValues.push(item.id);
+        } else {
+            // Create a DOM Option and optionally pre-select by default
+            var newOption = new Option(item.text, item.id, select, select);
+            // Append it to the select
+            element.append(newOption);
+            if (select) element.trigger('change', changeEventArgs);
+        }
+        if (existingValues.length) element.val(existingValues).trigger('change', changeEventArgs);
+    });
+}
+
+/**
+ * Returns the ajax settings that can be used on the select2 ajax property to dynamically get the data.
+ * Can be used on a single global array, querying data from the server or anything similar.
+ *
+ * @param {function():Select2Option[]} dataProvider - The provider/function to retrieve the data - can be as simple as "() => myData" for arrays
+ * @return {{transport: (params, success, failure) => any}} The ajax object with the transport function to use on the select2 ajax property
+ */
+export function dynamicSelect2DataViaAjax(dataProvider) {
+    function dynamicSelect2DataTransport(params, success, failure) {
+        var items = dataProvider();
+        // fitering if params.data.q available
+        if (params.data && params.data.q) {
+            items = items.filter(function (item) {
+                return includesIgnoreCaseAndAccents(item.text, params.data.q);
+            });
+        }
+        var promise = new Promise(function (resolve, reject) {
+            resolve({ results: items });
+        });
+        promise.then(success);
+        promise.catch(failure);
+    }
+    const ajax = {
+        transport: dynamicSelect2DataTransport,
+    };
+    return ajax;
+}
+
+/**
+ * Checks whether a given control is a select2 choice element - meaning one of the results being displayed in the select multi select box
+ * @param {JQuery<HTMLElement>|HTMLElement} element - The element to check
+ * @returns {boolean} Whether this is a choice element
+ */
+export function isSelect2ChoiceElement(element) {
+    const $element = $(element);
+    return ($element.hasClass('select2-selection__choice__display') || $element.parents('.select2-selection__choice__display').length > 0);
+}
+
+/**
+ * Subscribes a 'click' event handler to the choice elements of a select2 multi-select control
+ *
+ * @param {JQuery<HTMLElement>} control The original control the select2 was applied to
+ * @param {function(HTMLElement):void} action - The action to execute when a choice element is clicked
+ * @param {object} options - Optional parameters
+ * @param {boolean} [options.buttonStyle=false] - Whether the choices should be styles as a clickable button with color and hover transition, instead of just changed cursor
+ * @param {boolean} [options.closeDrawer=false] - Whether the drawer should be closed and focus removed after the choice item was clicked
+ * @param {boolean} [options.openDrawer=false] - Whether the drawer should be opened, even if this click would normally close it
+ */
+export function select2ChoiceClickSubscribe(control, action, { buttonStyle = false, closeDrawer = false, openDrawer = false } = {}) {
+    // Add class for styling (hover color, changed cursor, etc)
+    control.addClass('select2_choice_clickable');
+    if (buttonStyle) control.addClass('select2_choice_clickable_buttonstyle');
+
+    // Get the real container below and create a click handler on that one
+    const select2Container = control.next('span.select2-container');
+    select2Container.on('click', function (event) {
+        const isChoice = isSelect2ChoiceElement(event.target);
+        if (isChoice) {
+            event.preventDefault();
+
+            // select2 still bubbles the event to open the dropdown. So we close it here and remove focus if we want that
+            if (closeDrawer) {
+                control.select2('close');
+                setTimeout(() => select2Container.find('textarea').trigger('blur'), debounce_timeout.quick);
+            }
+            if (openDrawer) {
+                control.select2('open');
+            }
+
+            // Now execute the actual action that was subscribed
+            action(event.target);
+        }
+    });
+}
+
+/**
+ * Applies syntax highlighting to a given regex string by generating HTML with classes
+ *
+ * @param {string} regexStr - The javascript compatible regex string
+ * @returns {string} The html representation of the highlighted regex
+ */
+export function highlightRegex(regexStr) {
+    // Function to escape HTML special characters for safety
+    const escapeHtml = (str) => str.replace(/[&<>"']/g, match => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;',
+    })[match]);
+
+    // Replace special characters with their HTML-escaped forms
+    regexStr = escapeHtml(regexStr);
+
+    // Patterns that we want to highlight only if they are not escaped
+    function getPatterns() {
+        try {
+            return {
+                brackets: new RegExp('(?<!\\\\)\\[.*?\\]', 'g'),  // Non-escaped square brackets
+                quantifiers: new RegExp('(?<!\\\\)[*+?{}]', 'g'),  // Non-escaped quantifiers
+                operators: new RegExp('(?<!\\\\)[|.^$()]', 'g'),  // Non-escaped operators like | and ()
+                specialChars: new RegExp('\\\\.', 'g'),
+                flags: new RegExp('(?<=\\/)([gimsuy]*)$', 'g'),  // Match trailing flags
+                delimiters: new RegExp('^\\/|(?<![\\\\<])\\/', 'g'),  // Match leading or trailing delimiters
+            };
+
+        } catch (error) {
+            return {
+                brackets: new RegExp('(\\\\)?\\[.*?\\]', 'g'),  // Non-escaped square brackets
+                quantifiers: new RegExp('(\\\\)?[*+?{}]', 'g'),  // Non-escaped quantifiers
+                operators: new RegExp('(\\\\)?[|.^$()]', 'g'),  // Non-escaped operators like | and ()
+                specialChars: new RegExp('\\\\.', 'g'),
+                flags: new RegExp('/([gimsuy]*)$', 'g'),  // Match trailing flags
+                delimiters: new RegExp('^/|[^\\\\](/)', 'g'),  // Match leading or trailing delimiters
+            };
+        }
+    }
+
+    const patterns = getPatterns();
+
+    // Function to replace each pattern with a highlighted HTML span
+    const wrapPattern = (pattern, className) => {
+        regexStr = regexStr.replace(pattern, match => `<span class="${className}">${match}</span>`);
+    };
+
+    // Apply highlighting patterns
+    wrapPattern(patterns.brackets, 'regex-brackets');
+    wrapPattern(patterns.quantifiers, 'regex-quantifier');
+    wrapPattern(patterns.operators, 'regex-operator');
+    wrapPattern(patterns.specialChars, 'regex-special');
+    wrapPattern(patterns.flags, 'regex-flags');
+    wrapPattern(patterns.delimiters, 'regex-delimiter');
+
+    return `<span class="regex-highlight">${regexStr}</span>`;
+}
+
+/**
+ * Confirms if the user wants to overwrite an existing data object (like character, world info, etc) if one exists.
+ * If no data with the name exists, this simply returns true.
+ *
+ * @param {string} type - The type of the check ("World Info", "Character", etc)
+ * @param {string[]} existingNames - The list of existing names to check against
+ * @param {string} name - The new name
+ * @param {object} options - Optional parameters
+ * @param {boolean} [options.interactive=false] - Whether to show a confirmation dialog when needing to overwrite an existing data object
+ * @param {string} [options.actionName='overwrite'] - The action name to display in the confirmation dialog
+ * @param {(existingName:string)=>void} [options.deleteAction=null] - Optional action to execute wen deleting an existing data object on overwrite
+ * @returns {Promise<boolean>} True if the user confirmed the overwrite or there is no overwrite needed, false otherwise
+ */
+export async function checkOverwriteExistingData(type, existingNames, name, { interactive = false, actionName = 'Overwrite', deleteAction = null } = {}) {
+    const existing = existingNames.find(x => equalsIgnoreCaseAndAccents(x, name));
+    if (!existing) {
+        return true;
+    }
+
+    const overwrite = interactive ? await callPopup(`<h3>${type} ${actionName}</h3><p>A ${type.toLowerCase()} with the same name already exists:<br />${existing}</p>Do you want to overwrite it?`, 'confirm') : false;
+    if (!overwrite) {
+        toastr.warning(`${type} ${actionName.toLowerCase()} cancelled. A ${type.toLowerCase()} with the same name already exists:<br />${existing}`, `${type} ${actionName}`, { escapeHtml: false });
+        return false;
+    }
+
+    toastr.info(`Overwriting Existing ${type}:<br />${existing}`, `${type} ${actionName}`, { escapeHtml: false });
+
+    // If there is an action to delete the existing data, do it, as the name might be slightly different so file name would not be the same
+    if (deleteAction) {
+        deleteAction(existing);
+    }
+
+    return true;
 }

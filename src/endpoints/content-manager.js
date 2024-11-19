@@ -3,17 +3,23 @@ const path = require('path');
 const express = require('express');
 const fetch = require('node-fetch').default;
 const sanitize = require('sanitize-filename');
-const { getConfigValue } = require('../util');
+const { getConfigValue, color } = require('../util');
 const { jsonParser } = require('../express-common');
 const writeFileAtomicSync = require('write-file-atomic').sync;
 const contentDirectory = path.join(process.cwd(), 'default/content');
+const scaffoldDirectory = path.join(process.cwd(), 'default/scaffold');
 const contentIndexPath = path.join(contentDirectory, 'index.json');
+const scaffoldIndexPath = path.join(scaffoldDirectory, 'index.json');
 const characterCardParser = require('../character-card-parser.js');
+
+const WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES = getConfigValue('whitelistImportDomains', []);
 
 /**
  * @typedef {Object} ContentItem
  * @property {string} filename
  * @property {string} type
+ * @property {string} [name]
+ * @property {string|null} [folder]
  */
 
 /**
@@ -48,9 +54,7 @@ const CONTENT_TYPES = {
  */
 function getDefaultPresets(directories) {
     try {
-        const contentIndexText = fs.readFileSync(contentIndexPath, 'utf8');
-        const contentIndex = JSON.parse(contentIndexText);
-
+        const contentIndex = getContentIndex();
         const presets = [];
 
         for (const contentItem of contentIndex) {
@@ -94,8 +98,11 @@ function getDefaultPresetFile(filename) {
  * @param {ContentItem[]} contentIndex Content index
  * @param {import('../users').UserDirectoryList} directories User directories
  * @param {string[]} forceCategories List of categories to force check (even if content check is skipped)
+ * @returns {Promise<boolean>} Whether any content was added
  */
 async function seedContentForUser(contentIndex, directories, forceCategories) {
+    let anyContentAdded = false;
+
     if (!fs.existsSync(directories.root)) {
         fs.mkdirSync(directories.root, { recursive: true });
     }
@@ -109,8 +116,12 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
             continue;
         }
 
-        contentLog.push(contentItem.filename);
-        const contentPath = path.join(contentDirectory, contentItem.filename);
+        if (!contentItem.folder) {
+            console.log(`Content file ${contentItem.filename} has no parent folder`);
+            continue;
+        }
+
+        const contentPath = path.join(contentItem.folder, contentItem.filename);
 
         if (!fs.existsSync(contentPath)) {
             console.log(`Content file ${contentItem.filename} is missing`);
@@ -126,6 +137,7 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
 
         const basePath = path.parse(contentItem.filename).base;
         const targetPath = path.join(contentTarget, basePath);
+        contentLog.push(contentItem.filename);
 
         if (fs.existsSync(targetPath)) {
             console.log(`Content file ${contentItem.filename} already exists in ${contentTarget}`);
@@ -134,9 +146,11 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
 
         fs.cpSync(contentPath, targetPath, { recursive: true, force: false });
         console.log(`Content file ${contentItem.filename} copied to ${contentTarget}`);
+        anyContentAdded = true;
     }
 
     writeFileAtomicSync(contentLogPath, contentLog.join('\n'));
+    return anyContentAdded;
 }
 
 /**
@@ -147,19 +161,62 @@ async function seedContentForUser(contentIndex, directories, forceCategories) {
  */
 async function checkForNewContent(directoriesList, forceCategories = []) {
     try {
-        if (getConfigValue('skipContentCheck', false) && forceCategories?.length === 0) {
+        const contentCheckSkip = getConfigValue('skipContentCheck', false);
+        if (contentCheckSkip && forceCategories?.length === 0) {
             return;
         }
 
-        const contentIndexText = fs.readFileSync(contentIndexPath, 'utf8');
-        const contentIndex = JSON.parse(contentIndexText);
+        const contentIndex = getContentIndex();
+        let anyContentAdded = false;
 
         for (const directories of directoriesList) {
-            await seedContentForUser(contentIndex, directories, forceCategories);
+            const seedResult = await seedContentForUser(contentIndex, directories, forceCategories);
+
+            if (seedResult) {
+                anyContentAdded = true;
+            }
+        }
+
+        if (anyContentAdded && !contentCheckSkip && forceCategories?.length === 0) {
+            console.log();
+            console.log(`${color.blue('If you don\'t want to receive content updates in the future, set')} ${color.yellow('skipContentCheck')} ${color.blue('to true in the config.yaml file.')}`);
+            console.log();
         }
     } catch (err) {
         console.log('Content check failed', err);
     }
+}
+
+/**
+ * Gets combined content index from the content and scaffold directories.
+ * @returns {ContentItem[]} Array of content index
+ */
+function getContentIndex() {
+    const result = [];
+
+    if (fs.existsSync(scaffoldIndexPath)) {
+        const scaffoldIndexText = fs.readFileSync(scaffoldIndexPath, 'utf8');
+        const scaffoldIndex = JSON.parse(scaffoldIndexText);
+        if (Array.isArray(scaffoldIndex)) {
+            scaffoldIndex.forEach((item) => {
+                item.folder = scaffoldDirectory;
+            });
+            result.push(...scaffoldIndex);
+        }
+    }
+
+    if (fs.existsSync(contentIndexPath)) {
+        const contentIndexText = fs.readFileSync(contentIndexPath, 'utf8');
+        const contentIndex = JSON.parse(contentIndexText);
+        if (Array.isArray(contentIndex)) {
+            contentIndex.forEach((item) => {
+                item.folder = contentDirectory;
+            });
+            result.push(...contentIndex);
+        }
+    }
+
+    return result;
 }
 
 /**
@@ -338,7 +395,7 @@ function parseChubUrl(str) {
     let domainIndex = -1;
 
     splitStr.forEach((part, index) => {
-        if (part === 'www.chub.ai' || part === 'chub.ai') {
+        if (part === 'www.chub.ai' || part === 'chub.ai' || part === 'www.characterhub.org' || part === 'characterhub.org') {
             domainIndex = index;
         }
     });
@@ -433,6 +490,66 @@ function parseAICC(url) {
 }
 
 /**
+ * Download character card from generic url.
+ * @param {String} url
+ */
+async function downloadGenericPng(url) {
+    try {
+        const result = await fetch(url);
+
+        if (result.ok) {
+            const buffer = await result.buffer();
+            const fileName = sanitize(result.url.split('?')[0].split('/').reverse()[0]);
+            const contentType = result.headers.get('content-type') || 'image/png'; //yoink it from AICC function lol
+
+            return {
+                buffer: buffer,
+                fileName: fileName,
+                fileType: contentType,
+            };
+        }
+    } catch (error) {
+        console.error('Error downloading file: ', error);
+        throw error;
+    }
+    return null;
+}
+
+/**
+ * Parse Risu Realm URL to extract the UUID.
+ * @param {string} url Risu Realm URL
+ * @returns {string | null} UUID of the character
+ */
+function parseRisuUrl(url) {
+    // Example: https://realm.risuai.net/character/7adb0ed8d81855c820b3506980fb40f054ceef010ff0c4bab73730c0ebe92279
+    // or https://realm.risuai.net/character/7adb0ed8-d818-55c8-20b3-506980fb40f0
+    const pattern = /^https?:\/\/realm\.risuai\.net\/character\/([a-f0-9-]+)\/?$/i;
+    const match = url.match(pattern);
+    return match ? match[1] : null;
+}
+
+/**
+ * Download RisuAI character card
+ * @param {string} uuid UUID of the character
+ * @returns {Promise<{buffer: Buffer, fileName: string, fileType: string}>}
+ */
+async function downloadRisuCharacter(uuid) {
+    const result = await fetch(`https://realm.risuai.net/api/v1/download/png-v3/${uuid}?non_commercial=true`);
+
+    if (!result.ok) {
+        const text = await result.text();
+        console.log('RisuAI returned error', result.statusText, text);
+        throw new Error('Failed to download character');
+    }
+
+    const buffer = await result.buffer();
+    const fileName = `${sanitize(uuid)}.png`;
+    const fileType = 'image/png';
+
+    return { buffer, fileName, fileType };
+}
+
+/**
 * @param {String} url
 * @returns {String | null } UUID of the character
 */
@@ -446,6 +563,29 @@ function getUuidFromUrl(url) {
     return uuid;
 }
 
+/**
+ * Filter to get the domain host of a url instead of a blanket string search.
+ * @param {String} url URL to strip
+ * @returns {String} Domain name
+ */
+function getHostFromUrl(url) {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.hostname;
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * Checks if host is part of generic download source whitelist.
+ * @param {String} host Host to check
+ * @returns {boolean} If the host is on the whitelist.
+ */
+function isHostWhitelisted(host) {
+    return WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES.includes(host);
+}
+
 const router = express.Router();
 
 router.post('/importURL', jsonParser, async (request, response) => {
@@ -455,12 +595,16 @@ router.post('/importURL', jsonParser, async (request, response) => {
 
     try {
         const url = request.body.url;
+        const host = getHostFromUrl(url);
         let result;
         let type;
 
-        const isJannnyContent = url.includes('janitorai');
-        const isPygmalionContent = url.includes('pygmalion.chat');
-        const isAICharacterCardsContent = url.includes('aicharactercards.com');
+        const isChub = host.includes('chub.ai') || host.includes('characterhub.org');
+        const isJannnyContent = host.includes('janitorai');
+        const isPygmalionContent = host.includes('pygmalion.chat');
+        const isAICharacterCardsContent = host.includes('aicharactercards.com');
+        const isRisu = host.includes('realm.risuai.net');
+        const isGeneric = isHostWhitelisted(host);
 
         if (isPygmalionContent) {
             const uuid = getUuidFromUrl(url);
@@ -485,7 +629,7 @@ router.post('/importURL', jsonParser, async (request, response) => {
             }
             type = 'character';
             result = await downloadAICCCharacter(AICCParsed);
-        } else {
+        } else if (isChub) {
             const chubParsed = parseChubUrl(url);
             type = chubParsed?.type;
 
@@ -500,10 +644,28 @@ router.post('/importURL', jsonParser, async (request, response) => {
             else {
                 return response.sendStatus(404);
             }
+        } else if (isRisu) {
+            const uuid = parseRisuUrl(url);
+            if (!uuid) {
+                return response.sendStatus(404);
+            }
+
+            type = 'character';
+            result = await downloadRisuCharacter(uuid);
+        } else if (isGeneric) {
+            console.log('Downloading from generic url.');
+            type = 'character';
+            result = await downloadGenericPng(url);
+        } else {
+            return response.sendStatus(404);
+        }
+
+        if (!result) {
+            return response.sendStatus(404);
         }
 
         if (result.fileType) response.set('Content-Type', result.fileType);
-        response.set('Content-Disposition', `attachment; filename="${result.fileName}"`);
+        response.set('Content-Disposition', `attachment; filename="${encodeURI(result.fileName)}"`);
         response.set('X-Custom-Content-Type', type);
         return response.send(result.buffer);
     } catch (error) {

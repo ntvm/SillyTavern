@@ -40,7 +40,6 @@ import {
     online_status,
     talkativeness_default,
     selectRightMenuWithAnimation,
-    default_ch_mes,
     deleteLastMessage,
     showSwipeButtons,
     hideSwipeButtons,
@@ -205,6 +204,12 @@ export async function getGroupChat(groupId, reload = false) {
                 }
 
                 const mes = await getFirstCharacterMessage(character);
+
+                // No first message
+                if (!(mes?.mes)) {
+                    continue;
+                }
+
                 chat.push(mes);
                 await eventSource.emit(event_types.MESSAGE_RECEIVED, (chat.length - 1));
                 addOneMessage(mes);
@@ -582,7 +587,7 @@ async function getFirstCharacterMessage(character) {
     mes['extra'] = { 'gen_id': Date.now() * Math.random() * 1000000 };
     mes['mes'] = messageText
         ? substituteParams(messageText.trim(), name1, character.name)
-        : default_ch_mes;
+        : '';
     mes['force_avatar'] =
         character.avatar != 'none'
             ? getThumbnailUrl('avatar', character.avatar)
@@ -767,7 +772,7 @@ function isValidImageUrl(url) {
     if (Object.keys(url).length === 0) {
         return false;
     }
-    return isDataURL(url) || (url && url.startsWith('user'));
+    return isDataURL(url) || (url && (url.startsWith('user') || url.startsWith('/user')));
 }
 
 function getGroupAvatar(group) {
@@ -918,7 +923,6 @@ async function generateGroupWrapper(by_auto_mode, type = null, params = {}) {
             }
         }
         else if (type === 'impersonate') {
-            $('#send_textarea').attr('disabled', true);
             activatedMembers = activateImpersonate(group.members);
         }
         else if (activationStrategy === group_activation_strategy.NATURAL) {
@@ -935,7 +939,7 @@ async function generateGroupWrapper(by_auto_mode, type = null, params = {}) {
             const bias = getBiasStrings(userInput, type);
             await sendMessageAsUser(userInput, bias.messageBias);
             await saveChatConditional();
-            $('#send_textarea').val('').trigger('input');
+            $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles:true }));
         }
 
         // now the real generation begins: cycle through every activated character
@@ -970,7 +974,6 @@ async function generateGroupWrapper(by_auto_mode, type = null, params = {}) {
         typingIndicator.hide();
 
         is_group_generating = false;
-        $('#send_textarea').attr('disabled', false);
         setSendButtonState(false);
         setCharacterId(undefined);
         setCharacterName('');
@@ -1550,6 +1553,10 @@ function select_group_chats(groupId, skipAnimation) {
  * @returns {Promise<void>} - A promise that resolves when the processing and upload is complete.
  */
 async function uploadGroupAvatar(event) {
+    if (!(event.target instanceof HTMLInputElement) || !event.target.files.length) {
+        return;
+    }
+
     const file = event.target.files[0];
 
     if (!file) {
@@ -1624,15 +1631,17 @@ async function onGroupActionClick(event) {
         const index = _thisGroup.disabled_members.indexOf(member.data('id'));
         if (index !== -1) {
             _thisGroup.disabled_members.splice(index, 1);
+            await editGroup(openGroupId, false, false);
         }
-        await editGroup(openGroupId, false, false);
     }
 
     if (action === 'disable') {
         member.addClass('disabled');
         const _thisGroup = groups.find(x => x.id === openGroupId);
-        _thisGroup.disabled_members.push(member.data('id'));
-        await editGroup(openGroupId, false, false);
+        if (!_thisGroup.disabled_members.includes(member.data('id'))) {
+            _thisGroup.disabled_members.push(member.data('id'));
+            await editGroup(openGroupId, false, false);
+        }
     }
 
     if (action === 'up' || action === 'down') {

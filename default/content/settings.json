@@ -402,13 +402,7 @@
         }
     ],
     "tag_map": {
-        "default_FluxTheCat.png": [
-            "1345561466591"
-        ],
         "default_Seraphina.png": [
-            "1345561466591"
-        ],
-        "default_CodingSensei.png": [
             "1345561466591"
         ]
     },
@@ -648,5 +642,6 @@
         "use_ai21_tokenizer": false,
         "exclude_assistant": false,
         "bypass_status_check": true
+        "assistant_impersonation": "",
     }
 }

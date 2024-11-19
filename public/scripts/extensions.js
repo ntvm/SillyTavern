@@ -157,7 +157,9 @@ let extension_settings = {
         custom: [],
     },
     dice: {},
+    /** @type {import('./char-data.js').RegexScriptData[]} */
     regex: [],
+    character_allowed_regex: [],
     tts: {},
     sd: {
         prompts: {},

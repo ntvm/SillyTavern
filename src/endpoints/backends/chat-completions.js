@@ -8,7 +8,7 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
 const { forwardFetchResponse, getConfigValue, tryParse, uuidv4, mergeObjectWithYaml, excludeKeysByYaml, color } = require('../../util');
-const { convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMesIntoSys, postconvertClaudeIntoPrefill, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages } = require('../../prompt-converters');
+const { convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMesIntoSys, postconvertClaudeIntoPrefill, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages, convertMistralMessages, convertCohereTools } = require('../../prompt-converters');
 
 const { readSecret, SECRET_KEYS } = require('../secrets');
 const { getTokenizerModel, getSentencepiceTokenizer, getTiktokenTokenizer, sentencepieceTokenizers, TEXT_COMPLETION_MODELS } = require('../tokenizers');
@@ -18,6 +18,9 @@ const API_CLAUDE = 'https://api.anthropic.com/v1';
 const API_MISTRAL = 'https://api.mistral.ai/v1';
 const API_COHERE = 'https://api.cohere.ai/v1';
 const API_PERPLEXITY = 'https://api.perplexity.ai';
+const API_GROQ = 'https://api.groq.com/openai/v1';
+const API_MAKERSUITE = 'https://generativelanguage.googleapis.com';
+
 const proxingRequests = getConfigValue('proxingRequests', false);
 const proxyHost = getConfigValue('proxyHost', '');
 const proxyPort = getConfigValue('proxyPort', '');
@@ -125,6 +128,7 @@ async function sendClaudeRequest(request, response) {
     const divider = '-'.repeat(process.stdout.columns);
     const HumAssistOff = getConfigValue('HumAssistOff', false);
     const SystemFul = getConfigValue('SystemFul', true);
+    const additionalHeaders = {};
 
     if (!apiKey) {
         console.log(color.red(`Claude API key is missing.\n${divider}`));
@@ -151,6 +155,7 @@ async function sendClaudeRequest(request, response) {
 
         let converted_prompt;
         let IsExperemental = (requestRoute == 'messages' && request.body.claude_exclude_prefixes_asSysOrPlain == true);
+
         switch (IsExperemental){
             default:
                 converted_prompt = (request.body.claude_allow_plaintext == true && !request.body.model.startsWith('claude-3'))
@@ -271,6 +276,7 @@ async function sendClaudeRequest(request, response) {
                         'Content-Type': 'application/json',
                         'anthropic-version': '2023-06-01',
                         'x-api-key': apiKey,
+                        ...additionalHeaders,
                     },
                     timeout: 0,
                 };
@@ -284,6 +290,19 @@ async function sendClaudeRequest(request, response) {
                 generateResponse = await fetch(apiUrl + '/complete', requestjson);
                 break;
             case "messages":
+                if (Array.isArray(request.body.tools) && request.body.tools.length > 0) {
+                    // Claude doesn't do prefills on function calls, and doesn't allow empty messages
+                    if (converted_prompt.messages.length && converted_prompt.messages[converted_prompt.messages.length - 1].role === 'assistant') {
+                        converted_prompt.messages.push({ role: 'user', content: '.' });
+                    }
+                    additionalHeaders['anthropic-beta'] = 'tools-2024-05-16';
+                    requestBody.tool_choice = { type: request.body.tool_choice === 'required' ? 'any' : 'auto' };
+                    requestBody.tools = request.body.tools
+                        .filter(tool => tool.type === 'function')
+                        .map(tool => tool.function)
+                        .map(fn => ({ name: fn.name, description: fn.description, input_schema: fn.parameters }));
+                }
+
                 requestBody = {
                     messages: converted_prompt.messages,
                     model: request.body.model,
@@ -308,6 +327,7 @@ async function sendClaudeRequest(request, response) {
                         'Content-Type': 'application/json',
                         'anthropic-version': '2023-06-01',
                         'x-api-key': apiKey,
+                        ...additionalHeaders,
                     },
                     timeout: 0,
                 };
@@ -355,8 +375,8 @@ async function sendClaudeRequest(request, response) {
             const responseText = (request.body.claude_allow_plaintext == true && request.body.model.startsWith('claude-1') || request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-instant')) ? generateResponseJson.completion : generateResponseJson.content[0].text;
             console.log('Claude response:', generateResponseJson);
 
-            // Wrap it back to OAI format
-            const reply = { choices: [{ 'message': { 'content': responseText } }] };
+            // Wrap it back to OAI format + save the original content
+            const reply = { choices: [{ 'message': { 'content': responseText } }], content: generateResponseJson.content };
             return response.send(reply);
         }
     } catch (error) {
@@ -433,9 +453,10 @@ async function sendScaleRequest(request, response) {
  * @param {express.Response} response Express response
  */
 async function sendMakerSuiteRequest(request, response) {
-    const apiKey = readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE);
+    const apiUrl = new URL(request.body.reverse_proxy || API_MAKERSUITE);
+    const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE);
 
-    if (!apiKey) {
+    if (!request.body.reverse_proxy && !apiKey) {
         console.log('MakerSuite API key is missing.');
         return response.status(400).send({ error: true });
     }
@@ -455,7 +476,7 @@ async function sendMakerSuiteRequest(request, response) {
     };
 
     function getGeminiBody() {
-        const should_use_system_prompt = model === 'gemini-1.5-pro-latest' && request.body.use_makersuite_sysprompt;
+        const should_use_system_prompt = ['gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'].includes(model) && request.body.use_makersuite_sysprompt;
         const prompt = convertGooglePrompt(request.body.messages, model, should_use_system_prompt, request.body.char_name, request.body.user_name);
         let body = {
             contents: prompt.contents,
@@ -533,7 +554,7 @@ async function sendMakerSuiteRequest(request, response) {
             requestjson.agent = proxyAgent;
         }
 
-        const generateResponse = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`, requestjson);
+        const generateResponse = await fetch(`${apiUrl.origin}/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`, requestjson);
         // have to do this because of their busted ass streaming endpoint
         if (stream) {
             try {
@@ -681,35 +702,7 @@ async function sendMistralAIRequest(request, response) {
     }
 
     try {
-        //must send a user role as last message
-        const messages = Array.isArray(request.body.messages) ? request.body.messages : [];
-        //large seems to be throwing a 500 error if we don't make the first message a user role, most likely a bug since the other models won't do this
-        if (request.body.model.includes('large'))
-            messages[0].role = 'user';
-        const lastMsg = messages[messages.length - 1];
-        if (messages.length > 0 && lastMsg && (lastMsg.role === 'system' || lastMsg.role === 'assistant')) {
-            if (lastMsg.role === 'assistant' && lastMsg.name) {
-                lastMsg.content = lastMsg.name + ': ' + lastMsg.content;
-            } else if (lastMsg.role === 'system') {
-                lastMsg.content = '[INST] ' + lastMsg.content + ' [/INST]';
-            }
-            lastMsg.role = 'user';
-        }
-
-        //system prompts can be stacked at the start, but any futher sys prompts after the first user/assistant message will break the model
-        let encounteredNonSystemMessage = false;
-        messages.forEach(msg => {
-            if ((msg.role === 'user' || msg.role === 'assistant') && !encounteredNonSystemMessage) {
-                encounteredNonSystemMessage = true;
-            }
-
-            if (encounteredNonSystemMessage && msg.role === 'system') {
-                msg.role = 'user';
-                //unsure if the instruct version is what they've deployed on their endpoints and if this will make a difference or not.
-                //it should be better than just sending the message as a user role without context though
-                msg.content = '[INST] ' + msg.content + ' [/INST]';
-            }
-        });
+        const messages = convertMistralMessages(request.body.messages, request.body.model, request.body.char_name, request.body.user_name);
         const controller = new AbortController();
         request.socket.removeAllListeners('close');
         request.socket.on('close', function () {
@@ -726,6 +719,11 @@ async function sendMistralAIRequest(request, response) {
             'safe_prompt': request.body.safe_prompt,
             'random_seed': request.body.seed === -1 ? undefined : request.body.seed,
         };
+
+        if (Array.isArray(request.body.tools) && request.body.tools.length > 0) {
+            requestBody['tools'] = request.body.tools;
+            requestBody['tool_choice'] = request.body.tool_choice === 'required' ? 'any' : 'auto';
+        }
 
         const config = {
             method: 'POST',
@@ -791,11 +789,18 @@ async function sendCohereRequest(request, response) {
     try {
         const convertedHistory = convertCohereMessages(request.body.messages, request.body.char_name, request.body.user_name);
         const connectors = [];
+        const tools = [];
 
         if (request.body.websearch) {
             connectors.push({
                 id: 'web-search',
             });
+        }
+
+        if (Array.isArray(request.body.tools) && request.body.tools.length > 0) {
+            tools.push(...convertCohereTools(request.body.tools));
+            // Can't have both connectors and tools in the same request
+            connectors.splice(0, connectors.length);
         }
 
         // https://docs.cohere.com/reference/chat
@@ -816,8 +821,7 @@ async function sendCohereRequest(request, response) {
             prompt_truncation: 'AUTO_PRESERVE_ORDER',
             connectors: connectors,
             documents: [],
-            tools: [],
-            tool_results: [],
+            tools: tools,
             search_queries_only: false,
         };
 
@@ -995,7 +999,11 @@ router.post('/bias', jsonParser, async function (request, response) {
         if (sentencepieceTokenizers.includes(model)) {
             const tokenizer = getSentencepiceTokenizer(model);
             const instance = await tokenizer?.get();
-            encodeFunction = (text) => new Uint32Array(instance?.encodeIds(text));
+            if (!instance) {
+                console.warn('Tokenizer not initialized:', model);
+                return response.send({});
+            }
+            encodeFunction = (text) => new Uint32Array(instance.encodeIds(text));
         } else {
             const tokenizer = getTiktokenTokenizer(model);
             encodeFunction = (tokenizer.encode.bind(tokenizer));
@@ -1105,6 +1113,13 @@ router.post('/generate', jsonParser, function (request, response) {
             bodyParams['repetition_penalty'] = request.body.repetition_penalty;
         }
 
+        if (Array.isArray(request.body.provider) && request.body.provider.length > 0) {
+            bodyParams['provider'] = {
+                allow_fallbacks: true,
+                order: request.body.provider ?? [],
+            };
+        }
+
         if (request.body.use_fallback) {
             bodyParams['route'] = 'fallback';
         }
@@ -1140,6 +1155,23 @@ router.post('/generate', jsonParser, function (request, response) {
         headers = {};
         bodyParams = {};
         request.body.messages = postProcessPrompt(request.body.messages, 'claude', request.body.char_name, request.body.user_name);
+    } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.GROQ) {
+        apiUrl = API_GROQ;
+        apiKey = readSecret(request.user.directories, SECRET_KEYS.GROQ);
+        headers = {};
+        bodyParams = {};
+
+        // 'required' tool choice is not supported by Groq
+        if (request.body.tool_choice === 'required') {
+            if (Array.isArray(request.body.tools) && request.body.tools.length > 0) {
+                request.body.tool_choice = request.body.tools.length > 1
+                    ? 'auto' :
+                    { type: 'function', function: { name: request.body.tools[0]?.function?.name } };
+
+            } else {
+                request.body.tool_choice = 'none';
+            }
+        }
     } else {
         console.log('This chat completion source is not supported yet.');
         return response.status(400).send({ error: true });
@@ -1165,6 +1197,11 @@ router.post('/generate', jsonParser, function (request, response) {
     request.socket.on('close', function () {
         controller.abort();
     });
+
+    if (!isTextCompletion) {
+        bodyParams['tools'] = request.body.tools;
+        bodyParams['tool_choice'] = request.body.tool_choice;
+    }
 
     const requestBody = {
         'messages': isTextCompletion === false ? request.body.messages : undefined,

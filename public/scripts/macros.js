@@ -211,7 +211,8 @@ function randomReplace(input, emptyListPlaceholder = '') {
         // Split on either double colons or comma. If comma is the separator, we are also trimming all items.
         const list = listString.includes('::')
             ? listString.split('::')
-            : listString.split(',').map(item => item.trim());
+            // Replaced escaped commas with a placeholder to avoid splitting on them
+            : listString.replace(/\\,/g, '##�COMMA�##').split(',').map(item => item.trim().replace(/##�COMMA�##/g, ','));
 
         if (list.length === 0) {
             return emptyListPlaceholder;
@@ -235,7 +236,8 @@ function pickReplace(input, rawContent, emptyListPlaceholder = '') {
         // Split on either double colons or comma. If comma is the separator, we are also trimming all items.
         const list = listString.includes('::')
             ? listString.split('::')
-            : listString.split(',').map(item => item.trim());
+            // Replaced escaped commas with a placeholder to avoid splitting on them
+            : listString.replace(/\\,/g, '##�COMMA�##').split(',').map(item => item.trim().replace(/##�COMMA�##/g, ','));
 
         if (list.length === 0) {
             return emptyListPlaceholder;
@@ -274,6 +276,26 @@ function diceRollReplace(input, invalidRollPlaceholder = '') {
 }
 
 /**
+ * Returns the difference between two times. Works with any time format acceptable by moment().
+ * Can work with {{date}} {{time}} macros
+ * @param {string} input - The string to replace time difference macros in.
+ * @returns {string} The string with replaced time difference macros.
+ */
+function timeDiffReplace(input) {
+    const timeDiffPattern = /{{timeDiff::(.*?)::(.*?)}}/gi;
+
+    const output = input.replace(timeDiffPattern, (_match, matchPart1, matchPart2) => {
+        const time1 = moment(matchPart1);
+        const time2 = moment(matchPart2);
+
+        const timeDifference = moment.duration(time1.diff(time2));
+        return timeDifference.humanize();
+    });
+
+    return output;
+}
+
+/**
  * Substitutes {{macro}} parameters in a string.
  * @param {string} content - The string to substitute parameters in.
  * @param {Object<string, *>} env - Map of macro names to the values they'll be substituted with. If the param
@@ -290,6 +312,7 @@ export function evaluateMacros(content, env) {
     // Legacy non-macro substitutions
     content = content.replace(/<USER>/gi, typeof env.user === 'function' ? env.user() : env.user);
     content = content.replace(/<BOT>/gi, typeof env.char === 'function' ? env.char() : env.char);
+    content = content.replace(/<CHAR>/gi, typeof env.char === 'function' ? env.char() : env.char);
     content = content.replace(/<CHARIFNOTGROUP>/gi, typeof env.group === 'function' ? env.group() : env.group);
     content = content.replace(/<GROUP>/gi, typeof env.group === 'function' ? env.group() : env.group);
 
@@ -343,6 +366,7 @@ export function evaluateMacros(content, env) {
         const utcTime = moment().utc().utcOffset(utcOffset).format('LT');
         return utcTime;
     });
+    content = timeDiffReplace(content);
     content = bannedWordsReplace(content);
     content = randomReplace(content);
     content = pickReplace(content, rawContent);
