@@ -271,7 +271,6 @@ async function deleteProxyPreset() {
 jQuery(function () {
     function addExtensionControls() {
         const settingsHtml = `
-        <div id="ProxyManager_settings">
             <div class="inline-drawer">
                 <div class="inline-drawer-toggle inline-drawer-header">
                     <b>Proxy Manager</b>
@@ -316,9 +315,8 @@ jQuery(function () {
                     </div>
                 </div>
             </div>
-        </div>
         `;
-        $('#extensions_settings2').append(settingsHtml);
+        $('#ProxyManager_settings').append(settingsHtml);
         $('#ProxySaveButton').on('click', saveProxy);
         $('#ProxyPrior').on('input', onProxyPrior);
         $('#SaveInSecretButton').on('click', onSecretWrite);

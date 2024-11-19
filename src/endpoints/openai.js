@@ -6,6 +6,7 @@ const fs = require('fs');
 const { jsonParser, urlencodedParser } = require('../express-common');
 const { getConfigValue, mergeObjectWithYaml, excludeKeysByYaml, trimV1 } = require('../util');
 const { setAdditionalHeaders } = require('../additional-headers');
+const { OPENROUTER_HEADERS } = require('../constants');
 
 var Uscase;
 var apiURL;
@@ -75,7 +76,11 @@ router.post('/caption-image', jsonParser, async (request, response) => {
             key = readSecret(request.user.directories, SECRET_KEYS.KOBOLDCPP);
         }
 
-        if (!key && !request.body.reverse_proxy && ['custom', 'ooba', 'koboldcpp'].includes(request.body.api) === false) {
+        if (request.body.api === 'vllm') {
+            key = readSecret(request.user.directories, SECRET_KEYS.VLLM);
+        }
+
+        if (!key && !request.body.reverse_proxy && ['custom', 'ooba', 'koboldcpp', 'vllm'].includes(request.body.api) === false) {
             console.log('No key found for API', request.body.api);
             return response.sendStatus(400);
         }
@@ -114,7 +119,7 @@ router.post('/caption-image', jsonParser, async (request, response) => {
 
         if (request.body.api === 'openrouter' && (proxy !== true)) {
             apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
-            headers['HTTP-Referer'] = request.headers.referer;
+            Object.assign(headers, OPENROUTER_HEADERS);
         }
 
         if (request.body.api === 'openai' && (proxy !== true)) {
@@ -149,7 +154,7 @@ router.post('/caption-image', jsonParser, async (request, response) => {
             });
         }
 
-        if (request.body.api === 'koboldcpp') {
+        if (request.body.api === 'koboldcpp' || request.body.api === 'vllm') {
             apiUrl = `${trimV1(request.body.server_url)}/v1/chat/completions`;
         }
 

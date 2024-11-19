@@ -801,7 +801,6 @@ adddeswiperButton();
 jQuery(function () {
     function addExtensionControls() {
         const settingsHtml = `
-        <div id="Nvkun_settings">
             <div class="inline-drawer">
                 <div class="inline-drawer-toggle inline-drawer-header">
                     <b>Nv-Kun Settings</b>
@@ -842,9 +841,8 @@ jQuery(function () {
                     </div>
                 </div>
             </div>
-        </div>
         `;
-        $('#extensions_settings2').append(settingsHtml);
+        $('#Nvkun_settings').append(settingsHtml);
         $('#Inputer_frozen').on('input', onInputerFrozenInput);
         $('#exclude_Prefill').on('input', onExclude_Prefill);
         $('#AlwaysCharnames').on('change', onAlwaysCharnamesChange);
