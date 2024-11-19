@@ -1,3 +1,4 @@
+import { shouldSendOnEnter } from './RossAscends-mods.js';
 import { power_user } from './power-user.js';
 import { removeFromArray, runAfterAnimation, uuidv4 } from './utils.js';
 
@@ -35,6 +36,7 @@ export const POPUP_RESULT = {
  * @property {boolean?} [transparent=false] - Whether to display the popup in transparent mode (no background, border, shadow or anything, only its content)
  * @property {boolean?} [allowHorizontalScrolling=false] - Whether to allow horizontal scrolling in the popup
  * @property {boolean?} [allowVerticalScrolling=false] - Whether to allow vertical scrolling in the popup
+ * @property {'slow'|'fast'|'none'?} [animation='slow'] - Animation speed for the popup (opening, closing, ...)
  * @property {POPUP_RESULT|number?} [defaultResult=POPUP_RESULT.AFFIRMATIVE] - The default result of this popup when Enter is pressed. Can be changed from `POPUP_RESULT.AFFIRMATIVE`.
  * @property {CustomPopupButton[]|string[]?} [customButtons=null] - Custom buttons to add to the popup. If only strings are provided, the buttons will be added with default options, and their result will be in order from `2` onward.
  * @property {CustomPopupInput[]?} [customInputs=null] - Custom inputs to add to the popup. The display below the content and the input box, one by one.
@@ -71,8 +73,8 @@ const showPopupHelper = {
     /**
      * Asynchronously displays an input popup with the given header and text, and returns the user's input.
      *
-     * @param {string} header - The header text for the popup.
-     * @param {string} text - The main text for the popup.
+     * @param {string?} header - The header text for the popup.
+     * @param {string?} text - The main text for the popup.
      * @param {string} [defaultValue=''] - The default value for the input field.
      * @param {PopupOptions} [popupOptions={}] - Options for the popup.
      * @return {Promise<string?>} A Promise that resolves with the user's input.
@@ -98,7 +100,7 @@ const showPopupHelper = {
         const result = await popup.show();
         if (typeof result === 'string' || typeof result === 'boolean') throw new Error(`Invalid popup result. CONFIRM popups only support numbers, or null. Result: ${result}`);
         return result;
-    }
+    },
 };
 
 export class Popup {
@@ -133,6 +135,7 @@ export class Popup {
 
     /** @type {Promise<any>} */ #promise;
     /** @type {(result: any) => any} */ #resolver;
+    /** @type {boolean} */ #isClosingPrevented;
 
     /**
      * Constructs a new Popup object with the given text content, type, inputValue, and options
@@ -142,7 +145,7 @@ export class Popup {
      * @param {string} [inputValue=''] - The initial value of the input field
      * @param {PopupOptions} [options={}] - Additional options for the popup
      */
-    constructor(content, type, inputValue = '', { okButton = null, cancelButton = null, rows = 1, wide = false, wider = false, large = false, transparent = false, allowHorizontalScrolling = false, allowVerticalScrolling = false, defaultResult = POPUP_RESULT.AFFIRMATIVE, customButtons = null, customInputs = null, onClosing = null, onClose = null, cropAspect = null, cropImage = null } = {}) {
+    constructor(content, type, inputValue = '', { okButton = null, cancelButton = null, rows = 1, wide = false, wider = false, large = false, transparent = false, allowHorizontalScrolling = false, allowVerticalScrolling = false, animation = 'fast', defaultResult = POPUP_RESULT.AFFIRMATIVE, customButtons = null, customInputs = null, onClosing = null, onClose = null, cropAspect = null, cropImage = null } = {}) {
         Popup.util.popups.push(this);
 
         // Make this popup uniquely identifiable
@@ -175,6 +178,7 @@ export class Popup {
         if (transparent) this.dlg.classList.add('transparent_dialogue_popup');
         if (allowHorizontalScrolling) this.dlg.classList.add('horizontal_scrolling_dialogue_popup');
         if (allowVerticalScrolling) this.dlg.classList.add('vertical_scrolling_dialogue_popup');
+        if (animation) this.dlg.classList.add('popup--animation-' + animation);
 
         // If custom button captions are provided, we set them beforehand
         this.okButton.textContent = typeof okButton === 'string' ? okButton : 'OK';
@@ -191,7 +195,7 @@ export class Popup {
             const buttonElement = document.createElement('div');
             buttonElement.classList.add('menu_button', 'popup-button-custom', 'result-control');
             buttonElement.classList.add(...(button.classes ?? []));
-            buttonElement.dataset.result = String(button.result ?? undefined);
+            buttonElement.dataset.result = String(button.result); // This is expected to also write 'null' or 'staging', to indicate cancel and no action respectively
             buttonElement.textContent = button.text;
             buttonElement.dataset.i18n = buttonElement.textContent;
             buttonElement.tabIndex = 0;
@@ -210,7 +214,7 @@ export class Popup {
         this.customInputs = customInputs;
         this.customInputs?.forEach(input => {
             if (!input.id || !(typeof input.id === 'string')) {
-                console.warn('Given custom input does not have a valid id set')
+                console.warn('Given custom input does not have a valid id set');
                 return;
             }
 
@@ -314,24 +318,40 @@ export class Popup {
         // Bind event listeners for all result controls to their defined event type
         this.dlg.querySelectorAll('[data-result]').forEach(resultControl => {
             if (!(resultControl instanceof HTMLElement)) return;
-            const result = Number(resultControl.dataset.result);
-            if (String(undefined) === String(resultControl.dataset.result)) return;
-            if (isNaN(result)) throw new Error('Invalid result control. Result must be a number. ' + resultControl.dataset.result);
+            // If no value was set, we exit out and don't bind an action
+            if (String(resultControl.dataset.result) === String(undefined)) return;
+
+            // Make sure that both `POPUP_RESULT` numbers and also `null` as 'cancelled' are supported
+            const result = String(resultControl.dataset.result) === String(null) ? null
+                : Number(resultControl.dataset.result);
+
+            if (result !== null && isNaN(result)) throw new Error('Invalid result control. Result must be a number. ' + resultControl.dataset.result);
             const type = resultControl.dataset.resultEvent || 'click';
-            resultControl.addEventListener(type, () => this.complete(result));
+            resultControl.addEventListener(type, async () => await this.complete(result));
         });
 
         // Bind dialog listeners manually, so we can be sure context is preserved
-        const cancelListener = (evt) => {
-            this.complete(POPUP_RESULT.CANCELLED);
+        const cancelListener = async (evt) => {
             evt.preventDefault();
             evt.stopPropagation();
-            window.removeEventListener('cancel', cancelListenerBound);
+            await this.complete(POPUP_RESULT.CANCELLED);
         };
-        const cancelListenerBound = cancelListener.bind(this);
-        this.dlg.addEventListener('cancel', cancelListenerBound);
+        this.dlg.addEventListener('cancel', cancelListener.bind(this));
 
-        const keyListener = (evt) => {
+        // Don't ask me why this is needed. I don't get it. But we have to keep it.
+        // We make sure that the modal on its own doesn't hide. Dunno why, if onClosing is triggered multiple times through the cancel event, and stopped,
+        // it seems to just call 'close' on the dialog even if the 'cancel' event was prevented.
+        // So here we just say that close should not happen if it was prevented.
+        const closeListener = async (evt) => {
+            if (this.#isClosingPrevented) {
+                evt.preventDefault();
+                evt.stopPropagation();
+                this.dlg.showModal();
+            }
+        };
+        this.dlg.addEventListener('close', closeListener.bind(this));
+
+        const keyListener = async (evt) => {
             switch (evt.key) {
                 case 'Enter': {
                     // CTRL+Enter counts as a closing action, but all other modifiers (ALT, SHIFT) should not trigger this
@@ -342,24 +362,32 @@ export class Popup {
                     if (this.dlg != document.activeElement?.closest('.popup'))
                         return;
 
-                    // Check if the current focus is a result control. Only should we apply the compelete action
+                    // Check if the current focus is a result control. Only should we apply the complete action
                     const resultControl = document.activeElement?.closest('.result-control');
                     if (!resultControl)
                         return;
 
-                    const result = Number(document.activeElement.getAttribute('data-result') ?? this.defaultResult);
-                    this.complete(result);
+                    // Check if we are inside an input type text or a textarea field and send on enter is disabled
+                    const textarea = document.activeElement?.closest('textarea');
+                    if (textarea instanceof HTMLTextAreaElement && !shouldSendOnEnter())
+                        return;
+                    const input = document.activeElement?.closest('input[type="text"]');
+                    if (input instanceof HTMLInputElement && !shouldSendOnEnter())
+                        return;
+
                     evt.preventDefault();
                     evt.stopPropagation();
-                    window.removeEventListener('keydown', keyListenerBound);
+                    const result = Number(document.activeElement.getAttribute('data-result') ?? this.defaultResult);
+
+                    // Call complete on the popup. Make sure that we handle `onClosing` cancels correctly and don't remove the listener then.
+                    await this.complete(result);
 
                     break;
                 }
             }
 
         };
-        const keyListenerBound = keyListener.bind(this);
-        this.dlg.addEventListener('keydown', keyListenerBound);
+        this.dlg.addEventListener('keydown', keyListener.bind(this));
     }
 
     /**
@@ -429,9 +457,13 @@ export class Popup {
      * - popup with `POPUP_TYPE.INPUT` will return the input value - or `false` on negative and `null` on cancelled
      * - All other will return the result value as provided as `POPUP_RESULT` or a custom number value
      *
+     * <b>IMPORTANT:</b> If the popup closing was cancelled via the `onClosing` handler, the return value will be `Promise<undefined>`.
+     *
      * @param {POPUP_RESULT|number} result - The result of the popup (either an existing `POPUP_RESULT` or a custom result value)
+     *
+     * @returns {Promise<string|number|boolean|undefined?>} A promise that resolves with the value of the popup when it is completed. <b>Returns `undefined` if the closing action was cancelled.</b>
      */
-    complete(result) {
+    async complete(result) {
         // In all cases besides INPUT the popup value should be the result
         /** @type {POPUP_RESULT|number|boolean|string?} */
         let value = result;
@@ -463,11 +495,21 @@ export class Popup {
 
         if (this.onClosing) {
             const shouldClose = this.onClosing(this);
-            if (!shouldClose) return;
+            if (!shouldClose) {
+                this.#isClosingPrevented = true;
+                // Set values back if we cancel out of closing the popup
+                this.value = undefined;
+                this.result = undefined;
+                this.inputResults = undefined;
+                return undefined;
+            }
         }
+        this.#isClosingPrevented = false;
 
         Popup.util.lastResult = { value, result, inputResults: this.inputResults };
         this.#hide();
+
+        return this.#promise;
     }
 
     /**
@@ -549,15 +591,15 @@ class PopupUtils {
     /**
      * Builds popup content with header and text below
      *
-     * @param {string} header - The header to be added to the text
-     * @param {string} text - The main text content
+     * @param {string?} header - The header to be added to the text
+     * @param {string?} text - The main text content
      */
     static BuildTextWithHeader(header, text) {
         if (!header) {
             return text;
         }
         return `<h3>${header}</h3>
-            ${text}`;
+            ${text ?? ''}`; // Convert no text to empty string
     }
 }
 
@@ -618,8 +660,13 @@ export function fixToastrForDialogs() {
     // Now another case is if we only have one popup and that is currently closing. In that case the toastr container exists,
     // but we don't have an open dialog to move it into. It's just inside the existing one that will be gone in milliseconds.
     // To prevent new toasts from being showing up in there and then vanish in an instant,
-    // we move the toastr back to the main body
+    // we move the toastr back to the main body, or delete if its empty
     if (!dlg && isAlreadyPresent) {
-        document.body.appendChild(toastContainer);
+        if (!toastContainer.childNodes.length) {
+            toastContainer.remove();
+        } else {
+            document.body.appendChild(toastContainer);
+            toastContainer.classList.add('toast-top-center');
+        }
     }
 }

@@ -33,6 +33,7 @@ export const SECRET_KEYS = {
     FEATHERLESS: 'api_key_featherless',
     ZEROONEAI: 'api_key_01ai',
     HUGGINGFACE: 'api_key_huggingface',
+    STABILITY: 'api_key_stability',
 };
 
 const INPUT_MAP = {

@@ -260,7 +260,7 @@ function getCurrentSwipeId() {
     // For swipe macro, we are accepting using the message that is currently being swiped
     const mid = getLastMessageId({ exclude_swipe_in_propress: false });
     const swipeId = chat[mid]?.swipe_id;
-    return swipeId ? swipeId + 1 : null;
+    return swipeId !== null ? swipeId + 1 : null;
 }
 
 
@@ -415,7 +415,7 @@ function timeDiffReplace(input) {
         const time2 = moment(matchPart2);
 
         const timeDifference = moment.duration(time1.diff(time2));
-        return timeDifference.humanize();
+        return timeDifference.humanize(true);
     });
 
     return output;
@@ -451,7 +451,7 @@ export function evaluateMacros(content, env) {
     content = replaceInstructMacros(content, env);
     content = replaceVariableMacros(content);
     content = content.replace(/{{newline}}/gi, '\n');
-    content = content.replace(/\n*{{trim}}\n*/gi, '');
+    content = content.replace(/(?:\r?\n)*{{trim}}(?:\r?\n)*/gi, '');
     content = content.replace(/{{noop}}/gi, '');
     content = content.replace(/{{input}}/gi, () => String($('#send_textarea').val()));
 
@@ -480,6 +480,7 @@ export function evaluateMacros(content, env) {
     content = content.replace(/{{currentSwipeId}}/gi, () => String(getCurrentSwipeId() ?? ''));
     content = content.replace(/{{lastMesID}}/gi, () => (chat?.length - 1));
     content = content.replace(/{{pastswipe}}/gi, () => String(getLastSwipeText() ?? 'lolkek'));
+    content = content.replace(/{{reverse\:(.+?)}}/gi, (_, str) => Array.from(str).reverse().join(''));
 
     content = content.replace(/\{\{\/\/([\s\S]*?)\}\}/gm, '');
 

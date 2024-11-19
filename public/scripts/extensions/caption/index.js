@@ -333,8 +333,9 @@ async function getCaptionForFile(file, prompt, quiet) {
         return caption;
     }
     catch (error) {
-        toastr.error('Failed to caption image.');
-        console.log(error);
+        const errorMessage = error.message || 'Unknown error';
+        toastr.error(errorMessage, "Failed to caption image.");
+        console.error(error);
         return '';
     }
     finally {
@@ -520,12 +521,17 @@ jQuery(async function () {
         const messageImg = messageBlock.find('.mes_img');
         if (messageImg.hasClass(animationClass)) return;
         messageImg.addClass(animationClass);
-        const index = Number(messageBlock.attr('mesid'));
-        const data = getContext().chat[index];
-        await captionExistingMessage(data);
-        appendMediaToMessage(data, messageBlock, false);
-        await saveChatConditional();
-        messageImg.removeClass(animationClass);
+        try {
+            const index = Number(messageBlock.attr('mesid'));
+            const data = getContext().chat[index];
+            await captionExistingMessage(data);
+            appendMediaToMessage(data, messageBlock, false);
+            await saveChatConditional();
+        } catch(e) {
+            console.error('Message image recaption failed', e);
+        } finally {
+            messageImg.removeClass(animationClass);
+        }
     });
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({ name: 'caption',
