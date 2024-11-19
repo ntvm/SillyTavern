@@ -197,6 +197,7 @@ const CHAT_COMPLETION_SOURCES = {
     PERPLEXITY: 'perplexity',
     GROQ: 'groq',
     ZEROONEAI: '01ai',
+    BLOCKENTROPY: 'blockentropy',
 };
 
 /**
@@ -314,6 +315,9 @@ const TOGETHERAI_KEYS = [
     'top_p',
     'top_k',
     'repetition_penalty',
+    'min_p',
+    'presence_penalty',
+    'frequency_penalty',
     'stream',
     'stop',
 ];
@@ -336,12 +340,18 @@ const OLLAMA_KEYS = [
     'mirostat',
     'mirostat_tau',
     'mirostat_eta',
+    'min_p',
 ];
 
 const AVATAR_WIDTH = 512;
 const AVATAR_HEIGHT = 768;
 
 const OPENROUTER_HEADERS = {
+    'HTTP-Referer': 'https://sillytavern.app',
+    'X-Title': 'SillyTavern',
+};
+
+const FEATHERLESS_HEADERS = {
     'HTTP-Referer': 'https://sillytavern.app',
     'X-Title': 'SillyTavern',
 };
@@ -430,4 +440,5 @@ module.exports = {
     OPENROUTER_KEYS,
     VLLM_KEYS,
     FEATHERLESS_KEYS,
+    FEATHERLESS_HEADERS,
 };
