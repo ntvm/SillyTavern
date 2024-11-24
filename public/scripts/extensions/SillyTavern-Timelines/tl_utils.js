@@ -1,9 +1,9 @@
-import { openCharacterChat, addOneMessage, event_types, eventSource } from '../../../../script.js';
-import { power_user } from '../../../power-user.js';
-import { createBranch } from '../../../bookmarks.js';
-import { getTokenCount } from '../../../tokenizers.js';
-import { getContext } from '../../../extensions.js';
-import { debounce } from '../../../utils.js';
+import { openCharacterChat, addOneMessage, event_types, eventSource } from '../../../script.js';
+import { power_user } from '../../power-user.js';
+import { createBranch } from '../../bookmarks.js';
+import { getTokenCount } from '../../tokenizers.js';
+import { getContext } from '../../extensions.js';
+import { debounce } from '../../utils.js';
 
 const saveChatDebounced = debounce(() => getContext().saveChat(), 2000);
 

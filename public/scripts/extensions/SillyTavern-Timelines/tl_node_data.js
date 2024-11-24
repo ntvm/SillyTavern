@@ -1,5 +1,5 @@
-import { characters, getRequestHeaders } from '../../../../script.js';
-import { extension_settings, getContext } from '../../../extensions.js';
+import { characters, getRequestHeaders } from '../../../script.js';
+import { extension_settings, getContext } from '../../extensions.js';
 
 
 /**
