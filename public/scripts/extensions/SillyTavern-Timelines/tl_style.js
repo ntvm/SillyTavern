@@ -1,6 +1,6 @@
-import { extension_settings, getContext, loadExtensionSettings } from '../../../extensions.js';
-import { characters, getRequestHeaders, openCharacterChat, saveSettingsDebounced, getThumbnailUrl } from '../../../../script.js';
-import { power_user } from '../../../power-user.js';
+import { extension_settings, getContext, loadExtensionSettings } from '../../extensions.js';
+import { characters, getRequestHeaders, openCharacterChat, saveSettingsDebounced, getThumbnailUrl } from '../../../script.js';
+import { power_user } from '../../power-user.js';
 
 /**
  * Extracts the alpha (opacity) value from a given RGBA color string.
