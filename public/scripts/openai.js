@@ -1867,7 +1867,7 @@ async function sendOpenAIRequest(type, messages, signal) {
     // Proxy is only supported for Claude, Gemini? and OpenAI
     switch (extension_settings.ProxyManager.ProxyPrior) {
         default:
-            if (oai_settings.reverse_proxy && [chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI].includes(oai_settings.chat_completion_source)) {
+            if (oai_settings.reverse_proxy && [chat_completion_sources.CLAUDE, chat_completion_sources.OPENAI, chat_completion_sources.MISTRALAI, chat_completion_sources.MAKERSUITE].includes(oai_settings.chat_completion_source)) {
                 validateReverseProxy();
                 generate_data['reverse_proxy'] = oai_settings.reverse_proxy;
                 generate_data['proxy_password'] = oai_settings.proxy_password;

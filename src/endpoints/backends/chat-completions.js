@@ -17,6 +17,7 @@ const API_OPENAI = 'https://api.openai.com/v1';
 const API_CLAUDE = 'https://api.anthropic.com/v1';
 const API_MISTRAL = 'https://api.mistral.ai/v1';
 const API_COHERE = 'https://api.cohere.ai/v1';
+const API_GOOGLE = 'https://generativelanguage.googleapis.com'
 const API_PERPLEXITY = 'https://api.perplexity.ai';
 const proxingRequests = getConfigValue('proxingRequests', false);
 const proxyHost = getConfigValue('proxyHost', '');
@@ -401,7 +402,7 @@ async function sendScaleRequest(request, response) {
             timeout: 0,
         };
         if (proxingRequests) {
-            const proxyConfig = readProxyConfig()
+            const proxyConfig = readProxyConfig();
             const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
             const proxyAgent = new HttpsProxyAgent(proxyUrl);
             requestjson.agent = proxyAgent;
@@ -433,7 +434,8 @@ async function sendScaleRequest(request, response) {
  * @param {express.Response} response Express response
  */
 async function sendMakerSuiteRequest(request, response) {
-    const apiKey = readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE);
+    const baseURL = (request.body.reverse_proxy) ? request.body.reverse_proxy : API_GOOGLE;
+    const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE);
 
     if (!apiKey) {
         console.log('MakerSuite API key is missing.');
@@ -527,13 +529,15 @@ async function sendMakerSuiteRequest(request, response) {
             timeout: 0,
         };
         if (proxingRequests) {
-            const proxyConfig = readProxyConfig()
+            const proxyConfig = readProxyConfig();
             const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
             const proxyAgent = new HttpsProxyAgent(proxyUrl);
             requestjson.agent = proxyAgent;
         }
 
-        const generateResponse = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`, requestjson);
+        const apiURL = new URL(baseURL + `/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`).toString();
+
+        const generateResponse = await fetch(apiURL, requestjson);
         // have to do this because of their busted ass streaming endpoint
         if (stream) {
             try {
