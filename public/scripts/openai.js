@@ -268,6 +268,7 @@ const default_settings = {
     api_url_scale: '',
     show_external_models: false,
     proxy_password: '',
+    mistral_assistant_prefill: '',
     assistant_prefill: '',
     human_sysprompt_message: default_claude_human_sysprompt_message,
     use_ai21_tokenizer: false,
@@ -353,6 +354,7 @@ const oai_settings = {
     api_url_scale: '',
     show_external_models: false,
     proxy_password: '',
+    mistral_assistant_prefill: '',
     assistant_prefill: '',
     human_sysprompt_message: default_claude_human_sysprompt_message,
     use_ai21_tokenizer: false,
@@ -1946,6 +1948,10 @@ async function sendOpenAIRequest(type, messages, signal) {
 
     if (isMistral) {
         generate_data['safe_prompt'] = false; // already defaults to false, but just incase they change that in the future.
+        // Don't add a prefill on quiet gens (summarization)
+        if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill && !(mistral_assistant_prefill == '')) {
+            generate_data['assistant_prefill'] = substituteParams(oai_settings.mistral_assistant_prefill);
+        }
     }
 
     if (isCustom) {
@@ -2880,7 +2886,8 @@ function loadOpenAISettings(data, settings) {
     oai_settings.api_url_scale = settings.api_url_scale ?? default_settings.api_url_scale;
     oai_settings.show_external_models = settings.show_external_models ?? default_settings.show_external_models;
     oai_settings.proxy_password = settings.proxy_password ?? default_settings.proxy_password;
-    oai_settings.assistant_prefill = settings.assistant_prefill ?? default_settings.assistant_prefill;
+    oai_settings.assistant_prefill = settings.assistant_prefill ?? default_settings.assistant_prefill; //claude
+    oai_settings.mistral_assistant_prefill = settings.mistral_assistant_prefill ?? default_settings.mistral_assistant_prefill;
     oai_settings.human_sysprompt_message = settings.human_sysprompt_message ?? default_settings.human_sysprompt_message;
     oai_settings.image_inlining = settings.image_inlining ?? default_settings.image_inlining;
     oai_settings.bypass_status_check = settings.bypass_status_check ?? default_settings.bypass_status_check;
@@ -2915,6 +2922,7 @@ function loadOpenAISettings(data, settings) {
     $('#websearch_toggle').prop('checked', oai_settings.websearch_cohere);
     $('#api_url_scale').val(oai_settings.api_url_scale);
     $('#openai_proxy_password').val(oai_settings.proxy_password);
+    $('#mistral_assistant_prefill').val(oai_settings.mistral_assistant_prefill);
     $('#claude_assistant_prefill').val(oai_settings.assistant_prefill);
     $('#claude_human_sysprompt_textarea').val(oai_settings.human_sysprompt_message);
     $('#openai_image_inlining').prop('checked', oai_settings.image_inlining);
@@ -3235,6 +3243,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         api_url_scale: settings.api_url_scale,
         show_external_models: settings.show_external_models,
         assistant_prefill: settings.assistant_prefill,
+        mistral_assistant_prefill: settings.mistral_assistant_prefill,
         human_sysprompt_message: settings.human_sysprompt_message,
         use_ai21_tokenizer: settings.use_ai21_tokenizer,
         use_google_tokenizer: settings.use_google_tokenizer,
@@ -3623,6 +3632,7 @@ function onSettingsPresetChange() {
         api_url_scale: ['#api_url_scale', 'api_url_scale', false],
         show_external_models: ['#openai_show_external_models', 'show_external_models', true],
         proxy_password: ['#openai_proxy_password', 'proxy_password', false],
+        mistral_assistant_prefill: ['#mistral_assistant_prefill', 'assistant_prefill', false],
         assistant_prefill: ['#claude_assistant_prefill', 'assistant_prefill', false],
         human_sysprompt_message: ['#claude_human_sysprompt_textarea', 'human_sysprompt_message', false],
         use_ai21_tokenizer: ['#use_ai21_tokenizer', 'use_ai21_tokenizer', true],
@@ -4853,6 +4863,11 @@ $(document).ready(async function () {
 
     $('#claude_assistant_prefill').on('input', function () {
         oai_settings.assistant_prefill = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#mistral_assistant_prefill').on('input', function () {
+        oai_settings.mistral_assistant_prefill = String($(this).val());
         saveSettingsDebounced();
     });
 

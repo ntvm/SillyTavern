@@ -1733,7 +1733,7 @@
                                             </span>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="openai,openrouter,makersuite,claude,custom">
+                                    <div class="range-block" data-source="openai,openrouter,makersuite,claude,mistralai,custom">
                                         <label for="openai_image_inlining" class="checkbox_label flexWrap widthFreeExpand">
                                             <input id="openai_image_inlining" type="checkbox" />
                                             <span data-i18n="Send inline images">Send inline images</span>
@@ -1750,6 +1750,12 @@
                                         </label>
                                         <div class="toggle-description justifyLeft">
                                             <span data-i18n="Use the appropriate tokenizer for Jurassic models, which is more efficient than GPT's.">Use the appropriate tokenizer for Jurassic models, which is more efficient than GPT's.</span>
+                                        </div>
+                                    </div>
+                                    <div class="range-block" data-source="mistralai">
+                                        <div id="mistral_assistant_prefill_block" class="wide100p">
+                                            <span id="mistral_assistant_prefill_text" data-i18n="Assistant Prefill">Assistant Prefill</span>
+                                            <textarea id="mistral_assistant_prefill" class="text_pole textarea_compact" name="assistant_prefill autoSetHeight" rows="3" maxlength="50000" data-i18n="[placeholder]Start Mistral's answer with..." placeholder="Start Mistral's answer with..."></textarea>
                                         </div>
                                     </div>
                                     <div class="range-block" data-source="makersuite">

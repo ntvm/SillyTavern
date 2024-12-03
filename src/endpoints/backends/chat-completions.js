@@ -720,6 +720,14 @@ async function sendMistralAIRequest(request, response) {
             controller.abort();
         });
 
+        if (request.body.assistant_prefill) {
+            messages.push({
+                role: 'assistant',
+                content: request.body.assistant_prefill,
+                prefix: true,
+            });
+        }
+
         const requestBody = {
             'model': request.body.model,
             'messages': messages,
