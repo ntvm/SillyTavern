@@ -3857,8 +3857,8 @@ async function onModelChange() {
     if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
         if (oai_settings.max_context_unlocked) {
             $('#openai_max_context').attr('max', max_1mil);
-        } else if (value === 'gemini-1.5-pro-latest') {
-            $('#openai_max_context').attr('max', max_1mil);
+        } else if (value.includes('gemini-1.5-pro') || value.includes('gemini-exp-1206')) {
+            $('#openai_max_context').attr('max', max_2mil);
         } else if (value === 'gemini-ultra' || value === 'gemini-1.0-pro-latest' || value === 'gemini-pro' || value === 'gemini-1.0-ultra-latest') {
             $('#openai_max_context').attr('max', max_32k);
         } else if (value === 'gemini-1.0-pro-vision-latest' || value === 'gemini-pro-vision') {
