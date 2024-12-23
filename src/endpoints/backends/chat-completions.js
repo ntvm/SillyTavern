@@ -323,7 +323,7 @@ async function sendClaudeRequest(request, response) {
                 break;
         }
         let Attempts = 0;
-        while (generateResponse.ok !== true && Attempts < 6) {
+        while (generateResponse.ok !== true && Attempts < 1) {
             switch (requestRoute){
                 case "plain":
                     generateResponse = await fetch(apiUrl + '/complete', requestjson);
