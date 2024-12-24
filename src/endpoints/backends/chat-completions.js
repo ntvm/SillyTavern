@@ -275,7 +275,7 @@ async function sendClaudeRequest(request, response) {
                     },
                     timeout: 0,
                 };
-                if (proxingRequests) {
+                if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
                     const proxyConfig = readProxyConfig();
                     const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
                     const proxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -312,7 +312,7 @@ async function sendClaudeRequest(request, response) {
                     },
                     timeout: 0,
                 };
-                if (proxingRequests) {
+                if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
                     const proxyConfig = readProxyConfig();
                     const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
                     const proxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -353,7 +353,11 @@ async function sendClaudeRequest(request, response) {
                 return response.status(generateResponse.status).send({ error: true });
             }
             const generateResponseJson = await generateResponse.json();
-            const responseText = (request.body.claude_allow_plaintext == true && request.body.model.startsWith('claude-1') || request.body.model.startsWith('claude-2') || request.body.model.startsWith('claude-instant')) ? generateResponseJson.completion : generateResponseJson.content[0].text;
+            const responseText = (request.body.claude_allow_plaintext == true &&
+                request.body.model.startsWith('claude-1') ||
+                request.body.model.startsWith('claude-2') ||
+                request.body.model.startsWith('claude-instant'))
+                ? generateResponseJson.completion : generateResponseJson.content[0].text;
             console.log('Claude response:', generateResponseJson);
 
             // Wrap it back to OAI format
@@ -401,7 +405,7 @@ async function sendScaleRequest(request, response) {
             },
             timeout: 0,
         };
-        if (proxingRequests) {
+        if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
             const proxyConfig = readProxyConfig();
             const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
             const proxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -528,7 +532,7 @@ async function sendMakerSuiteRequest(request, response) {
             signal: controller.signal,
             timeout: 0,
         };
-        if (proxingRequests) {
+        if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
             const proxyConfig = readProxyConfig();
             const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
             const proxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -645,7 +649,7 @@ async function sendAI21Request(request, response) {
         }),
         signal: controller.signal,
     };
-    if (proxingRequests) {
+    if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
         const proxyConfig = readProxyConfig()
         const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
         const proxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -749,7 +753,7 @@ async function sendMistralAIRequest(request, response) {
             signal: controller.signal,
             timeout: 0,
         };
-        if (proxingRequests) {
+        if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
             const proxyConfig = readProxyConfig()
             const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
             const proxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -845,7 +849,7 @@ async function sendCohereRequest(request, response) {
             signal: controller.signal,
             timeout: 0,
         };
-        if (proxingRequests) {
+        if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
             const proxyConfig = readProxyConfig()
             const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
             const proxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -929,7 +933,7 @@ router.post('/status', jsonParser, async function (request, response_getstatus_o
                 ...headers,
             },
         };
-        if (proxingRequests) {
+        if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
             const proxyConfig = readProxyConfig();
             const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
             const proxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -1212,7 +1216,7 @@ router.post('/generate', jsonParser, function (request, response) {
         signal: controller.signal,
         timeout: 0,
     };
-    if (proxingRequests) {
+    if (proxingRequests && !request.body.reverse_proxy.includes('127.0.0.1')) {
         const proxyConfig = readProxyConfig();
         const proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
         const proxyAgent = new HttpsProxyAgent(proxyUrl);
