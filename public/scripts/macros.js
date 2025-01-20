@@ -273,6 +273,16 @@ function diceRollReplace(input, invalidRollPlaceholder = '') {
     });
 }
 
+function replaceContent(content, pattern) {
+    pattern.forEach(entry => {
+        for (const [key, value] of Object.entries(entry)) {
+            const regex = new RegExp(key, 'g');
+            content = content.replace(regex, value);
+        }
+    });
+    return content;
+}
+
 /**
  * Substitutes {{macro}} parameters in a string.
  * @param {string} content - The string to substitute parameters in.
@@ -324,6 +334,10 @@ export function evaluateMacros(content, env) {
     content = content.replace(/{{currentSwipeId}}/gi, () => String(getCurrentSwipeId() ?? ''));
     content = content.replace(/{{lastMesID}}/gi, () => (chat?.length - 1));
     content = content.replace(/{{pastswipe}}/gi, () => String(getLastSwipeText() ?? 'lolkek'));
+	
+    let pattern = [{'raphic':'ra_phic'}, {'xplicit':'xpli_cit'}, {'exual':'_exual'}, {'ovel':'ov_el'}, {'anfiction':'an-fiction'}, {'Lewd':'L_ewd'}, {'lewd':'l_ewd'},{'feet':'F_eet'},{'arefoot':'are_foot'}]
+
+    content = replaceContent(content, pattern)
 
     content = content.replace(/\{\{\/\/([\s\S]*?)\}\}/gm, '');
 

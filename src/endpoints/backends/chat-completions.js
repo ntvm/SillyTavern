@@ -24,7 +24,36 @@ const proxyHost = getConfigValue('proxyHost', '');
 const proxyPort = getConfigValue('proxyPort', '');
 const proxyProxyLogin = getConfigValue('ProxyLogin', '');
 const proxyProxyPassword = getConfigValue('ProxyPassword', '');
+const localarray = [
+    { 'type':'including', 'value':'localhost' },
+    { 'type':'regex', 'value':'^http://127.0.0.1' },
+    { 'type':'regex','value':'^http://192\.' },
+    { 'type':'regex','value':'^http://172\.' },
+    { 'type':'regex','value':'^http://10\.' },
+];
+let proxyAgent;
+let proxyConfig;
+if (proxingRequests) {
+    proxyConfig = readProxyConfig();
+    let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+    proxyAgent = new HttpsProxyAgent(proxyUrl);
+}
 
+function isLocalIP(ip) {
+    let result = localarray.some(item => {
+        if (item.type === 'including') {
+            return ip.includes(item.value);
+        } else if (item.type === 'regex') {
+            const regex = new RegExp(item.value);
+            return regex.test(ip);
+        }
+        return false;
+    });
+    if (result) {
+        console.log('IP address is local. Ignoring proxy.');
+    }
+    return result;
+}
 function readProxyConfig() {
     try {
         return {
@@ -249,7 +278,6 @@ async function sendClaudeRequest(request, response) {
         var requestjson;
         var requestBody;
         var generateResponse;
-        let prevent_proxing;
 
         switch (requestRoute) {
             case "plain":
@@ -276,18 +304,14 @@ async function sendClaudeRequest(request, response) {
                     timeout: 0,
                 };
 
-                if (proxingRequests) {
-                    if (!request.body.reverse_proxy == null) {
-                        if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                            prevent_proxing = true;
-                        }
-                    }
-                    if (!prevent_proxing) {
-                        const proxyConfig = readProxyConfig();
-                        let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-                        const proxyAgent = new HttpsProxyAgent(proxyUrl);
+                if (request.body.reverse_proxy !== undefined) {
+                    if (!isLocalIP(request.body.reverse_proxy)){
                         requestjson.agent = proxyAgent;
+                        console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
                     }
+                } else if (proxyAgent !== undefined) {
+                    requestjson.agent = proxyAgent;
+                    console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
                 }
 
                 generateResponse = await fetch(apiUrl + '/complete', requestjson);
@@ -321,18 +345,14 @@ async function sendClaudeRequest(request, response) {
                     timeout: 0,
                 };
 
-                if (proxingRequests) {
-                    if (!request.body.reverse_proxy == null) {
-                        if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                            prevent_proxing = true;
-                        }
-                    }
-                    if (!prevent_proxing) {
-                        const proxyConfig = readProxyConfig();
-                        let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-                        const proxyAgent = new HttpsProxyAgent(proxyUrl);
+                if (request.body.reverse_proxy !== undefined) {
+                    if (!isLocalIP(request.body.reverse_proxy)){
                         requestjson.agent = proxyAgent;
+                        console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
                     }
+                } else if (proxyAgent !== undefined) {
+                    requestjson.agent = proxyAgent;
+                    console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
                 }
 
                 generateResponse = await fetch(apiUrl + '/messages', requestjson );
@@ -421,20 +441,15 @@ async function sendScaleRequest(request, response) {
             },
             timeout: 0,
         };
-        let prevent_proxing;
 
-        if (proxingRequests) {
-            if (!request.body.reverse_proxy == null) {
-                if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                    prevent_proxing = true;
-                }
-            }
-            if (!prevent_proxing) {
-                const proxyConfig = readProxyConfig();
-                let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-                const proxyAgent = new HttpsProxyAgent(proxyUrl);
+        if (request.body.reverse_proxy !== undefined) {
+            if (!isLocalIP(request.body.reverse_proxy)){
                 requestjson.agent = proxyAgent;
+                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
             }
+        } else if (proxyAgent !== undefined) {
+            requestjson.agent = proxyAgent;
+            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
         }
 
         const generateResponse = await fetch(apiUrl, requestjson);
@@ -499,7 +514,7 @@ async function sendMakerSuiteRequest(request, response) {
 
         const prompt = convertGooglePrompt(request.body.messages, model, should_use_system_prompt, request.body.char_name, request.body.user_name);
         let safetySettings = GEMINI_SAFETY;
-        
+
         if (model.includes('gemini-2.0-flash-exp')) {
             safetySettings = GEMINI_SAFETY.map(setting => ({ ...setting, threshold: 'OFF' }));
         }
@@ -574,20 +589,14 @@ async function sendMakerSuiteRequest(request, response) {
             timeout: 0,
         };
 
-        let prevent_proxing;
-
-        if (proxingRequests) {
-            if (!request.body.reverse_proxy == null) {
-                if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                    prevent_proxing = true;
-                }
-            }
-            if (!prevent_proxing) {
-                const proxyConfig = readProxyConfig();
-                let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-                const proxyAgent = new HttpsProxyAgent(proxyUrl);
+        if (request.body.reverse_proxy !== undefined) {
+            if (!isLocalIP(request.body.reverse_proxy)){
                 requestjson.agent = proxyAgent;
+                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
             }
+        } else if (proxyAgent !== undefined) {
+            requestjson.agent = proxyAgent;
+            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
         }
 
         const apiURL = new URL(baseURL + `/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`).toString();
@@ -700,20 +709,15 @@ async function sendAI21Request(request, response) {
         }),
         signal: controller.signal,
     };
-    let prevent_proxing;
 
-    if (proxingRequests) {
-        if (!request.body.reverse_proxy == null) {
-            if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                prevent_proxing = true;
-            }
+    if (request.body.reverse_proxy !== undefined) {
+        if (!isLocalIP(request.body.reverse_proxy)){
+            options.agent = proxyAgent;
+            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
         }
-        if (!prevent_proxing) {
-            const proxyConfig = readProxyConfig();
-            let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-            const proxyAgent = new HttpsProxyAgent(proxyUrl);
-            requestjson.agent = proxyAgent;
-        }
+    } else if (proxyAgent !== undefined) {
+        options.agent = proxyAgent;
+        console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
     }
 
     fetch(`https://api.ai21.com/studio/v1/${request.body.model}/complete`, options)
@@ -813,20 +817,15 @@ async function sendMistralAIRequest(request, response) {
             signal: controller.signal,
             timeout: 0,
         };
-        let prevent_proxing;
 
-        if (proxingRequests) {
-            if (!request.body.reverse_proxy == null) {
-                if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                    prevent_proxing = true;
-                }
+        if (request.body.reverse_proxy !== undefined) {
+            if (!isLocalIP(request.body.reverse_proxy)){
+                config.agent = proxyAgent;
+                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
             }
-            if (!prevent_proxing) {
-                const proxyConfig = readProxyConfig();
-                let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-                const proxyAgent = new HttpsProxyAgent(proxyUrl);
-                requestjson.agent = proxyAgent;
-            }
+        } else if (proxyAgent !== undefined) {
+            config.agent = proxyAgent;
+            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
         }
 
         console.log('MisralAI request:', requestBody);
@@ -919,20 +918,14 @@ async function sendCohereRequest(request, response) {
             timeout: 0,
         };
 
-        let prevent_proxing;
-
-        if (proxingRequests) {
-            if (!request.body.reverse_proxy == null) {
-                if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                    prevent_proxing = true;
-                }
-            }
-            if (!prevent_proxing) {
-                const proxyConfig = readProxyConfig();
-                let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-                const proxyAgent = new HttpsProxyAgent(proxyUrl);
+        if (request.body.reverse_proxy !== undefined) {
+            if (!isLocalIP(request.body.reverse_proxy)){
                 config.agent = proxyAgent;
+                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
             }
+        } else if (proxyAgent !== undefined) {
+            config.agent = proxyAgent;
+            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
         }
 
         const apiUrl = API_COHERE + '/chat';
@@ -1012,20 +1005,15 @@ router.post('/status', jsonParser, async function (request, response_getstatus_o
                 ...headers,
             },
         };
-        let prevent_proxing;
 
-        if (proxingRequests) {
-            if (!request.body.reverse_proxy == null) {
-                if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                    prevent_proxing = true;
-                }
-            }
-            if (!prevent_proxing) {
-                const proxyConfig = readProxyConfig();
-                let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-                const proxyAgent = new HttpsProxyAgent(proxyUrl);
+        if (request.body.reverse_proxy !== undefined) {
+            if (!isLocalIP(request.body.reverse_proxy)){
                 requestjson.agent = proxyAgent;
+                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
             }
+        } else if (proxyAgent !== undefined) {
+            requestjson.agent = proxyAgent;
+            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
         }
 
         const response = await fetch(api_url + '/models', requestjson);
@@ -1304,20 +1292,14 @@ router.post('/generate', jsonParser, function (request, response) {
         signal: controller.signal,
         timeout: 0,
     };
-    let prevent_proxing;
-
-    if (proxingRequests) {
-        if (!request.body.reverse_proxy == null) {
-            if (!request.body.reverse_proxy.includes('127.0.0.1')){
-                prevent_proxing = true;
-            }
-        }
-        if (!prevent_proxing) {
-            const proxyConfig = readProxyConfig();
-            let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
-            const proxyAgent = new HttpsProxyAgent(proxyUrl);
+    if (request.body.reverse_proxy !== undefined) {
+        if (!isLocalIP(request.body.reverse_proxy)){
             config.agent = proxyAgent;
+            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
         }
+    } else if (proxyAgent !== undefined) {
+        config.agent = proxyAgent;
+        console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
     }
 
     console.log(requestBody);
