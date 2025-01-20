@@ -227,6 +227,17 @@ export async function getGroupChat(groupId, reload = false) {
 }
 
 /**
+ * Retrieves the member names of a group. If the group is not selected, an empty array is returned.
+ * @returns {string[]} An array of character names representing the members of the group.
+ */
+export function getGroupNames() {
+    const groupMembers = selected_group ? groups.find(x => x.id == selected_group)?.members : null;
+    return Array.isArray(groupMembers)
+        ? groupMembers.map(x => characters.find(y => y.avatar === x)?.name).filter(x => x)
+        : [];
+}
+
+/**
  * Finds the character ID for a group member.
  * @param {string} arg 1-based member index or character name
  * @returns {number} 0-based character ID

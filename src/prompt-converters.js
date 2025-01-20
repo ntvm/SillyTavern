@@ -1,5 +1,7 @@
 require('./polyfill.js');
 
+const PROMPT_PLACEHOLDER = 'Let\'s get started.';
+
 /**
  * Convert a prompt from the ChatML objects to the format used by Claude.
  * @param {object[]} messages Array of messages
@@ -12,6 +14,145 @@ require('./polyfill.js');
  * @returns {string} Prompt for Claude
  * @copyright Prompt Conversion script taken from RisuAI by kwaroran (GPLv3).
  */
+
+/**
+ * Extracts the character name, user name, and group member names from the request.
+ * @param {import('express').Request} request Express request object
+ * @returns {PromptNames} Prompt names
+ */
+function getPromptNames(request) {
+    return {
+        charName: String(request.body.char_name || ''),
+        userName: String(request.body.user_name || ''),
+        groupNames: Array.isArray(request.body.group_names) ? request.body.group_names.map(String) : [],
+        startsWithGroupName: function (message) {
+            return this.groupNames.some(name => message.startsWith(`${name}: `));
+        },
+    };
+}
+
+/**
+ * Merge messages with the same consecutive role, removing names if they exist.
+ * @param {any[]} messages Messages to merge
+ * @param {PromptNames} names Prompt names
+ * @param {boolean} strict Enable strict mode: only allow one system message at the start, force user first message
+ * @param {boolean} placeholders Add user placeholders to the messages in strict mode
+ * @returns {any[]} Merged messages
+ */
+function mergeMessages(messages, names, strict, placeholders) {
+    let mergedMessages = [];
+
+    /** @type {Map<string,object>} */
+    const contentTokens = new Map();
+
+    // Remove names from the messages
+    messages.forEach((message) => {
+        if (!message.content) {
+            message.content = '';
+        }
+        // Flatten contents and replace image URLs with random tokens
+        if (Array.isArray(message.content)) {
+            const text = message.content.map((content) => {
+                if (content.type === 'text') {
+                    return content.text;
+                }
+                // Could be extended with other non-text types
+                if (content.type === 'image_url') {
+                    const token = crypto.randomBytes(32).toString('base64');
+                    contentTokens.set(token, content);
+                    return token;
+                }
+                return '';
+            }).join('\n\n');
+            message.content = text;
+        }
+        if (message.role === 'system' && message.name === 'example_assistant') {
+            if (names.charName && !message.content.startsWith(`${names.charName}: `) && !names.startsWithGroupName(message.content)) {
+                message.content = `${names.charName}: ${message.content}`;
+            }
+        }
+        if (message.role === 'system' && message.name === 'example_user') {
+            if (names.userName && !message.content.startsWith(`${names.userName}: `)) {
+                message.content = `${names.userName}: ${message.content}`;
+            }
+        }
+        if (message.name && message.role !== 'system') {
+            if (!message.content.startsWith(`${message.name}: `)) {
+                message.content = `${message.name}: ${message.content}`;
+            }
+        }
+        if (message.role === 'tool') {
+            message.role = 'user';
+        }
+        delete message.name;
+        delete message.tool_calls;
+        delete message.tool_call_id;
+    });
+
+    // Squash consecutive messages with the same role
+    messages.forEach((message) => {
+        if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === message.role && message.content) {
+            mergedMessages[mergedMessages.length - 1].content += '\n\n' + message.content;
+        } else {
+            mergedMessages.push(message);
+        }
+    });
+
+    // Prevent erroring out if the mergedMessages array is empty.
+    if (mergedMessages.length === 0) {
+        mergedMessages.unshift({
+            role: 'user',
+            content: PROMPT_PLACEHOLDER,
+        });
+    }
+
+    // Check for content tokens and replace them with the actual content objects
+    if (contentTokens.size > 0) {
+        mergedMessages.forEach((message) => {
+            const hasValidToken = Array.from(contentTokens.keys()).some(token => message.content.includes(token));
+
+            if (hasValidToken) {
+                const splitContent = message.content.split('\n\n');
+                const mergedContent = [];
+
+                splitContent.forEach((content) => {
+                    if (contentTokens.has(content)) {
+                        mergedContent.push(contentTokens.get(content));
+                    } else {
+                        if (mergedContent.length > 0 && mergedContent[mergedContent.length - 1].type === 'text') {
+                            mergedContent[mergedContent.length - 1].text += `\n\n${content}`;
+                        } else {
+                            mergedContent.push({ type: 'text', text: content });
+                        }
+                    }
+                });
+
+                message.content = mergedContent;
+            }
+        });
+    }
+
+    if (strict) {
+        for (let i = 0; i < mergedMessages.length; i++) {
+            // Force mid-prompt system messages to be user messages
+            if (i > 0 && mergedMessages[i].role === 'system') {
+                mergedMessages[i].role = 'user';
+            }
+        }
+        if (mergedMessages.length && placeholders) {
+            if (mergedMessages[0].role === 'system' && (mergedMessages.length === 1 || mergedMessages[1].role !== 'user')) {
+                mergedMessages.splice(1, 0, { role: 'user', content: PROMPT_PLACEHOLDER });
+            }
+            else if (mergedMessages[0].role !== 'system' && mergedMessages[0].role !== 'user') {
+                mergedMessages.unshift({ role: 'user', content: PROMPT_PLACEHOLDER });
+            }
+        }
+        return mergeMessages(mergedMessages, names, false, placeholders);
+    }
+
+    return mergedMessages;
+}
+
 function convertClaudePrompt(messages, addAssistantPostfix, addAssistantPrefill, withSysPromptSupport, useSystemPrompt, addSysHumanMsg, HumAssistOff, SystemFul, excludePrefixes) {
 
     //Prepare messages for claude.
@@ -533,4 +674,5 @@ module.exports = {
     convertClaudeExperementalMesIntoSys,
     postconvertClaudeIntoPrefill,
     convertCohereMessages,
+    mergeMessages
 };

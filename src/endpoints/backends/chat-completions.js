@@ -8,7 +8,7 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const { jsonParser } = require('../../express-common');
 const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS } = require('../../constants');
 const { forwardFetchResponse, getConfigValue, tryParse, uuidv4, mergeObjectWithYaml, excludeKeysByYaml, color } = require('../../util');
-const { convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMesIntoSys, postconvertClaudeIntoPrefill, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages } = require('../../prompt-converters');
+const { convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMesIntoSys, postconvertClaudeIntoPrefill, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages, mergeMessages, getPromptNames } = require('../../prompt-converters');
 
 const { readSecret, SECRET_KEYS } = require('../secrets');
 const { getTokenizerModel, getSentencepiceTokenizer, getTiktokenTokenizer, sentencepieceTokenizers, TEXT_COMPLETION_MODELS } = require('../tokenizers');
@@ -22,50 +22,37 @@ const API_PERPLEXITY = 'https://api.perplexity.ai';
 const proxingRequests = getConfigValue('proxingRequests', false);
 const proxyHost = getConfigValue('proxyHost', '');
 const proxyPort = getConfigValue('proxyPort', '');
-const proxyProxyLogin = getConfigValue('ProxyLogin', '');
-const proxyProxyPassword = getConfigValue('ProxyPassword', '');
+const ProxyLogin = getConfigValue('ProxyLogin', '');
+const ProxyPassword = getConfigValue('ProxyPassword', '');
 const localarray = [
-    { 'type':'including', 'value':'localhost' },
-    { 'type':'regex', 'value':'^http://127.0.0.1' },
-    { 'type':'regex','value':'^http://192\.' },
-    { 'type':'regex','value':'^http://172\.' },
-    { 'type':'regex','value':'^http://10\.' },
+    'localhost',
+    '^http://127\.0\.0\.1',
+    '^http://192\.',
+    '^http://172\.',
+    '^http://10\.',
 ];
 let proxyAgent;
 let proxyConfig;
+
 if (proxingRequests) {
-    proxyConfig = readProxyConfig();
-    let proxyUrl = `http://${proxyConfig.login}:${proxyConfig.password}@${proxyConfig.host}:${proxyConfig.port}`;
+    let proxyUrl = `http://${ProxyLogin}:${ProxyPassword}@${proxyHost}:${proxyPort}`;
     proxyAgent = new HttpsProxyAgent(proxyUrl);
 }
 
+/**
+ * Applies a post-processing step to the generated messages.
+ * @param {string} ip incoming address
+ * @returns {bool} is local
+ */
 function isLocalIP(ip) {
     let result = localarray.some(item => {
-        if (item.type === 'including') {
-            return ip.includes(item.value);
-        } else if (item.type === 'regex') {
-            const regex = new RegExp(item.value);
+            const regex = new RegExp(item);
             return regex.test(ip);
-        }
-        return false;
     });
     if (result) {
         console.log('IP address is local. Ignoring proxy.');
     }
     return result;
-}
-function readProxyConfig() {
-    try {
-        return {
-            host: proxyHost,
-            port: proxyPort,
-            login: proxyProxyLogin,
-            password: proxyProxyPassword,
-        };
-    } catch (error) {
-        console.error('Error reading proxy configuration:', error);
-    }
-    return null;
 }
 
 /**
@@ -76,10 +63,17 @@ function readProxyConfig() {
  * @param {string} userName User name
  * @returns
  */
-function postProcessPrompt(messages, type, charName, userName) {
+function postProcessPrompt(messages, type, charName, userName, names) {
     switch (type) {
+        case 'merge':
         case 'claude':
             return convertClaudeMessages(messages, '', false, '', charName, userName).messages;
+        case 'semi':
+            return mergeMessages(messages, names, true, false);
+        case 'strict':
+            return mergeMessages(messages, names, true, true);
+        case 'deepseek':
+            return (x => x.length && (x[x.length - 1].role !== 'assistant' || (x[x.length - 1].prefix = true)) ? x : x)(mergeMessages(messages, names, true, false));
         default:
             return messages;
     }
@@ -307,11 +301,11 @@ async function sendClaudeRequest(request, response) {
                 if (request.body.reverse_proxy !== undefined) {
                     if (!isLocalIP(request.body.reverse_proxy)){
                         requestjson.agent = proxyAgent;
-                        console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+                        console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
                     }
                 } else if (proxyAgent !== undefined) {
                     requestjson.agent = proxyAgent;
-                    console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+                    console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
                 }
 
                 generateResponse = await fetch(apiUrl + '/complete', requestjson);
@@ -348,11 +342,11 @@ async function sendClaudeRequest(request, response) {
                 if (request.body.reverse_proxy !== undefined) {
                     if (!isLocalIP(request.body.reverse_proxy)){
                         requestjson.agent = proxyAgent;
-                        console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+                        console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
                     }
                 } else if (proxyAgent !== undefined) {
                     requestjson.agent = proxyAgent;
-                    console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+                    console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
                 }
 
                 generateResponse = await fetch(apiUrl + '/messages', requestjson );
@@ -445,11 +439,11 @@ async function sendScaleRequest(request, response) {
         if (request.body.reverse_proxy !== undefined) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 requestjson.agent = proxyAgent;
-                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+                console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
             }
         } else if (proxyAgent !== undefined) {
             requestjson.agent = proxyAgent;
-            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+            console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
         }
 
         const generateResponse = await fetch(apiUrl, requestjson);
@@ -592,11 +586,11 @@ async function sendMakerSuiteRequest(request, response) {
         if (request.body.reverse_proxy !== undefined) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 requestjson.agent = proxyAgent;
-                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+                console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
             }
         } else if (proxyAgent !== undefined) {
             requestjson.agent = proxyAgent;
-            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+            console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
         }
 
         const apiURL = new URL(baseURL + `/${apiVersion}/models/${model}:${responseType}?key=${apiKey}${stream ? '&alt=sse' : ''}`).toString();
@@ -713,11 +707,11 @@ async function sendAI21Request(request, response) {
     if (request.body.reverse_proxy !== undefined) {
         if (!isLocalIP(request.body.reverse_proxy)){
             options.agent = proxyAgent;
-            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+            console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
         }
     } else if (proxyAgent !== undefined) {
         options.agent = proxyAgent;
-        console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+        console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
     }
 
     fetch(`https://api.ai21.com/studio/v1/${request.body.model}/complete`, options)
@@ -821,11 +815,11 @@ async function sendMistralAIRequest(request, response) {
         if (request.body.reverse_proxy !== undefined) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 config.agent = proxyAgent;
-                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+                console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
             }
         } else if (proxyAgent !== undefined) {
             config.agent = proxyAgent;
-            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+            console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
         }
 
         console.log('MisralAI request:', requestBody);
@@ -921,11 +915,11 @@ async function sendCohereRequest(request, response) {
         if (request.body.reverse_proxy !== undefined) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 config.agent = proxyAgent;
-                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+                console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
             }
         } else if (proxyAgent !== undefined) {
             config.agent = proxyAgent;
-            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+            console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
         }
 
         const apiUrl = API_COHERE + '/chat';
@@ -1009,11 +1003,11 @@ router.post('/status', jsonParser, async function (request, response_getstatus_o
         if (request.body.reverse_proxy !== undefined) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 requestjson.agent = proxyAgent;
-                console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+                console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
             }
         } else if (proxyAgent !== undefined) {
             requestjson.agent = proxyAgent;
-            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+            console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
         }
 
         const response = await fetch(api_url + '/models', requestjson);
@@ -1224,14 +1218,15 @@ router.post('/generate', jsonParser, function (request, response) {
                 request.body.messages,
                 request.body.custom_prompt_post_processing,
                 request.body.char_name,
-                request.body.user_name);
+                request.body.user_name,
+                request.body.group_names);
         }
     } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.PERPLEXITY) {
         apiUrl = API_PERPLEXITY;
         apiKey = readSecret(request.user.directories, SECRET_KEYS.PERPLEXITY);
         headers = {};
         bodyParams = {};
-        request.body.messages = postProcessPrompt(request.body.messages, 'claude', request.body.char_name, request.body.user_name);
+        request.body.messages = postProcessPrompt(request.body.messages, 'claude', request.body.char_name, request.body.user_name, group_names);
     } else {
         console.log('This chat completion source is not supported yet.');
         return response.status(400).send({ error: true });
@@ -1295,11 +1290,11 @@ router.post('/generate', jsonParser, function (request, response) {
     if (request.body.reverse_proxy !== undefined) {
         if (!isLocalIP(request.body.reverse_proxy)){
             config.agent = proxyAgent;
-            console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`);
+            console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
         }
     } else if (proxyAgent !== undefined) {
         config.agent = proxyAgent;
-        console.log('Using proxy: ', `${proxyConfig.host}:${proxyConfig.port}`, '(No reverse-proxy)');
+        console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
     }
 
     console.log(requestBody);
