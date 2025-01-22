@@ -337,7 +337,7 @@ export function evaluateMacros(content, env) {
 	
     let pattern = [{'raphic':'ra_phic'}, {'xplicit':'xpli_cit'}, {'exual':'_exual'}, {'ovel':'ov_el'}, {'anfiction':'an-fiction'}, {'Lewd':'L_ewd'}, {'lewd':'l_ewd'},{'feet':'F_eet'},{'arefoot':'are_foot'}]
 
-    content = replaceContent(content, pattern)
+    //content = replaceContent(content, pattern) uncomment for sourcegraph users
 
     content = content.replace(/\{\{\/\/([\s\S]*?)\}\}/gm, '');
 
