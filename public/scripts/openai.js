@@ -33,7 +33,7 @@ import {
     system_message_types,
     this_chid,
 } from '../script.js';
-import { selected_group } from './group-chats.js';
+import { selected_group, getGroupNames } from './group-chats.js';
 import { registerSlashCommand } from './slash-commands.js';
 
 import { extension_settings} from "./extensions.js";
@@ -197,7 +197,11 @@ const continue_postfix_types = {
 
 const custom_prompt_post_processing_types = {
     NONE: '',
+    /** @deprecated Use MERGE instead. */
     CLAUDE: 'claude',
+    MERGE: 'merge',
+    SEMI: 'semi',
+    STRICT: 'strict',
 };
 
 const prefixMap = selected_group ? {
@@ -665,11 +669,15 @@ function setupChatCompletionPromptManager(openAiSettings) {
  * @returns {Message[]} Array of message objects
  */
 export function parseExampleIntoIndividual(messageExampleString, appendNamesForGroup = true) {
+    const groupBotNames = getGroupNames().map(name => `${name}:`);
+
     let result = []; // array of msgs
     let tmp = messageExampleString.split('\n');
     let cur_msg_lines = [];
     let in_user = false;
     let in_bot = false;
+    let botName = name2;
+
     // DRY my cock and balls :)
     function add_msg(name, role, system_name) {
         // join different newlines (we split them by \n and join by \n)
@@ -688,15 +696,19 @@ export function parseExampleIntoIndividual(messageExampleString, appendNamesForG
     for (let i = 1; i < tmp.length; i++) {
         let cur_str = tmp[i];
         // if it's the user message, switch into user mode and out of bot mode
-        // yes, repeated code, but I don't care// //If Silly Don't why I should?
-        if (cur_str.startsWith(name1 + ":")) {
+        // yes, repeated code, but I don't care //Nor I then
+        if (cur_str.startsWith(name1 + ':')) {
             in_user = true;
             // we were in the bot mode previously, add the message
             if (in_bot) {
-                add_msg(name2, 'system', 'example_assistant');
+                add_msg(botName, 'system', 'example_assistant');
             }
             in_bot = false;
-        } else if (cur_str.startsWith(name2 + ':')) {
+        } else if (cur_str.startsWith(name2 + ':') || groupBotNames.some(n => cur_str.startsWith(n))) {
+            if (!cur_str.startsWith(name2 + ':') && groupBotNames.length) {
+                botName = cur_str.split(':')[0];
+            }
+
             in_bot = true;
             // we were in the user mode previously, add the message
             if (in_user) {
@@ -711,11 +723,11 @@ export function parseExampleIntoIndividual(messageExampleString, appendNamesForG
     if (in_user) {
         add_msg(name1, 'system', 'example_user');
     } else if (in_bot) {
-        add_msg(name2, 'system', 'example_assistant');
+        add_msg(botName, 'system', 'example_assistant');
     }
     if (result.length == 0){
-        messageExampleString = messageExampleString.replace('{Example Dialogue:}','')
-		result.push({role: 'system', content: messageExampleString, name: '', serviceExample: true})
+        messageExampleString = messageExampleString.replace('{Example Dialogue:}','');
+        result.push({role: 'system', content: messageExampleString, name: '', ServiceExample:true});
     }
     return result;
 }
@@ -1859,6 +1871,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         'n': canMultiSwipe ? oai_settings.n : undefined,
         'user_name': name1,
         'char_name': name2,
+        'group_names': getGroupNames(),
     };
 
     // Empty array will produce a validation error

@@ -4161,6 +4161,19 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         } else {
             // If maxLoops is not passed in (e.g. first time generating), set it to MAX_GENERATION_LOOPS
             maxLoops ??= MAX_GENERATION_LOOPS;
+			console.error('If you saw this error, there are three potential reasons why: \n1. The model sent you an empty message.\n2. The endpoint returned 200, but it uses a non-standard JSON format. \n3. Your local script generating unvalid output.\n\nUse extractMessageFromData as reference of valid data')
+
+            function isLocalNetwork(url) {
+                const localPatterns = [
+                    /localhost/,
+                    /^http:\/\/127\.0\.0\.1/,
+                    /^http:\/\/192\./,
+                    /^http:\/\/172\./,
+                    /^http:\/\/10\./
+                ];
+
+                return localPatterns.some(pattern => pattern.test(url));
+            }
 
             if (maxLoops === 0) {
                 if (type !== 'quiet') {

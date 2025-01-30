@@ -2897,6 +2897,9 @@
                             <select id="custom_prompt_post_processing" class="text_pole" title="Applies additional processing to the prompt before sending it to the API.">
                                 <option value="">None</option>
                                 <option value="claude">Claude</option>
+                                <option data-i18n="prompt_post_processing_merge" value="merge">Merge consecutive roles</option>
+                                <option data-i18n="prompt_post_processing_semi" value="semi">Semi-strict (alternating roles)</option>
+                                <option data-i18n="prompt_post_processing_strict" value="strict">Strict (user first, alternating roles)</option>
                             </select>
                         </form>
                         <div class="flex-container flex">
