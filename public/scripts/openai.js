@@ -727,7 +727,7 @@ export function parseExampleIntoIndividual(messageExampleString, appendNamesForG
     }
     if (result.length == 0){
         messageExampleString = messageExampleString.replace('{Example Dialogue:}','');
-        result.push({role: system, content: messageExampleString, name: '', ServiceExample:true});
+        result.push({role: 'system', content: messageExampleString, name: '', ServiceExample:true});
     }
     return result;
 }
