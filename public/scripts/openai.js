@@ -2008,6 +2008,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         || extension_settings.ProxyManager.ProxyPrior == false && oai_settings.stream_openai == true && !oai_settings.reverse_proxy ||
         extension_settings.ProxyManager.ProxyPrior == false && !oai_settings.proxy_password && oai_settings.stream_openai == true) {
             alert('STREAMING NOT SUPPORTED BY o1') }
+        delete generate_data.logit_bias;
         delete generate_data.temperature;
         delete generate_data.frequency_penalty;
         delete generate_data.presence_penalty;
