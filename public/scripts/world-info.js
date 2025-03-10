@@ -28,15 +28,22 @@ export {
     deleteWorldInfo,
     setWorldInfoSettings,
     getWorldInfoPrompt,
+    updateWorldInfoList,
+    showWorldEditor,
+    loadWorldInfo,
+    createNewWorldInfo,
+    createWorldInfoEntry,
+    saveWorldInfo,
+
 };
 
-const world_info_insertion_strategy = {
+export const world_info_insertion_strategy = {
     evenly: 0,
     character_first: 1,
     global_first: 2,
 };
 
-const world_info_logic = {
+export const world_info_logic = {
     AND_ANY: 0,
     NOT_ALL: 1,
     NOT_ANY: 2,
@@ -44,6 +51,7 @@ const world_info_logic = {
 };
 
 const WI_ENTRY_EDIT_TEMPLATE = $('#entry_edit_template .world_entry');
+
 
 let world_info = {};
 let selected_world_info = [];
@@ -68,12 +76,13 @@ const sortFn = (a, b) => b.order - a.order;
 let updateEditor = (navigation) => { console.debug('Triggered WI navigation', navigation); };
 
 // Do not optimize. updateEditor is a function that is updated by the displayWorldEntries with new data.
-const worldInfoFilter = new FilterHelper(() => updateEditor());
-const SORT_ORDER_KEY = 'world_info_sort_order';
-const METADATA_KEY = 'world_info';
+export const worldInfoFilter = new FilterHelper(() => updateEditor());
+export const SORT_ORDER_KEY = 'world_info_sort_order';
+export const METADATA_KEY = 'world_info';
 
-const DEFAULT_DEPTH = 4;
-const MAX_SCAN_DEPTH = 1000;
+export const DEFAULT_WEIGHT = 100;
+export const DEFAULT_DEPTH = 4;
+export const MAX_SCAN_DEPTH = 1000;
 
 /**
  * Represents a scanning buffer for one evaluation of World Info.
@@ -261,7 +270,7 @@ export function getWorldInfoSettings() {
     };
 }
 
-const world_info_position = {
+export const world_info_position = {
     before: 0,
     after: 1,
     ANTop: 2,
@@ -609,6 +618,11 @@ async function showWorldEditor(name) {
 
     const wiData = await loadWorldInfoData(name);
     displayWorldEntries(name, wiData);
+}
+
+async function loadWorldInfo(data){
+    x = await loadWorldInfoData(data);
+	return x
 }
 
 async function loadWorldInfoData(name) {
@@ -2886,6 +2900,19 @@ export async function importWorldInfo(file) {
         },
         error: (jqXHR, exception) => { },
     });
+}
+
+/**
+ * Forces the world info editor to open on a specific world.
+ * @param {string} worldName The name of the world to open
+ */
+export function openWorldInfoEditor(worldName) {
+    console.log(`Opening lorebook for ${worldName}`);
+    if (!$('#WorldInfo').is(':visible')) {
+        $('#WIDrawerIcon').trigger('click');
+    }
+    const index = world_names.indexOf(worldName);
+    $('#world_editor_select').val(index).trigger('change');
 }
 
 function assignLorebookToChat() {
