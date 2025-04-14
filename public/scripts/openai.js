@@ -1999,8 +1999,8 @@ async function sendOpenAIRequest(type, messages, signal) {
     if ((isOAI || isOpenRouter || isMistral || isCustom || isCohere) && oai_settings.seed >= 0) {
         generate_data['seed'] = oai_settings.seed;
     }
-
-    if (isOAI && oai_settings.openai_model.includes('o1') || isCustom && oai_settings.custom_model.includes('o1')){
+    if (isOAI && oai_settings.openai_model.startsWith('o1') || isCustom && oai_settings.custom_model.includes('o1') || 
+    isOAI && oai_settings.openai_model.startsWith('o3') || isCustom && oai_settings.custom_model.includes('o3')){
         generate_data['max_completion_tokens'] = generate_data['max_tokens'];
         delete generate_data.max_tokens;
         delete generate_data.logprobs;
@@ -3710,6 +3710,12 @@ function getMaxContextOpenAI(value) {
     if (oai_settings.max_context_unlocked) {
         return unlocked_max;
     }
+    else if (value.includes('gpt-4.1')) {
+        return max_1mil;
+    }
+    else if (value.startsWith('o1') || value.startsWith('o3')) {
+        return max_128k;
+    }
     else if (value.includes('gpt-4-turbo') || value.includes('gpt-4o') || value.includes('gpt-4-1106') || value.includes('gpt-4-0125') || value.includes('gpt-4-vision') || value.includes('chatgpt-4o-latest')) {
         return max_128k;
     }
@@ -4404,7 +4410,8 @@ export function isImageInliningSupported() {
         'claude-3',
         'gpt-4-turbo',
         'gpt-4o',
-        'chatgpt-4o-latest'
+        'chatgpt-4o-latest',
+        'gpt-4.1',
     ];
 
     switch (oai_settings.chat_completion_source) {

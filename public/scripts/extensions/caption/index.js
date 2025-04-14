@@ -405,6 +405,12 @@ jQuery(function () {
                                 <option data-type="openai" value="gpt-4-vision-preview">gpt-4-vision-preview</option>
                                 <option data-type="openai" value="gpt-4-turbo">gpt-4-turbo</option>
                                 <option data-type="openai" value="gpt-4o">gpt-4o</option>
+                                <option data-type="openai" value="gpt-4.1">gpt-4.1</option>
+                                <option data-type="openai" value="gpt-4.1-2025-04-14">gpt-4.1-2025-04-14</option>
+                                <option data-type="openai" value="gpt-4.1-mini">gpt-4.1-mini</option>
+                                <option data-type="openai" value="gpt-4.1-mini-2025-04-14">gpt-4.1-mini-2025-04-14</option>
+                                <option data-type="openai" value="gpt-4.1-nano">gpt-4.1-nano</option>
+                                <option data-type="openai" value="gpt-4.1-nano-2025-04-14">gpt-4.1-nano-2025-04-14</option>
                                 <option data-type="anthropic" value="claude-3-5-sonnet-20241022">claude-3-5-sonnet-NEW</option>
                                 <option data-type="anthropic" value="claude-3-5-sonnet-20240620">claude-3-5-sonnet</option>
                                 <option data-type="anthropic" value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
