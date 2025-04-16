@@ -294,6 +294,8 @@ const default_settings = {
     custom_prompt_post_processing: custom_prompt_post_processing_types.NONE,
     seed: -1,
     n: 1,
+    claude_allow_thinking: false,
+    claude_thinking_budget: 2000,
 };
 
 
@@ -380,6 +382,8 @@ const oai_settings = {
     custom_prompt_post_processing: custom_prompt_post_processing_types.NONE,
     seed: -1,
     n: 1,
+    claude_allow_thinking: false,
+    claude_thinking_budget: 2000,
 };
 
 export let proxies = [
@@ -1927,6 +1931,9 @@ async function sendOpenAIRequest(type, messages, signal) {
         if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill) {
             generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
         }
+        if (oai_settings.claude_allow_thinking) {
+            generate_data['claude_thinking_budget'] = oai_settings.claude_thinking_budget;
+        }
     }
 
     if (isOpenRouter) {
@@ -2907,6 +2914,8 @@ function loadOpenAISettings(data, settings) {
     oai_settings.bypass_status_check = settings.bypass_status_check ?? default_settings.bypass_status_check;
     oai_settings.seed = settings.seed ?? default_settings.seed;
     oai_settings.n = settings.n ?? default_settings.n;
+    oai_settings.claude_allow_thinking = settings.claude_allow_thinking ?? default_settings.claude_allow_thinking;
+    oai_settings.claude_thinking_budget = settings.claude_thinking_budget ?? default_settings.claude_thinking_budget;
 
     oai_settings.prompts = settings.prompts ?? default_settings.prompts;
     oai_settings.prompt_order = settings.prompt_order ?? default_settings.prompt_order;
@@ -2994,6 +3003,7 @@ function loadOpenAISettings(data, settings) {
     $('#newexamplechat_prompt_textarea').val(oai_settings.new_example_chat_prompt);
     $('#continue_nudge_prompt_textarea').val(oai_settings.continue_nudge_prompt);
     $('#lookaround_nudge_prompt_textarea').val(oai_settings.lookaround_nudge_prompt);
+    $('#claude_allow_thinking').prop('checked', oai_settings.claude_allow_thinking);
 
     $('#wi_format_textarea').val(oai_settings.wi_format);
     $('#scenario_format_textarea').val(oai_settings.scenario_format);
@@ -3027,6 +3037,9 @@ function loadOpenAISettings(data, settings) {
     $('#repetition_penalty_counter_openai').val(Number(oai_settings.repetition_penalty_openai));
     $('#seed_openai').val(oai_settings.seed);
     $('#n_openai').val(oai_settings.n);
+
+    $('#thinking_budget_claude').val(oai_settings.claude_thinking_budget);
+    $('#thinking_budget_counter_claude').val(Number(oai_settings.claude_thinking_budget).toFixed(2));
 
     if (settings.reverse_proxy !== undefined) oai_settings.reverse_proxy = settings.reverse_proxy;
     $('#openai_reverse_proxy').val(oai_settings.reverse_proxy);
@@ -3275,6 +3288,10 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         continue_postfix: settings.continue_postfix,
         seed: settings.seed,
         n: settings.n,
+        claude_allow_thinking: settings.claude_allow_thinking,
+        claude_thinking_budget: settings.claude_thinking_budget,
+
+
     };
 
     const savePresetSettings = await fetch(`/api/presets/save-openai?name=${name}`, {
@@ -3664,6 +3681,8 @@ function onSettingsPresetChange() {
         continue_postfix: ['#continue_postfix', 'continue_postfix', false],
         seed: ['#seed_openai', 'seed', false],
         n: ['#n_openai', 'n', false],
+        claude_allow_thinking: ['#claude_allow_thinking', 'claude_allow_thinking', false],
+        claude_thinking_budget: ['#thinking_budget_claude', 'claude_thinking_budget', false],
     };
 
     const presetName = $('#settings_preset_openai').find(':selected').text();
@@ -4631,6 +4650,12 @@ $(document).ready(async function () {
         saveSettingsDebounced();
     });
 
+    $('#thinking_budget_claude').on('input', function () {
+        oai_settings.claude_thinking_budget = Number($(this).val());
+        $('#thinking_budget_counter_claude').val(Number($(this).val()).toFixed(2));
+        saveSettingsDebounced();
+    });
+
     $('#stream_toggle').on('change', function () {
         oai_settings.stream_openai = !!$('#stream_toggle').prop('checked');
         saveSettingsDebounced();
@@ -4668,6 +4693,12 @@ $(document).ready(async function () {
 
     $('#claude_allow_plaintext').on('change', function () {
         oai_settings.claude_allow_plaintext = !!$('#claude_allow_plaintext').prop('checked');
+        saveSettingsDebounced();
+    });
+	
+    $('#claude_allow_thinking').on('change', function () {
+        oai_settings.claude_allow_thinking = !!$('#claude_allow_thinking').prop('checked');
+        $('#claude_allow_thinking').toggle(!oai_settings.claude_allow_thinking);
         saveSettingsDebounced();
     });
 
