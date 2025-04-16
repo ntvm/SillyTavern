@@ -388,10 +388,11 @@ async function sendClaudeRequest(request, response) {
                 return response.status(generateResponse.status).send({ error: true });
             }
             const generateResponseJson = await generateResponse.json();
-            const responseText = (request.body.claude_allow_plaintext == true &&
-                request.body.model.startsWith('claude-1') ||
+            const plain = (request.body.claude_allow_plaintext == true) ? true : false;
+            const responseText = (plain  &&
+                (request.body.model.startsWith('claude-1') ||
                 request.body.model.startsWith('claude-2') ||
-                request.body.model.startsWith('claude-instant'))
+                request.body.model.startsWith('claude-instant')))
                 ? generateResponseJson.completion : generateResponseJson.content[0].text;
             console.log('Claude response:', generateResponseJson);
 
