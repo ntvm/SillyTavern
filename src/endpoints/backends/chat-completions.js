@@ -154,6 +154,7 @@ async function sendClaudeRequest(request, response) {
     const divider = '-'.repeat(process.stdout.columns);
     const HumAssistOff = getConfigValue('HumAssistOff', false);
     const SystemFul = getConfigValue('SystemFul', true);
+    let Isthinkingrequest = (request.body.claude_thinking_budget !== undefined) ? true : false;
 
     if (!apiKey) {
         console.log(color.red(`Claude API key is missing.\n${divider}`));
@@ -327,6 +328,41 @@ async function sendClaudeRequest(request, response) {
                     top_k: request.body.top_k,
                     stream: request.body.stream,
                 };
+
+                if (Isthinkingrequest) {
+
+                    if ( request.body.claude_thinking_budget < 1024) {
+                        console.log(color.red('Claude API thinking budget is too low.  max thinking budget must be higher than 1024.'));
+                        console.log(color.red('BUDGET WILL BE INCREASED.'));
+                        request.body.claude_thinking_budget =  1024;
+                    }
+
+                    //result of max_tokens minus thinking budget must be more than 1024
+                    let maxtokendifference = request.body.max_tokens - request.body.claude_thinking_budget;
+
+                    if ( maxtokendifference < 0) {
+                        console.log(color.red('Claude API thinking budget is too high. The result of max_tokens minus thinking budget must be lower than Max tokens.'));
+                        console.log(color.red('Disabling thinking.'));
+                        Isthinkingrequest = false;
+                    }
+
+                    if (Isthinkingrequest){
+                        delete requestBody["top_k"];
+                        delete requestBody["top_p"];
+                        requestBody['temperature'] = 1;
+                        requestBody['thinking'] = { 'type':'enabled','budget_tokens':request.body.claude_thinking_budget };
+
+                        //First of all, find number of last message in the array
+                        let lastmessage = requestBody.messages.length - 1;
+
+                        if (requestBody.messages[lastmessage].role === 'assistant') {
+                            //If last message is assistant, then we need to change it to user
+                            requestBody.messages[lastmessage].role = 'user';
+                            requestBody.messages[lastmessage].content = 'Assistant: ' + requestBody.messages[lastmessage].content;
+                        }
+                    }
+                }
+
                 if (use_system_prompt || IsExperemental) {
                     const SysL = 'Claude request: ' + converted_prompt.systemPrompt;
                     console.log(SysL, requestBody);
@@ -359,7 +395,7 @@ async function sendClaudeRequest(request, response) {
                 break;
         }
         let Attempts = 0;
-        while (generateResponse.ok !== true && Attempts < 1) {
+        while (generateResponse.ok !== true && generateResponse.status !== 400 && Attempts < 1) {
             switch (requestRoute){
                 case "plain":
                     generateResponse = await fetch(apiUrl + '/complete', requestjson);
@@ -390,14 +426,25 @@ async function sendClaudeRequest(request, response) {
             }
             const generateResponseJson = await generateResponse.json();
             const plain = (request.body.claude_allow_plaintext == true) ? true : false;
-            const responseText = (plain  &&
+
+            console.log('Claude response:', generateResponseJson);
+
+            if (Isthinkingrequest) {
+                generateResponseJson.content[0]["text"] = generateResponseJson.content[1].text;
+            }
+
+            let responseText = (plain &&
                 (request.body.model.startsWith('claude-1') ||
                 request.body.model.startsWith('claude-2') ||
                 request.body.model.startsWith('claude-instant')))
                 ? generateResponseJson.completion : generateResponseJson.content[0].text;
-            console.log('Claude response:', generateResponseJson);
+
+            if (Isthinkingrequest) {
+                responseText = '<Thinking_Block>\n' + generateResponseJson.content[0].thinking + '\n</Thinking_Block>\n\n\n' + generateResponseJson.content[1].text;
+            }
 
             // Wrap it back to OAI format
+
             const reply = { choices: [{ 'message': { 'content': responseText } }] };
             return response.send(reply);
         }

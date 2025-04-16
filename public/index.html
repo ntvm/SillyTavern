@@ -1818,8 +1818,7 @@
                                                     <div class="toggle-description justifyLeft marginBot5">
                                                         <span data-i18n="claude_allow_plaintext_description">
                                                             Allow Non-chatml formatting in old models where plain text input formatting still available.
-                                                            Allowed models: Claude-1, Claude-instant-1.0, Claude-instant-1.1, Claude-instant-1.2, Claude-1.2, Claude-1.3, Claude-2, Claude-2.1</span></span>
-                                                        </span>
+                                                            Allowed models: Claude-1, Claude-instant-1.0, Claude-instant-1.1, Claude-instant-1.2, Claude-1.2, Claude-1.3, Claude-2, Claude-2.1</span>
                                                     </div>
 
                                                     <label for="claude_exclude_prefixes_asSysOrPlain" title="Exclude Human/Assistant prefixes" class="checkbox_label widthFreeExpand">
@@ -1852,6 +1851,45 @@
                                                         <span data-i18n="">
                                                             Experemental Input format. Insert chat history and everything below into prefill. Working only with models using chatml formatting. (Obviously why)
                                                         </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div data-newbie-hidden class="inline-drawer wide100p" data-source="claude">
+                                            <div class="inline-drawer-toggle inline-drawer-header">
+                                                <b data-i18n="Thinking (claude)">Thinking (Claude)</b>
+                                                <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+                                            </div>
+                                            <div class="inline-drawer-content">
+                                                <div class="range-block m-t-1 wide100p">
+                                                    <label for="claude_allow_thinking" title="Allow thinking for newest claude models" class="checkbox_label">
+                                                        <input id="claude_allow_thinking" type="checkbox" />
+                                                        <span data-i18n="Allow thinking for newest claude models">Allow thinking for newest claude models</span>
+                                                    </label>
+                                                    <div class="toggle-description justifyLeft marginBot5">
+                                                        <span data-i18n="claude_allow_plaintext_description">
+                                                            <div>Warning. May cause problems for non-Anthropic APIs. In this cases just disable the feature;</div>
+                                                            <div>Not every model support thinking;</div>
+                                                            <div>THINKING BUDGET MUST BE HIGHER THAN 1024 and;</div>
+                                                            <div>@MAX_TOKENS - @THINKING_TOKENS;</div>
+                                                            <div>API will assume Temperature equal one;</div>
+                                                            <div>Top-K will be disabled automatically;</div>
+                                                            <div>Top-P will be disabled automatically;</div>
+                                                            <div>Prefill also will be redacted into Human message if it would be presented. PLEASE, REMOVE PREFILL FROM THE PROMPT IN CASE OF THINKING USAGE;</div>
+															<div>Bugdet higher than 4000 tokens can be set manualy;</div>
+                                                            <div>Thinking block will appear in the message only with disabled streaming</div>
+                                                        </span>
+                                                    </div>
+                                                    <div class="range-block-title" data-i18n="Claude_thinking_budget">
+                                                        Claude Thinking budget
+                                                    </div>
+                                                    <div class="range-block-range-and-counter">
+                                                        <div class="range-block-range">
+                                                            <input type="range" id="thinking_budget_claude" name="volume" min="0" max="4000" step="20">
+                                                        </div>
+                                                        <div class="range-block-counter">
+                                                            <input type="number" min="0" max="30000" step="1" data-for="top_p_openai" id="thinking_budget_counter_claude">
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
