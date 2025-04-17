@@ -2049,7 +2049,12 @@ async function sendOpenAIRequest(type, messages, signal) {
         response.body.pipeThrough(eventStream);
         const reader = eventStream.readable.getReader();
         return async function* streamData() {
+            const isThinking = (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_thinking == true) ? true : false; 
+            const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
+            const thinkingClosing = '\n</details>\n</Thinking_Block>\n\n';
+            let currentlyThinking;
             let text = '';
+            if (isThinking == true) { text += thinkingOpening; currentlyThinking = true};
             const swipes = [];
             while (true) {
                 const { done, value } = await reader.read();
@@ -2058,6 +2063,13 @@ async function sendOpenAIRequest(type, messages, signal) {
                 if (rawData === '[DONE]') return;
                 tryParseStreamingError(response, rawData);
                 const parsed = JSON.parse(rawData);
+
+                if (currentlyThinking == true) {
+                    if (parsed?.content_block?.type == 'text') {
+                        text += thinkingClosing;
+                        currentlyThinking = false;
+                    }
+                }
 
                 if (Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
                     const swipeIndex = parsed.choices[0].index - 1;
@@ -2094,7 +2106,7 @@ async function sendOpenAIRequest(type, messages, signal) {
 
 function getStreamingReply(data) {
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_plaintext == false || oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_model.includes('claude-3')) {
-        return data?.delta?.text || '';
+        return data?.delta?.text|| data?.delta?.thinking || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
         return data?.completion || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
