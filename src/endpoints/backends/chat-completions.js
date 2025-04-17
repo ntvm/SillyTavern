@@ -440,7 +440,12 @@ async function sendClaudeRequest(request, response) {
                 ? generateResponseJson.completion : generateResponseJson.content[0].text;
 
             if (Isthinkingrequest) {
-                responseText = '<Thinking_Block>\n' + generateResponseJson.content[0].thinking + '\n</Thinking_Block>\n\n\n' + generateResponseJson.content[1].text;
+                const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
+                const mainThinking = generateResponseJson.content[0].thinking;
+                const thinkingClosing = '\n</details>\n</Thinking_Block>\n\n';
+                const mainAnswer = generateResponseJson.content[1].text;
+
+                responseText = thinkingOpening + mainThinking + thinkingClosing + mainAnswer;
             }
 
             // Wrap it back to OAI format
