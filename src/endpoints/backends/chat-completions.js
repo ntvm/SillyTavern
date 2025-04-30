@@ -304,7 +304,7 @@ async function sendClaudeRequest(request, response) {
                     timeout: 0,
                 };
 
-                if (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy)) {
+                if (proxingRequests && (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy))) {
                     if (!isLocalIP(request.body.reverse_proxy)){
                         requestjson.agent = proxyAgent;
                         console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
@@ -380,7 +380,7 @@ async function sendClaudeRequest(request, response) {
                     timeout: 0,
                 };
 
-                if (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy)) {
+                if (proxingRequests && (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy))) {
                     if (!isLocalIP(request.body.reverse_proxy)){
                         requestjson.agent = proxyAgent;
                         console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
@@ -494,7 +494,7 @@ async function sendScaleRequest(request, response) {
             timeout: 0,
         };
 
-        if (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy)) {
+        if (proxingRequests && (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy))) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 requestjson.agent = proxyAgent;
                 console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
@@ -641,7 +641,7 @@ async function sendMakerSuiteRequest(request, response) {
             timeout: 0,
         };
 
-        if (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy)) {
+        if (proxingRequests && (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy))) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 requestjson.agent = proxyAgent;
                 console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
@@ -762,7 +762,7 @@ async function sendAI21Request(request, response) {
         signal: controller.signal,
     };
 
-    if (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy)) {
+    if (proxingRequests && (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy))) {
         if (!isLocalIP(request.body.reverse_proxy)){
             options.agent = proxyAgent;
             console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
@@ -870,7 +870,7 @@ async function sendMistralAIRequest(request, response) {
             timeout: 0,
         };
 
-        if (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy)) {
+        if (proxingRequests && (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy))) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 config.agent = proxyAgent;
                 console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
@@ -970,7 +970,7 @@ async function sendCohereRequest(request, response) {
             timeout: 0,
         };
 
-        if (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy)) {
+        if (proxingRequests && (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy))) {
             if (!isLocalIP(request.body.reverse_proxy)){
                 config.agent = proxyAgent;
                 console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
@@ -1057,7 +1057,7 @@ router.post('/status', jsonParser, async function (request, response_getstatus_o
             },
         };
 
-        if (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy)) {
+        if (proxingRequests && (request.body.reverse_proxy !== undefined || !(!request.body.reverse_proxy))) {
             if (!isLocalIP(api_url)){
                 requestjson.agent = proxyAgent;
                 console.log('Using proxy: ', `${proxyHost}:${proxyPort}`);
