@@ -3951,7 +3951,7 @@ async function onModelChange() {
 
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
         if (oai_settings.max_context_unlocked) {
-            $('#openai_max_context').attr('max', max_200k);
+            $('#openai_max_context').attr('max', max_1mil);
         }
         else if (value == 'claude-2.1' || value.startsWith('claude-3')) {
             $('#openai_max_context').attr('max', max_200k);
