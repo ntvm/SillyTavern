@@ -1307,10 +1307,6 @@ router.post('/generate', jsonParser, function (request, response) {
     }
 
     const textPrompt = isTextCompletion ? convertTextCompletionPrompt(request.body.messages) : '';
-    const endpointUrl = isTextCompletion && request.body.chat_completion_source !== CHAT_COMPLETION_SOURCES.OPENROUTER ?
-        `${apiUrl}/completions` :
-        `${apiUrl}/chat/completions`;
-
     const controller = new AbortController();
     request.socket.removeAllListeners('close');
     request.socket.on('close', function () {
@@ -1334,6 +1330,43 @@ router.post('/generate', jsonParser, function (request, response) {
         'n': request.body.n,
         ...bodyParams,
     };
+
+    let endpointUrl;
+	
+    if (isTextCompletion && request.body.chat_completion_source !== CHAT_COMPLETION_SOURCES.OPENROUTER) {
+        endpointUrl = `${apiUrl}/completions`;
+    } else if ((request.body.chat_completion_source == CHAT_COMPLETION_SOURCES.CUSTOM || request.body.chat_completion_source == CHAT_COMPLETION_SOURCES.OPENAI) && request.body.OAIresponsesEndpoint) {
+        endpointUrl = `${apiUrl}/responses`;
+
+        if (request.body.messages !== (null || undefined)) {
+            requestBody['input'] = requestBody['messages'];
+            delete requestBody.messages;
+        }
+
+        if (request.body.max_tokens !== (null || undefined)) {
+            requestBody['max_output_tokens'] = requestBody['max_tokens'];
+            delete requestBody.max_tokens;
+        }
+
+        if (request.body.presence_penalty || request.body.frequency_penalty) {
+            console.log('Response API not supporting both presence and frequency penalty')
+        }
+        delete requestBody.frequency_penalty;
+        delete requestBody.presence_penalty;
+
+        if (request.body.stop) {
+            console.log('Response API not supporting stop sequences')
+        }
+        delete requestBody.stop;
+
+        if (request.body.logit_bias) {
+            console.log('Response API not logit bias neither')
+        }
+        delete requestBody.logit_bias;
+
+    } else {
+        endpointUrl = `${apiUrl}/chat/completions`;
+    }
 
     if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CUSTOM) {
         excludeKeysByYaml(requestBody, request.body.custom_exclude_body);

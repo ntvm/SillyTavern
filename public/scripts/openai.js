@@ -1906,11 +1906,6 @@ async function sendOpenAIRequest(type, messages, signal) {
             break;
     }
 
-    // Add logprobs request (currently OpenAI only, max 5 on their side)
-    if (useLogprobs && (isOAI || isCustom)) {
-        generate_data['logprobs'] = 5;
-    }
-
     // Remove logit bias, logprobs and stop strings if it's not supported by the model
     if (isOAI && oai_settings.openai_model.includes('vision') || isOpenRouter && oai_settings.openrouter_model.includes('vision')) {
         delete generate_data.logit_bias;
@@ -1931,6 +1926,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         if (!isQuiet && !oai_settings.exclude_assistant && !extension_settings.Nvkun.exclude_Prefill) {
             generate_data['assistant_prefill'] = substituteParams(oai_settings.assistant_prefill);
         }
+
         if (oai_settings.claude_allow_thinking) {
             generate_data['claude_thinking_budget'] = oai_settings.claude_thinking_budget;
         }
@@ -2006,30 +2002,55 @@ async function sendOpenAIRequest(type, messages, signal) {
     if ((isOAI || isOpenRouter || isMistral || isCustom || isCohere) && oai_settings.seed >= 0) {
         generate_data['seed'] = oai_settings.seed;
     }
-    if (isOAI && oai_settings.openai_model.startsWith('o1') || isCustom && oai_settings.custom_model.includes('o1') || 
-    isOAI && oai_settings.openai_model.startsWith('o3') || isCustom && oai_settings.custom_model.includes('o3')){
-        generate_data['max_completion_tokens'] = generate_data['max_tokens'];
-        delete generate_data.max_tokens;
-        delete generate_data.logprobs;
-        if (extension_settings.ProxyManager.ProxyPrior == false && oai_settings.stream_openai == true
-        || extension_settings.ProxyManager.ProxyPrior == false && oai_settings.stream_openai == true && !oai_settings.reverse_proxy ||
-        extension_settings.ProxyManager.ProxyPrior == false && !oai_settings.proxy_password && oai_settings.stream_openai == true) {
-            alert('STREAMING NOT SUPPORTED BY o1') }
-        delete generate_data.logit_bias;
-        delete generate_data.temperature;
-        delete generate_data.frequency_penalty;
-        delete generate_data.presence_penalty;
-        delete generate_data.top_p;
-        delete generate_data.stop;
-        var messages_for_desystemize = generate_data.messages
-        for (let i = 0; i <= messages_for_desystemize.length - 1; i++){
-            if (messages_for_desystemize[i].role == 'system') {
-                messages_for_desystemize[i].role = 'user'
-            }
-        }
-        generate_data['messages'] = messages_for_desystemize;
-	}
 
+    if (isOAI || isCustom) {
+
+        // Add logprobs request (currently OpenAI only, max 5 on their side)
+        if (useLogprobs) {
+            generate_data['logprobs'] = 5;
+        }
+
+        switch (extension_settings.Nvkun.OAIresponsesEndpoint) {
+            default:
+                extension_settings.Nvkun.OAIresponsesEndpoint = false;
+                saveSettingsDebounced();
+                generate_data['OAIresponsesEndpoint'] = false;
+                break;
+
+            case true:
+                generate_data['OAIresponsesEndpoint'] = true;
+                var sysintodev = generate_data.messages
+                break;
+
+            case false:
+                generate_data['OAIresponsesEndpoint'] = false;
+                break;
+        }
+
+        if (isOAI && oai_settings.openai_model.startsWith('o1') || isCustom && oai_settings.custom_model.includes('o1') || 
+        isOAI && oai_settings.openai_model.startsWith('o3') || isCustom && oai_settings.custom_model.includes('o3')){
+            generate_data['max_completion_tokens'] = generate_data['max_tokens'];
+            delete generate_data.max_tokens;
+            delete generate_data.logprobs;
+            if (extension_settings.ProxyManager.ProxyPrior == false && oai_settings.stream_openai == true
+            || extension_settings.ProxyManager.ProxyPrior == false && oai_settings.stream_openai == true && !oai_settings.reverse_proxy ||
+            extension_settings.ProxyManager.ProxyPrior == false && !oai_settings.proxy_password && oai_settings.stream_openai == true) {
+                alert('STREAMING NOT SUPPORTED BY o1') }
+            delete generate_data.logit_bias;
+            delete generate_data.temperature;
+            delete generate_data.frequency_penalty;
+            delete generate_data.presence_penalty;
+            delete generate_data.top_p;
+            delete generate_data.stop;
+            var messages_for_desystemize = generate_data.messages
+            for (let i = 0; i <= messages_for_desystemize.length - 1; i++){
+                if (messages_for_desystemize[i].role == 'system') {
+                    messages_for_desystemize[i].role = 'user'
+                }
+            }
+            generate_data['messages'] = messages_for_desystemize;
+    	}
+    }
 
 
     const generate_url = '/api/backends/chat-completions/generate';
