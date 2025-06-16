@@ -59,6 +59,7 @@ const defaultSettings = {
     ExamplesExclude: false,
     SubPromptsUsage: false,
     witaggify: false,
+    OAIresponsesEndpoint: false,
     findCount: 10,
     nsfw: false,
 };
@@ -86,6 +87,7 @@ function loadSettings() {
     $('#Regex_Logging').prop('checked', extension_settings.Nvkun.RegexLogging).trigger('input');
     $('#ExamplesExclude').prop('checked', extension_settings.Nvkun.ExamplesExclude).trigger('input');
     $('#SubPromptsUsage').prop('checked', extension_settings.Nvkun.SubPromptsUsage).trigger('input');
+    $('#OAIresponsesEndpoint').prop('checked', extension_settings.Nvkun.OAIresponsesEndpoint).trigger('input');
 }
 
 //Code from City-Unit https://github.com/city-unit/SillyTavern-Chub-Search all rights reserved
@@ -606,14 +608,18 @@ function onSubPromptsUsage() {
     saveSettingsDebounced();
 }
 
+function onOAIresponsesEndpoint() {
+    const value = Boolean($(this).prop('checked'));
+    extension_settings.Nvkun.OAIresponsesEndpoint = value;
+    saveSettingsDebounced();
+}
+
 function onInputerPromptInput() {
     const value = $(this).val();
     extension_settings.Nvkun.Inputer_prompt = value;
     saveSettingsDebounced();
     setInputerContext(value, true);
 }
-
-
 
 function setInputerContext(value, saveToMessage) {
     switch (extension_settings.Nvkun.Inputer_frozen) {
@@ -700,6 +706,7 @@ async function savePreset() {
         Regex_logging: extension_settings.Nvkun.RegexLogging,
         ExamplesExclude: extension_settings.Nvkun.ExamplesExclude,
         SubPromptsUsage: extension_settings.Nvkun.SubPromptsUsage,
+        OAIresponsesEndpoint: extension_settings.Nvkun.OAIresponsesEndpoint,
     };
 
     const response = await fetch('/api/Nvkun/saveNv', {
@@ -833,6 +840,9 @@ jQuery(function () {
                          <label class="checkbox_label for="SubPromptsUsage"><input id="SubPromptsUsage" type="checkbox" />Use subprompts within Grp. Join mode</label>
                     </div>
                     <div>
+                         <label class="checkbox_label for="OAIresponsesEndpoint"><input id="OAIresponsesEndpoint" type="checkbox" />Switch OAI endpoint (/v1/responses)</label>
+                    </div>
+                    <div>
                         <select id="NvPresets" name="preset">
                             <option value="">
                                 <span>-- Selected to change --</span>
@@ -859,6 +869,8 @@ jQuery(function () {
         $('#Regex_Logging').on('input', onRegexLogging);
         $('#ExamplesExclude').on('input', onExamplesExclude);
         $('#SubPromptsUsage').on('input', onSubPromptsUsage);
+        $('#OAIresponsesEndpoint').on('input', onOAIresponsesEndpoint);
+
     }
     $("#external_import_button").after('<button id="search-chub" class="menu_button fa-solid fa-cloud-bolt faSmallFontSquareFix" title="Search CHub for characters"></button>');
     $("#search-chub").on("click", function chub_() {
