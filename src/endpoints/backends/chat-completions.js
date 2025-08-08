@@ -1438,7 +1438,7 @@ router.post('/generate', jsonParser, function (request, response) {
                             if (attemptrAPI.type == 'message'){
                                 for (let ii = 0; ii <= attemptrAPI.content?.length + 1; ii++) {
                                     if (attemptrAPI.content[ii].type == 'output_text'){
-                                        json.choices =  [{message:attemptrAPI.content[ii].text}];
+                                        json.choices = [{message:{content:attemptrAPI.content[ii].text}}];
                                         attemptrAPILayer2resolved = true;
                                         break;
                                     }
@@ -1453,7 +1453,6 @@ router.post('/generate', jsonParser, function (request, response) {
                         json.choices = [{message:'No candidat'}];
                     }
                 }
-
                 response.send(json);
                 console.log(json?.choices?.[0]?.message);
             } else if (fetchResponse.status === 429 && retries > 0) {
