@@ -266,7 +266,18 @@ function getTokenizerModel(requestModel) {
         return 'gpt-4o';
     }
 
+    if (requestModel.includes('o3')) {
+        return 'gpt-4o';
+    }
+    if (requestModel.includes('o4')) {
+        return 'gpt-4o';
+    }
+
     if (requestModel.includes('gpt-4o')) {
+        return 'gpt-4o';
+    }
+
+    if (requestModel.includes('gpt-5')) {
         return 'gpt-4o';
     }
 
