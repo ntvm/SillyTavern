@@ -1332,11 +1332,13 @@ router.post('/generate', jsonParser, function (request, response) {
     };
 
     let endpointUrl;
-	
+
     if (isTextCompletion && request.body.chat_completion_source !== CHAT_COMPLETION_SOURCES.OPENROUTER) {
         endpointUrl = `${apiUrl}/completions`;
     } else if ((request.body.chat_completion_source == CHAT_COMPLETION_SOURCES.CUSTOM || request.body.chat_completion_source == CHAT_COMPLETION_SOURCES.OPENAI) && request.body.OAIresponsesEndpoint) {
         endpointUrl = `${apiUrl}/responses`;
+
+        request.body.isResponseApi = true
 
         if (request.body.messages !== (null || undefined)) {
             requestBody['input'] = requestBody['messages'];
@@ -1377,13 +1379,14 @@ router.post('/generate', jsonParser, function (request, response) {
         method: 'post',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + apiKey,
+            'Authorization': 'Bearer ' + apiKey.replace(/[\r\n]+/g, '').trim(),
             ...headers,
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
         timeout: 0,
     };
+
     if (apiUrl !== undefined || !(!apiUrl)) {
         if (!isLocalIP(apiUrl)){
             config.agent = proxyAgent;
@@ -1408,6 +1411,12 @@ router.post('/generate', jsonParser, function (request, response) {
      */
     async function makeRequest(config, response, request, retries = 5, timeout = 5000) {
         try {
+            let isResponseApi = false;
+
+            if (request.body.isResponseApi == true){
+                isResponseApi = true;
+            }
+
             const fetchResponse = await fetch(endpointUrl, config);
 
             if (request.body.stream) {
@@ -1418,8 +1427,34 @@ router.post('/generate', jsonParser, function (request, response) {
 
             if (fetchResponse.ok) {
                 let json = await fetchResponse.json();
-                response.send(json);
                 console.log(json);
+                let attemptrAPI;
+                let attemptrAPILayer2resolved;
+
+                if (isResponseApi == true){
+                    if (json.output !== undefined) {
+                        for (let i = 0; i < json.output.length; i++) {
+                            attemptrAPI = json.output[i];
+                            if (attemptrAPI.type == 'message'){
+                                for (let ii = 0; ii <= attemptrAPI.content?.length + 1; ii++) {
+                                    if (attemptrAPI.content[ii].type == 'output_text'){
+                                        json.choices =  [{message:attemptrAPI.content[ii].text}];
+                                        attemptrAPILayer2resolved = true;
+                                        break;
+                                    }
+                                }
+                                if (attemptrAPILayer2resolved == true) break;
+                            }
+                        }
+                    }
+                    else if ((json?.choices?.[0]?.message) !== undefined) {
+                        console.log('Sourse used \'non-response\' scheme');
+                    } else {
+                        json.choices = [{message:'No candidat'}];
+                    }
+                }
+
+                response.send(json);
                 console.log(json?.choices?.[0]?.message);
             } else if (fetchResponse.status === 429 && retries > 0) {
                 console.log(`Out of quota, retrying in ${Math.round(timeout / 1000)}s`);

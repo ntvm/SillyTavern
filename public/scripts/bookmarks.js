@@ -37,6 +37,29 @@ export {
 
 const bookmarkNameToken = 'Checkpoint #';
 
+/**
+ * Compute the next checkpoint name by extracting numeric suffixes of existing names and returning prefix + next number.
+ * @param {string[]} chatNames - Existing bookmark names.
+ * @param {string} prefix - The bookmarkNameToken, defaults to bookmarkNameToken.
+ * @returns {string}
+ */
+export function getNextCheckpointName(chatNames, prefix = bookmarkNameToken) {
+    const prefixEscaped = prefix.replace(/[.*+?^${}()|\[\]\\]/g, '\\$&');
+    const prefixRe = new RegExp('^' + prefixEscaped + '(\\d+)');
+    let maxNum = -1;
+    for (const existing of chatNames) {
+        const m = prefixRe.exec(existing);
+        if (m) {
+            const num = parseInt(m[1], 10);
+            if (!isNaN(num) && num > maxNum) {
+                maxNum = num;
+            }
+        }
+    }
+    return prefix + (maxNum + 1);
+}
+
+
 async function getExistingChatNames() {
     if (selected_group) {
         const data = await getGroupPastChats(selected_group);
@@ -65,12 +88,13 @@ async function getBookmarkName() {
         return null;
     }
     else if (name === '') {
-        for (let i = chatNames.length; i < 1000; i++) {
+        /*for (let i = chatNames.length; i < 1000; i++) {
             name = bookmarkNameToken + i;
             if (!chatNames.includes(name)) {
                 break;
             }
-        }
+        }*/
+        name = getNextCheckpointName(chatNames);
     }
 
     return `${name} - ${humanizedDateTime()}`;

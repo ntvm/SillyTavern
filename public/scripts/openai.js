@@ -123,12 +123,13 @@ const max_16k = 16383;
 const max_32k = 32767;
 const max_128k = 128 * 1000;
 const max_200k = 200 * 1000;
+const max_400k = 400 * 1000;
 const max_1mil = 1000 * 1000;
 const scale_max = 8191;
 const claude_max = 9000; // We have a proper tokenizer, so theoretically could be larger (up to 9k)
 const claude_100k_max = 99000;
 let ai21_max = 9200; //can easily fit 9k gpt tokens because j2's tokenizer is efficient af
-const unlocked_max = max_200k;
+const unlocked_max = max_1mil;
 const oai_max_temp = 2.0;
 const claude_max_temp = 1.0; //same as j2
 const j2_max_topk = 10.0;
@@ -1930,6 +1931,11 @@ async function sendOpenAIRequest(type, messages, signal) {
         if (oai_settings.claude_allow_thinking) {
             generate_data['claude_thinking_budget'] = oai_settings.claude_thinking_budget;
         }
+
+        if (generate_data['model'].startsWith('anthropic')) {
+            generate_data['model'] = generate_data['model'] + '-v1:0';
+        }
+
     }
 
     if (isOpenRouter) {
@@ -2010,16 +2016,18 @@ async function sendOpenAIRequest(type, messages, signal) {
             generate_data['logprobs'] = 5;
         }
 
-        switch (extension_settings.Nvkun.OAIresponsesEndpoint) {
-            default:
-                extension_settings.Nvkun.OAIresponsesEndpoint = false;
-                saveSettingsDebounced();
-                generate_data['OAIresponsesEndpoint'] = false;
-                break;
+        let isResponsesendpoint = (extension_settings.Nvkun.OAIresponsesEndpoint || oai_settings.openai_model.startsWith('o3-pro') || ( oai_settings.openai_model.startsWith('gpt-5') && generate_data['reverse_proxy'] == undefined ))
 
+        switch (isResponsesendpoint) {
             case true:
                 generate_data['OAIresponsesEndpoint'] = true;
                 var sysintodev = generate_data.messages
+                for (let i = 0; i <= sysintodev.length - 1; i++){
+                    if (sysintodev[i].role == 'system') {
+                        sysintodev[i].role = 'developer'
+                    }
+                }
+                generate_data['messages'] = sysintodev;
                 break;
 
             case false:
@@ -2028,7 +2036,8 @@ async function sendOpenAIRequest(type, messages, signal) {
         }
 
         if (isOAI && oai_settings.openai_model.startsWith('o1') || isCustom && oai_settings.custom_model.includes('o1') || 
-        isOAI && oai_settings.openai_model.startsWith('o3') || isCustom && oai_settings.custom_model.includes('o3')){
+        isOAI && oai_settings.openai_model.startsWith('o3') || isCustom && oai_settings.custom_model.includes('o3') ||
+        (oai_settings.openai_model.startsWith('gpt-5') && oai_settings.openai_model !== 'gpt-5-chat-latest') ){
             generate_data['max_completion_tokens'] = generate_data['max_tokens'];
             delete generate_data.max_tokens;
             delete generate_data.logprobs;
@@ -3765,6 +3774,9 @@ function getMaxContextOpenAI(value) {
     else if (value.includes('gpt-4.1')) {
         return max_1mil;
     }
+    else if (value.startsWith('gpt-5')) {
+        return max_400k;
+    }
     else if (value.startsWith('o1') || value.startsWith('o3')) {
         return max_128k;
     }
@@ -3927,7 +3939,7 @@ async function onModelChange() {
     }
 
     if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
-        if (oai_settings.max_context_unlocked) {
+        if (oai_settings.max_context_unlocked || value.includes('gemini-2')) {
             $('#openai_max_context').attr('max', max_1mil);
         } else if (value.includes('gemini-1.5-pro') || value.includes('gemini-exp-1206')) {
             $('#openai_max_context').attr('max', max_2mil);
@@ -3974,7 +3986,10 @@ async function onModelChange() {
         if (oai_settings.max_context_unlocked) {
             $('#openai_max_context').attr('max', max_1mil);
         }
-        else if (value == 'claude-2.1' || value.startsWith('claude-3')) {
+        else if (value == 'claude-2.1' || value.startsWith('claude-3') || value.startsWith('claude-4')) {
+            $('#openai_max_context').attr('max', max_200k);
+        }
+        else if (value == 'claude-2.1' || value.startsWith('claude-3') || value.startsWith('claude-4')) {
             $('#openai_max_context').attr('max', max_200k);
         }
         else if (value.endsWith('100k') || value.startsWith('claude-2') || value === 'claude-instant-1.2') {
