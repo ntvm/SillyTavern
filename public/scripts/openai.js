@@ -2016,7 +2016,7 @@ async function sendOpenAIRequest(type, messages, signal) {
             generate_data['logprobs'] = 5;
         }
 
-        let isResponsesendpoint = (extension_settings.Nvkun.OAIresponsesEndpoint || oai_settings.openai_model.startsWith('o3-pro') || ( oai_settings.openai_model.startsWith('gpt-5') && generate_data['reverse_proxy'] == undefined ))
+        let isResponsesendpoint = (extension_settings.Nvkun.OAIresponsesEndpoint || oai_settings.openai_model.startsWith('o3-pro') || ( oai_settings.openai_model.startsWith('gpt-5') && generate_data['reverse_proxy'] == undefined && !isCustom))
 
         switch (isResponsesendpoint) {
             case true:
@@ -2026,6 +2026,7 @@ async function sendOpenAIRequest(type, messages, signal) {
                     if (sysintodev[i].role == 'system') {
                         sysintodev[i].role = 'developer'
                     }
+                    delete sysintodev[i].name;
                 }
                 generate_data['messages'] = sysintodev;
                 break;
