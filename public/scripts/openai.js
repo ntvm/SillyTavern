@@ -216,6 +216,15 @@ const prefixMap = selected_group ? {
         system: '',
     };
 
+const reasoning_effort_types = {
+    auto: 'auto',
+    min: 'minimal',
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    max: 'max',
+};
+
 const default_settings = {
     preset_settings_openai: 'Default',
     temp_openai: 1.0,
@@ -297,6 +306,7 @@ const default_settings = {
     n: 1,
     claude_allow_thinking: false,
     claude_thinking_budget: 2000,
+    reasoning_effort: reasoning_effort_types.auto,
 };
 
 
@@ -518,6 +528,34 @@ function convertChatCompletionToInstruct(messages, type) {
     }
 
     return prompt;
+}
+
+function getReasoningEffort() {
+    // These sources expect the effort as string.
+    const reasoningEffortSources = [
+        chat_completion_sources.OPENAI,
+        chat_completion_sources.CUSTOM,
+        chat_completion_sources.XAI,
+        chat_completion_sources.AIMLAPI,
+        chat_completion_sources.OPENROUTER,
+        chat_completion_sources.POLLINATIONS,
+        chat_completion_sources.PERPLEXITY,
+    ];
+
+    if (!reasoningEffortSources.includes(oai_settings.chat_completion_source)) {
+        return oai_settings.reasoning_effort;
+    }
+
+    switch (oai_settings.reasoning_effort) {
+        case reasoning_effort_types.auto:
+            return undefined;
+        case reasoning_effort_types.min:
+            return 'minimal';
+        case reasoning_effort_types.max:
+            return 'max';
+        default:
+            return oai_settings.reasoning_effort;
+    }
 }
 
 /**
@@ -2052,6 +2090,7 @@ async function sendOpenAIRequest(type, messages, signal) {
             delete generate_data.presence_penalty;
             delete generate_data.top_p;
             delete generate_data.stop;
+			generate_data.reasoning_effort = getReasoningEffort();
             var messages_for_desystemize = generate_data.messages
             for (let i = 0; i <= messages_for_desystemize.length - 1; i++){
                 if (messages_for_desystemize[i].role == 'system') {
@@ -2959,6 +2998,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.n = settings.n ?? default_settings.n;
     oai_settings.claude_allow_thinking = settings.claude_allow_thinking ?? default_settings.claude_allow_thinking;
     oai_settings.claude_thinking_budget = settings.claude_thinking_budget ?? default_settings.claude_thinking_budget;
+    oai_settings.reasoning_effort = settings.reasoning_effort ?? default_settings.reasoning_effort;
 
     oai_settings.prompts = settings.prompts ?? default_settings.prompts;
     oai_settings.prompt_order = settings.prompt_order ?? default_settings.prompt_order;
@@ -2971,7 +3011,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.squash_system_messages = settings.squash_system_messages ?? default_settings.squash_system_messages;
     oai_settings.continue_prefill = settings.continue_prefill ?? default_settings.continue_prefill;
     oai_settings.names_behavior = settings.names_behavior ?? default_settings.names_behavior;
-    oai_settings.continue_postfix = settings.continue_postfix ?? default_settings.continue_postfix;
+    oai_settings.continue_postfix = settings.continue_postfix ?? default_settings.continue_postfix;	
 
     if (settings.wrap_in_quotes !== undefined) oai_settings.wrap_in_quotes = !!settings.wrap_in_quotes;
     if (settings.claude_allow_plaintext !== undefined) oai_settings.claude_allow_plaintext = !!settings.claude_allow_plaintext;
@@ -3098,6 +3138,9 @@ function loadOpenAISettings(data, settings) {
         $('#openai_logit_bias_preset').append(option);
     }
     $('#openai_logit_bias_preset').trigger('change');
+
+    $('#openai_reasoning_effort').val(oai_settings.reasoning_effort);
+    $(`#openai_reasoning_effort option[value="${oai_settings.reasoning_effort}"]`).prop('selected', true);
 
     // Upgrade Palm to Makersuite
     if (oai_settings.chat_completion_source === 'palm') {
@@ -3333,6 +3376,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         n: settings.n,
         claude_allow_thinking: settings.claude_allow_thinking,
         claude_thinking_budget: settings.claude_thinking_budget,
+		openai_reasoning_effort: settings.openai_reasoning_effort,
 
 
     };
@@ -3726,6 +3770,7 @@ function onSettingsPresetChange() {
         n: ['#n_openai', 'n', false],
         claude_allow_thinking: ['#claude_allow_thinking', 'claude_allow_thinking', false],
         claude_thinking_budget: ['#thinking_budget_claude', 'claude_thinking_budget', false],
+		reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     };
 
     const presetName = $('#settings_preset_openai').find(':selected').text();
@@ -5019,6 +5064,11 @@ $(document).ready(async function () {
 
     $('#n_openai').on('input', function () {
         oai_settings.n = Number($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#openai_reasoning_effort').on('input', function () {
+        oai_settings.reasoning_effort = String($(this).val());
         saveSettingsDebounced();
     });
 

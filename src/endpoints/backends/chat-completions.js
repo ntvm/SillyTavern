@@ -1370,6 +1370,22 @@ router.post('/generate', jsonParser, function (request, response) {
         endpointUrl = `${apiUrl}/chat/completions`;
     }
 
+    if (request.body.reasoning_effort) {
+        requestBody.reasoning = { effort: request.body.reasoning_effort };
+    }
+
+    if (request.body.reasoning_effort && [CHAT_COMPLETION_SOURCES.CUSTOM, CHAT_COMPLETION_SOURCES.OPENAI].includes(request.body.chat_completion_source)) {
+        if ((['o1', 'o3-mini', 'o3-mini-2025-01-31', 'o4-mini', 'o4-mini-2025-04-16', 'o3', 'o3-2025-04-16'].includes(request.body.model) || request.body.model.startsWith('gpt-5')) && !request.body.model.includes('gpt-5-chat-latest')) {
+	        requestBody.reasoning = {effort:request.body.reasoning_effort}//{summary:'detailed'}
+        }
+    }
+
+    /*if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI && (request.body.model.startsWith('o1')|| request.body.model.startsWith('o3') || request.body.model.startsWith('gpt-5') && !request.body.model.includes('gpt-5-chat-latest'))) {
+	    requestBody.reasoning = {effort:request.body.reasoning_effort}//{summary:'detailed'}
+    }
+    //effort: minimal, low, medium, and high.
+    //summary string or null A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. One of auto, concise, or detailed.
+    */
     if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CUSTOM) {
         excludeKeysByYaml(requestBody, request.body.custom_exclude_body);
     }
