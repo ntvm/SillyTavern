@@ -1778,6 +1778,58 @@
                                                 Merges all system messages up until the first message with a non system role, and sends them through google's system_instruction field instead of with the rest of the prompt contents.
                                             </span>
                                         </div>
+                                        <div data-newbie-hidden class="inline-drawer wide100p" data-source="makersuite">
+                                            <div class="inline-drawer-toggle inline-drawer-header">
+                                                <b data-i18n="Thinking (Gemini)">Thinking (Gemini)</b>
+                                                <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+                                            </div>
+                                            <div class="inline-drawer-content">
+                                                <div class="range-block m-t-1 wide100p">
+                                                    <label for="claude_allow_thinking" title="Allow thinking for newest claude models" class="checkbox_label">
+                                                        <input id="claude_allow_thinking" type="checkbox" />
+                                                        <span data-i18n="Allow thinking for newest gemini models">Allow SillyTavern modify request with thinking for (2.5+) Gemini models</span>
+                                                    </label>
+                                                    <div class="toggle-description justifyLeft marginBot5">
+                                                        <span data-i18n="claude_allow_plaintext_description">
+                                                            <div>Warning. May cause problems for non-Makersuite APIs. In this cases just disable the feature;</div>
+                                                            <div>Not every model support thinking (2.5+ only);</div>
+                                                            <div>ONLY FLASH AND FLASH LITE SUPPORTING THINKING DISABLE;</div>
+                                                            <br>
+                                                            <div>Pro models range: 128-32768;</div>
+                                                            <div>IN CASE you need to get Thinking Summary without setting thinking budget;</div>
+                                                            <div>Set any value below 128 to let pro model still decide thinking budget at it's own</div>
+                                                            <br>
+                                                            <div>Flash model range: 0-24576;</div>
+                                                            <div>If Budget amount is zero, Flash would not thinking;</div>
+                                                            <br>
+                                                            <div>Flash Lite models range: 0 OR 512-24576;</div>
+                                                            <div>Flash Lite does not thinking by default;</div>
+                                                            <br>
+                                                            <div>Not recommending Streaming Using.</div>
+                                                            <div>Although, Streaming is working, As I know, IT WILL mess up with Thinking summary.</div>
+                                                            <div>Trust me. Non-streaming summarize will be MUCH better</div>
+                                                            <br>
+															<div>Bugdet higher than 24576 tokens can be set manualy (Currently 32768 tokens);</div>
+                                                            <br>
+                                                            <div>P.s. All Tags &ltThinking_Block&gt would be trimmed out of prompt forcefully.</div>
+                                                            <div>Rename tags if you need to insert it into context.</div>
+                                                            <div>For example, &ltReasoning_Block&gt &lt/Reasoning_Block&gt</div>
+                                                        </span>
+                                                    </div>
+                                                    <div class="range-block-title" data-i18n="Gemini_thinking_budget">
+                                                        Model Thinking budget
+                                                    </div>
+                                                    <div class="range-block-range-and-counter">
+                                                        <div class="range-block-range">
+                                                            <input type="range" id="thinking_budget_claude" name="volume" min="0" max="24576" step="20">
+                                                        </div>
+                                                        <div class="range-block-counter">
+                                                            <input type="number" min="0" max="32768" step="1" data-for="thinking_budget_counter_claude" id="thinking_budget_counter_claude">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div data-newbie-hidden class="range-block" data-source="claude">
                                         <div id="claude_assistant_prefill_block" class="wide100p">
@@ -1855,7 +1907,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div data-newbie-hidden class="inline-drawer wide100p" data-source="claude">
+                                        <div data-newbie-hidden class="inline-drawer wide100p">
                                             <div class="inline-drawer-toggle inline-drawer-header">
                                                 <b data-i18n="Thinking (claude)">Thinking (Claude)</b>
                                                 <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
@@ -1864,7 +1916,7 @@
                                                 <div class="range-block m-t-1 wide100p">
                                                     <label for="claude_allow_thinking" title="Allow thinking for newest claude models" class="checkbox_label">
                                                         <input id="claude_allow_thinking" type="checkbox" />
-                                                        <span data-i18n="Allow thinking for newest claude models">Allow thinking for newest claude models</span>
+                                                        <span data-i18n="Allow thinking for newest claude models">Allow thinking for newest (3.7+) claude models</span>
                                                     </label>
                                                     <div class="toggle-description justifyLeft marginBot5">
                                                         <span data-i18n="claude_allow_plaintext_description">
@@ -1876,19 +1928,19 @@
                                                             <div>Top-K will be disabled automatically;</div>
                                                             <div>Top-P will be disabled automatically;</div>
                                                             <div>Prefill also will be redacted into Human message if it would be presented. PLEASE, REMOVE PREFILL FROM THE PROMPT IN CASE OF THINKING USAGE;</div>
-															<div>Bugdet higher than 4000 tokens can be set manualy;</div>
+															<div>Bugdet higher than 24576 tokens can be set manualy (Currently 32768 tokens);</div>
                                                             <div>Thinking block will appear in the message only with disabled streaming</div>
                                                         </span>
                                                     </div>
                                                     <div class="range-block-title" data-i18n="Claude_thinking_budget">
-                                                        Claude Thinking budget
+                                                        Model Thinking budget
                                                     </div>
                                                     <div class="range-block-range-and-counter">
                                                         <div class="range-block-range">
-                                                            <input type="range" id="thinking_budget_claude" name="volume" min="0" max="4000" step="20">
+                                                            <input type="range" id="thinking_budget_claude" name="volume" min="0" max="24576" step="20">
                                                         </div>
                                                         <div class="range-block-counter">
-                                                            <input type="number" min="0" max="30000" step="1" data-for="top_p_openai" id="thinking_budget_counter_claude">
+                                                            <input type="number" min="0" max="32768" step="1" data-for="thinking_budget_counter_claude" id="thinking_budget_counter_claude">
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2834,13 +2886,9 @@
                                 <select id="model_google_select">
                                     <optgroup label="Primary">
                                         <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                        <option value="gemini-2.5-pro-exp-03-25">Gemini 2.5 Pro Experemental (03.25)</option>
-                                        <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash Preview (05.20)</option>
-                                        <option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro Preview (06.05)</option>
-                                        <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro Preview (05.06)</option>
+                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                        <option value="gemini-2.5-lite">Gemini 2.5 Flash Lite</option>
                                         <option value="gemini-2.0-flash"> Gemini 2.0 Flash</option>
-                                        <option value="gemini-2.0-pro-exp-02-05">Gemini 2.0 Pro Experemental</option>
-                                        <option value="gemini-2.0-flash-exp"> Gemini 2.0 Flash Experemental</option>
                                         <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
                                         <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                                         <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
@@ -2853,6 +2901,12 @@
                                         <option value="chat-bison-001">PaLM 2 Chat (Legacy)</option>
                                     </optgroup>
                                     <optgroup label="Subversions">
+                                        <option value="gemini-2.5-pro-exp-03-25">Gemini 2.5 Pro Experemental (03.25)</option>
+                                        <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash Preview (05.20)</option>
+                                        <option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro Preview (06.05)</option>
+                                        <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro Preview (05.06)</option>
+                                        <option value="gemini-2.0-pro-exp-02-05">Gemini 2.0 Pro Experemental</option>
+                                        <option value="gemini-2.0-flash-exp"> Gemini 2.0 Flash Experemental</option>
                                         <option value="gemini-1.5-pro-exp-0801">Gemini 1.5 Pro Experimental 2024-08-01</option>
                                         <option value="gemini-1.5-pro-exp-0827">Gemini 1.5 Pro Experimental 2024-08-27</option>
                                         <option value="gemini-exp-1114">Gemini Experiment 2024-11-14</option>

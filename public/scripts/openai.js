@@ -1967,11 +1967,32 @@ async function sendOpenAIRequest(type, messages, signal) {
         }
 
         if (oai_settings.claude_allow_thinking) {
-            generate_data['claude_thinking_budget'] = oai_settings.claude_thinking_budget;
+            generate_data['model_thinking_budget'] = oai_settings.claude_thinking_budget;
         }
 
         if (generate_data['model'].startsWith('anthropic')) {
             generate_data['model'] = generate_data['model'] + '-v1:0';
+        }
+
+        if (generate_data.model.includes('claude-opus-4-1')) {
+
+            if ( generate_data.temperature && generate_data.top_p == 0 ) {
+                console.log('Top_p deleted, Since value is 0 and Opus 4.1 NOT supporting BOTH temperature and Top_p');
+                delete generate_data.top_p;
+            }
+
+            if ( generate_data.temperature == 0 && generate_data.top_p ) {
+                console.log('Temperature deleted, Since value is 0 and Opus 4.1 NOT supporting BOTH temperature and Top_p');
+                delete generate_data.temperature;
+            }
+
+            if ( generate_data.temperature && generate_data.top_p ) {
+                alert('Opus 4.1 does not allow both temperature and top_p parameters to be specified.'
+                    + '\nAssuming TEMP is Priority parameter. (Top_p will be deleted)'
+                    + 'Please, set unimportant parameter to zero'
+                );
+                delete generate_data.top_p;
+            }
         }
 
     }
@@ -1998,6 +2019,11 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['top_k'] = Number(oai_settings.top_k_openai);
         generate_data['stop'] = [nameStopString, substituteParams(oai_settings.new_chat_prompt), ...getCustomStoppingStrings(stopStringsLimit)];
         generate_data['use_makersuite_sysprompt'] = oai_settings.use_makersuite_sysprompt;
+
+        if (oai_settings.claude_allow_thinking) {
+            generate_data['model_thinking_budget'] = oai_settings.claude_thinking_budget;
+        }
+
     }
 
     if (isAI21) {
@@ -2119,12 +2145,20 @@ async function sendOpenAIRequest(type, messages, signal) {
         response.body.pipeThrough(eventStream);
         const reader = eventStream.readable.getReader();
         return async function* streamData() {
-            const isThinking = (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_thinking == true) ? true : false; 
+            const isThinkingClaude = (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE
+                && oai_settings.claude_allow_thinking == true) ? true : false; 
+
+            const isThinkingGemini = (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE
+                && oai_settings.claude_allow_thinking == true) ? true : false; 
+
             const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
             const thinkingClosing = '\n</details>\n</Thinking_Block>\n\n';
             let currentlyThinking;
             let text = '';
-            if (isThinking == true) { text += thinkingOpening; currentlyThinking = true};
+            if (isThinkingClaude == true || isThinkingGemini == true) { 
+                text += thinkingOpening; 
+                currentlyThinking = true
+            };
             const swipes = [];
             while (true) {
                 const { done, value } = await reader.read();
@@ -2135,10 +2169,21 @@ async function sendOpenAIRequest(type, messages, signal) {
                 const parsed = JSON.parse(rawData);
 
                 if (currentlyThinking == true) {
-                    if (parsed?.content_block?.type == 'text') {
-                        text += thinkingClosing;
-                        currentlyThinking = false;
+
+                    if (isThinkingClaude) {
+                        if (parsed?.content_block?.type == 'text') {
+                            text += thinkingClosing;
+                            currentlyThinking = false;
+                        }
                     }
+
+                    if (isThinkingGemini) {
+                        if (parsed?.candidates?.[0]?.content?.parts?.[0]?.thought == null) {
+                            text += thinkingClosing;
+                            currentlyThinking = false;
+                        }
+                    }
+
                 }
 
                 if (Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
@@ -3996,8 +4041,8 @@ async function onModelChange() {
         } else {
             $('#openai_max_context').attr('max', max_8k);
         }
-        oai_settings.temp_openai = Math.min(claude_max_temp, oai_settings.temp_openai);
-        $('#temp_openai').attr('max', claude_max_temp).val(oai_settings.temp_openai).trigger('input');
+        //oai_settings.temp_openai = Math.min(claude_max_temp, oai_settings.temp_openai);
+        //$('#temp_openai').attr('max', claude_max_temp).val(oai_settings.temp_openai).trigger('input');
         oai_settings.openai_max_context = Math.min(Number($('#openai_max_context').attr('max')), oai_settings.openai_max_context);
         $('#openai_max_context').val(oai_settings.openai_max_context).trigger('input');
     }
@@ -4521,10 +4566,14 @@ export function isImageInliningSupported() {
         'gemini-1.5-pro-latest',
         'gemini-pro-vision',
         'claude-3',
+        'claude-4',
         'gpt-4-turbo',
         'gpt-4o',
         'chatgpt-4o-latest',
         'gpt-4.1',
+        'gpt-5',
+        'o3',
+        'gemini-2.5',
     ];
 
     switch (oai_settings.chat_completion_source) {

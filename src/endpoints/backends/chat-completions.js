@@ -154,7 +154,7 @@ async function sendClaudeRequest(request, response) {
     const divider = '-'.repeat(process.stdout.columns);
     const HumAssistOff = getConfigValue('HumAssistOff', false);
     const SystemFul = getConfigValue('SystemFul', true);
-    let Isthinkingrequest = (request.body.claude_thinking_budget !== undefined) ? true : false;
+    let Isthinkingrequest = (request.body.model_thinking_budget !== undefined) ? true : false;
 
     if (!apiKey) {
         console.log(color.red(`Claude API key is missing.\n${divider}`));
@@ -330,14 +330,14 @@ async function sendClaudeRequest(request, response) {
 
                 if (Isthinkingrequest) {
 
-                    if ( request.body.claude_thinking_budget < 1024) {
+                    if ( request.body.model_thinking_budget < 1024) {
                         console.log(color.red('Claude API thinking budget is too low.  max thinking budget must be higher than 1024.'));
                         console.log(color.red('BUDGET WILL BE INCREASED.'));
-                        request.body.claude_thinking_budget =  1024;
+                        request.body.model_thinking_budget =  1024;
                     }
 
                     //result of max_tokens minus thinking budget must be more than 1024
-                    let maxtokendifference = request.body.max_tokens - request.body.claude_thinking_budget;
+                    let maxtokendifference = request.body.max_tokens - request.body.model_thinking_budget;
 
                     if ( maxtokendifference < 0) {
                         console.log(color.red('Claude API thinking budget is too high. The result of max_tokens minus thinking budget must be lower than Max tokens.'));
@@ -349,7 +349,7 @@ async function sendClaudeRequest(request, response) {
                         delete requestBody["top_k"];
                         delete requestBody["top_p"];
                         requestBody['temperature'] = 1;
-                        requestBody['thinking'] = { 'type':'enabled','budget_tokens':request.body.claude_thinking_budget };
+                        requestBody['thinking'] = { 'type':'enabled','budget_tokens':request.body.model_thinking_budget };
 
                         //First of all, find number of last message in the array
                         let lastmessage = requestBody.messages.length - 1;
@@ -532,6 +532,7 @@ async function sendScaleRequest(request, response) {
 async function sendMakerSuiteRequest(request, response) {
     const baseURL = (request.body.reverse_proxy) ? request.body.reverse_proxy : API_GOOGLE;
     const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE);
+    let isThinkingRequest = (request.body.model_thinking_budget !== undefined) ? true : false;
 
     if (!apiKey) {
         console.log('MakerSuite API key is missing.');
@@ -551,6 +552,38 @@ async function sendMakerSuiteRequest(request, response) {
         topP: request.body.top_p,
         topK: request.body.top_k || undefined,
     };
+
+    if (isThinkingRequest) {
+
+        let InsertTokens = true;
+
+        if ( request.body.model.includes('pro') && request.body.model_thinking_budget < 128 ) {
+            console.log(color.red('Thinking CAN-NOT be disabled on Pro models.'));
+            console.log(color.red('Model will choose avilable amount of tokens at it\'s own'));
+            InsertTokens = false;
+        }
+
+        if ( request.body.model.includes('flash') && request.body.model_thinking_budget == 0) {
+            console.log(color.red('Turning off Thinking...'));
+            request.body.model_thinking_budget = 0;
+        }
+
+        if ( request.body.model.includes('flash-lite') && request.body.model_thinking_budget < 512 && !(request.body.model_thinking_budget == 0) ) {
+            console.log(color.red('Budget can not be lesser than 512 tokens if thinking is enabled'));
+            request.body.model_thinking_budget = 512;
+        } else if ( request.body.model.includes('flash') && request.body.model_thinking_budget == 0) {
+            console.log(color.red('Turning off Thinking...'));
+            request.body.model_thinking_budget = 0;
+        }
+
+        let thinkingRequest = { 'includeThoughts':true };
+		
+        if (InsertTokens == true) {
+            thinkingRequest.thinkingBudget = request.body.model_thinking_budget
+        }
+
+        generationConfig.thinkingConfig = thinkingRequest;
+    }
 
     function getGeminiBody() {
         if (!Array.isArray(generationConfig.stopSequences) || !generationConfig.stopSequences.length) {
@@ -683,15 +716,32 @@ async function sendMakerSuiteRequest(request, response) {
                 return response.send({ error: { message } });
             }
 
+            if (! (candidates[0].content.parts[0].thought == undefined) ){
+                if (candidates[0].content.parts[0].thought == true) {
+                    console.log('MakerSuite response thinking:', candidates[0].content.parts[0].text);
+                    const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
+                    const mainThinking = candidates[0].content.parts[0].text;
+                    const thinkingClosing = '\n</details>\n</Thinking_Block>\n\n';
+                    const mainAnswer = candidates[0].content.parts[1].text;
+                    console.log('\n\n\nMakerSuite response:', mainAnswer);
+                    candidates[0].content = thinkingOpening + mainThinking + thinkingClosing + mainAnswer;
+                }
+            } else {
+                var logGemini = true;
+            }
+
             const responseContent = candidates[0].content ?? candidates[0].output;
             const responseText = typeof responseContent === 'string' ? responseContent : responseContent?.parts?.[0]?.text;
+
             if (!responseText) {
                 let message = 'MakerSuite Candidate text empty';
                 console.log(message, generateResponseJson);
                 return response.send({ error: { message } });
             }
 
-            console.log('MakerSuite response:', responseText);
+            if (logGemini) {
+                console.log('MakerSuite response:', responseText);
+            }
 
             // Wrap it back to OAI format
             const reply = { choices: [{ 'message': { 'content': responseText } }] };

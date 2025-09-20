@@ -1,3 +1,5 @@
+const multer = require('multer');
+
 require('./polyfill.js');
 
 const PROMPT_PLACEHOLDER = 'Let\'s get started.';
@@ -550,6 +552,9 @@ function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '
         'gemini-1.5-pro-exp-0827',
         'gemini-1.0-pro-vision-latest',
         'gemini-pro-vision',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
     ];
 
 
@@ -597,14 +602,16 @@ function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '
             delete message.name;
         }
 
+        TrimThink = /(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/gi;
+
         //create the prompt parts
         const parts = [];
         if (typeof message.content === 'string') {
-            parts.push({ text: message.content });
+            parts.push({ text: message.content.replace(TrimThink,'') });
         } else if (Array.isArray(message.content)) {
             message.content.forEach((part) => {
                 if (part.type === 'text') {
-                    parts.push({ text: part.text });
+                    parts.push({ text: part.text.replace(TrimThink,'') });
                 } else if (part.type === 'image_url' && isMultimodal) {
                     parts.push({
                         inlineData: {
@@ -620,6 +627,14 @@ function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '
         // merge consecutive messages with the same role
         if (index > 0 && message.role === contents[contents.length - 1].role) {
             contents[contents.length - 1].parts[0].text += '\n\n' + parts[0].text;
+            if (isMultimodal && parts.length > 1) {
+                // @ts-ignore
+                for (let i = 1; i < parts.length; i++) {
+                    if (parts[i].inlineData) {
+                        contents[contents.length - 1].parts.push(parts[i]);
+                    }
+                }
+            }
         } else {
             contents.push({
                 role: message.role,
@@ -629,7 +644,7 @@ function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '
     });
 
     // pro 1.5 doesn't require a dummy image to be attached, other vision models do
-    if (isMultimodal && model !== 'gemini-1.5-pro-latest' && !hasImage) {
+    if (isMultimodal && model !== 'gemini-1.5-pro-latest' && !(model.includes('gemini-2.5')) && !hasImage) {
         contents[0].parts.push({
             inlineData: {
                 mimeType: 'image/png',
