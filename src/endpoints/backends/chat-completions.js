@@ -614,6 +614,10 @@ async function sendMakerSuiteRequest(request, response) {
             body.system_instruction = prompt.system_instruction;
         }
 
+        if (request.body.websearch) {
+            body.tools = [{ googleSearch: {}}];
+		}
+
         return body;
     }
 

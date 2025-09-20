@@ -2024,6 +2024,10 @@ async function sendOpenAIRequest(type, messages, signal) {
             generate_data['model_thinking_budget'] = oai_settings.claude_thinking_budget;
         }
 
+        if (oai_settings.websearch_cohere) {
+            generate_data['websearch'] = oai_settings.websearch_cohere;
+        }
+
     }
 
     if (isAI21) {
