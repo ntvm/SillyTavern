@@ -602,16 +602,16 @@ function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '
             delete message.name;
         }
 
-        TrimThink = /(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/gi;
+
 
         //create the prompt parts
         const parts = [];
         if (typeof message.content === 'string') {
-            parts.push({ text: message.content.replace(TrimThink,'') });
+            parts.push({ text: message.content });
         } else if (Array.isArray(message.content)) {
             message.content.forEach((part) => {
                 if (part.type === 'text') {
-                    parts.push({ text: part.text.replace(TrimThink,'') });
+                    parts.push({ text: part.text });
                 } else if (part.type === 'image_url' && isMultimodal) {
                     parts.push({
                         inlineData: {

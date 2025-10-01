@@ -1261,6 +1261,10 @@ router.post('/bias', jsonParser, async function (request, response) {
 router.post('/generate', jsonParser, function (request, response) {
     if (!request.body) return response.status(400).send({ error: true });
 
+    request.body.messages.forEach(
+        message => { message.content = message.content.replace(/(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i,''); }
+    );
+
     switch (request.body.chat_completion_source) {
         case CHAT_COMPLETION_SOURCES.CLAUDE: return sendClaudeRequest(request, response);
         case CHAT_COMPLETION_SOURCES.SCALE: return sendScaleRequest(request, response);
