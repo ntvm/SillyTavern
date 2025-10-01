@@ -532,7 +532,7 @@ async function sendScaleRequest(request, response) {
 async function sendMakerSuiteRequest(request, response) {
     const baseURL = (request.body.reverse_proxy) ? request.body.reverse_proxy : API_GOOGLE;
     const apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MAKERSUITE);
-    let isThinkingRequest = (request.body.model_thinking_budget !== undefined) ? true : false;
+    let isThinkingRequest = (request.body.model_thinking_budget !== undefined ) ? true : false;
 
     if (!apiKey) {
         console.log('MakerSuite API key is missing.');
@@ -580,10 +580,12 @@ async function sendMakerSuiteRequest(request, response) {
 		
         if (InsertTokens == true) {
             thinkingRequest.thinkingBudget = request.body.model_thinking_budget
-        }
+        } else { isThinkingRequest = false }
 
         generationConfig.thinkingConfig = thinkingRequest;
     }
+
+    var logGemini;
 
     function getGeminiBody() {
         if (!Array.isArray(generationConfig.stopSequences) || !generationConfig.stopSequences.length) {
@@ -720,18 +722,20 @@ async function sendMakerSuiteRequest(request, response) {
                 return response.send({ error: { message } });
             }
 
-            if (! (candidates[0].content.parts[0].thought == undefined) ){
-                if (candidates[0].content.parts[0].thought == true) {
-                    console.log('MakerSuite response thinking:', candidates[0].content.parts[0].text);
-                    const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
-                    const mainThinking = candidates[0].content.parts[0].text;
-                    const thinkingClosing = '\n</details>\n</Thinking_Block>\n\n';
-                    const mainAnswer = candidates[0].content.parts[1].text;
-                    console.log('\n\n\nMakerSuite response:', mainAnswer);
-                    candidates[0].content = thinkingOpening + mainThinking + thinkingClosing + mainAnswer;
-                }
+            if (isThinkingRequest == true){
+                if (!(candidates[0]?.content?.parts[0]?.thought == undefined)){
+                    if (candidates[0].content.parts[0].thought == true) {
+                        console.log('MakerSuite response thinking:', candidates[0].content.parts[0].text);
+                        const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
+                        const mainThinking = candidates[0].content.parts[0].text;
+                        const thinkingClosing = `\nTotal thinking tokens usage: ${generateResponseJson.usageMetadata.thoughtsTokenCount}\n\n</details>\n</Thinking_Block>\n\n`;
+                        const mainAnswer = candidates[0].content.parts[1].text;
+                        console.log('\n\n\nMakerSuite response:', mainAnswer);
+                        candidates[0].content = thinkingOpening + mainThinking + thinkingClosing + mainAnswer;
+                    }
+                } else { logGemini = true; }
             } else {
-                var logGemini = true;
+                logGemini = true;
             }
 
             const responseContent = candidates[0].content ?? candidates[0].output;
