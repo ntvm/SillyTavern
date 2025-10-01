@@ -2156,7 +2156,7 @@ async function sendOpenAIRequest(type, messages, signal) {
                 && oai_settings.claude_allow_thinking == true) ? true : false; 
 
             const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
-            const thinkingClosing = '\n</details>\n</Thinking_Block>\n\n';
+            const thinkingClosing = '\n\n</details>\n</Thinking_Block>\n\n';
             let currentlyThinking;
             let text = '';
             if (isThinkingClaude == true || isThinkingGemini == true) { 
@@ -2183,7 +2183,7 @@ async function sendOpenAIRequest(type, messages, signal) {
 
                     if (isThinkingGemini) {
                         if (parsed?.candidates?.[0]?.content?.parts?.[0]?.thought == null) {
-                            text += thinkingClosing;
+                            text += `\n\nTotal thinking tokens usage: ${parsed.usageMetadata.thoughtsTokenCount}` + thinkingClosing;
                             currentlyThinking = false;
                         }
                     }
@@ -2224,10 +2224,10 @@ async function sendOpenAIRequest(type, messages, signal) {
 }
 
 function getStreamingReply(data) {
-    if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_plaintext == false || oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_model.includes('claude-3')) {
-        return data?.delta?.text|| data?.delta?.thinking || '';
-    } else if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
+    if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_plaintext == true) {
         return data?.completion || '';
+    } else if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
+        return data?.delta?.text|| data?.delta?.thinking || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } else {
