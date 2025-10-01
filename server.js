@@ -140,6 +140,10 @@ const cliArguments = yargs(hideBin(process.argv))
         type: 'number',
         default: null,
         describe: 'proxyPort',
+    }).option('simplyConsole', {
+        type: 'boolean',
+        default: 'false',
+        describe: 'Simplify requestjsons in console. Faster perfomance with the readability cost',
     }).parseSync();
 
 // change all relative paths
