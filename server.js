@@ -140,12 +140,17 @@ const cliArguments = yargs(hideBin(process.argv))
         type: 'number',
         default: null,
         describe: 'proxyPort',
+    }).option('simplyConsole', {
+        type: 'boolean',
+        default: 'false',
+        describe: 'Simplify requestjsons in console. Faster perfomance with the readability cost',
     }).parseSync();
 
 // change all relative paths
 const serverDirectory = process['pkg'] ? path.dirname(process.execPath) : __dirname;
 console.log(`Node version: ${process.version}. Running in ${process.env.NODE_ENV} environment.`);
 console.log(process['pkg'] ? 'Running from binary' : 'Running from source');
+console.log(`Running in ${process.env.NODE_ENV} environment`);
 process.chdir(serverDirectory);
 
 const app = express();

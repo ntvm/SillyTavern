@@ -70,6 +70,8 @@ proxyHost: ''
 ProxyLogin: ''
 ProxyPassword: ''
 proxyPort: 0
+simplyConsole: false #Simplify requestjsons in console. Faster perfomance with the readability cost
+
 
 extras:
   # Disables automatic model download from HuggingFace

@@ -10,6 +10,8 @@ const { CHAT_COMPLETION_SOURCES, GEMINI_SAFETY, BISON_SAFETY, OPENROUTER_HEADERS
 const { forwardFetchResponse, getConfigValue, tryParse, uuidv4, mergeObjectWithYaml, excludeKeysByYaml, color } = require('../../util');
 const { convertClaudeMessages, convertClaudePrompt, convertClaudeExperementalMesIntoSys, postconvertClaudeIntoPrefill, convertGooglePrompt, convertTextCompletionPrompt, convertCohereMessages, mergeMessages, getPromptNames } = require('../../prompt-converters');
 
+const { spawn } = require('child_process');
+
 const { readSecret, SECRET_KEYS } = require('../secrets');
 const { getTokenizerModel, getSentencepiceTokenizer, getTiktokenTokenizer, sentencepieceTokenizers, TEXT_COMPLETION_MODELS } = require('../tokenizers');
 
@@ -24,6 +26,7 @@ const proxyHost = getConfigValue('proxyHost', '');
 const proxyPort = getConfigValue('proxyPort', '');
 const ProxyLogin = getConfigValue('ProxyLogin', '');
 const ProxyPassword = getConfigValue('ProxyPassword', '');
+const simplyConsole = getConfigValue('simplyConsole', false);
 const localarray = [
     'localhost',
     '^http://127\.0\.0\.1',
@@ -32,11 +35,20 @@ const localarray = [
     '^http://10\.',
 ];
 let proxyAgent;
-let proxyConfig;
 
 if (proxingRequests) {
     let proxyUrl = `http://${ProxyLogin}:${ProxyPassword}@${proxyHost}:${proxyPort}`;
     proxyAgent = new HttpsProxyAgent(proxyUrl);
+}
+
+function printJsonInBackground(data) {
+  const json = typeof data === 'string' ? data : JSON.stringify(data);
+  const child = spawn(process.execPath, ['-e', 'process.stdin.pipe(process.stdout)'], {
+    stdio: ['pipe', 'inherit', 'inherit'], // stdout/stderr ребенка — та же консоль
+    detached: false
+  });
+  child.stdin.end(json + '\n');
+  return child; // можно подписаться на 'close' при желании
 }
 
 /**
@@ -255,7 +267,13 @@ async function sendClaudeRequest(request, response) {
                 sequenceError.push('\\n +      <-----(Each message beginning with the "Assistant:/Human:" prefix must have \\n\\n before it.)\n\\n +\nHuman: \\n +\n\\n +\nAssistant: \\n +\n...\n\\n +\nHuman: \\n +\n\\n +\nAssistant:');
                 console.log(color.white(`\nWhile, most probably you searching for it in case, when claude send you internal error. Check, does you even changed your proxy or if it even work?\n${divider}`));
             }
-            console.log('Claude request:', converted_prompt); //requestBody); I REALLY hate this green format
+
+            if (simplyConsole) {
+                console.log('Claude request:');
+                printJsonInBackground(converted_prompt);
+            } else {
+                console.log('Claude request:', converted_prompt); //requestBody); I REALLY hate this green format
+            }
 
             sequenceError.forEach(sequenceError => {
                 console.log(color.red(sequenceError));
@@ -366,7 +384,14 @@ async function sendClaudeRequest(request, response) {
                     const SysL = 'Claude request: ' + converted_prompt.systemPrompt;
                     console.log(SysL, requestBody);
                     requestBody.system = converted_prompt.systemPrompt;
-                } else console.log('Claude request: ', requestBody);
+                } else {
+                    if (simplyConsole) {
+                        console.log('Claude request:');
+                        printJsonInBackground(requestBody);
+                    } else {
+                        console.log('Claude request: ', requestBody);
+                    }
+                }
 
                 requestjson = {
                     method: 'POST',
@@ -475,8 +500,14 @@ async function sendScaleRequest(request, response) {
     }
 
     const converted_prompt = convertTextCompletionPrompt(request.body.messages);
-    console.log('Scale request:', converted_prompt);
 
+    if (simplyConsole) {
+        console.log('Scale request:');
+        printJsonInBackground(converted_prompt);
+    } else {
+        console.log('Scale request: ', converted_prompt);
+    }
+  
     try {
         const controller = new AbortController();
         request.socket.removeAllListeners('close');
@@ -656,7 +687,13 @@ async function sendMakerSuiteRequest(request, response) {
     }
 
     const body = isGemini ? getGeminiBody() : getBisonBody();
-    console.log('MakerSuite request:', body);
+
+    if (simplyConsole) {
+        console.log('MakerSuite request:');
+        printJsonInBackground(body);
+    } else {
+        console.log('MakerSuite request:', body);
+    }
 
     try {
         const controller = new AbortController();
@@ -771,7 +808,14 @@ async function sendMakerSuiteRequest(request, response) {
 async function sendAI21Request(request, response) {
     if (!request.body) return response.sendStatus(400);
     const controller = new AbortController();
-    console.log(request.body.messages);
+
+    if (simplyConsole) {
+        console.log('AI21 request:');
+        printJsonInBackground(request.body.messages);
+    } else {
+        console.log('AI21 request:', request.body.messages);
+    }
+
     request.socket.removeAllListeners('close');
     request.socket.on('close', function () {
         controller.abort();
@@ -938,7 +982,12 @@ async function sendMistralAIRequest(request, response) {
             console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
         }
 
-        console.log('MisralAI request:', requestBody);
+        if (simplyConsole) {
+            console.log('MisralAI request:');
+            printJsonInBackground(requestBody);
+        } else {
+            console.log('MisralAI request:', requestBody);
+        }
 
         const generateResponse = await fetch(apiUrl + '/chat/completions', config);
         if (request.body.stream) {
@@ -1015,7 +1064,12 @@ async function sendCohereRequest(request, response) {
             search_queries_only: false,
         };
 
-        console.log('Cohere request:', requestBody);
+        if (simplyConsole) {
+            console.log('Cohere request:');
+            printJsonInBackground(requestBody);
+        } else {
+            console.log('Cohere request:', requestBody);
+        }
 
         const config = {
             method: 'POST',
@@ -1262,6 +1316,9 @@ router.post('/generate', jsonParser, function (request, response) {
     if (!request.body) return response.status(400).send({ error: true });
 
     request.body.messages.forEach(
+        message => { message.content = message.content.replace(/(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i,''); }
+    );
+
     switch (request.body.chat_completion_source) {
         case CHAT_COMPLETION_SOURCES.CLAUDE: return sendClaudeRequest(request, response);
         case CHAT_COMPLETION_SOURCES.SCALE: return sendScaleRequest(request, response);
@@ -1472,7 +1529,12 @@ router.post('/generate', jsonParser, function (request, response) {
         console.log('Using proxy: ', `${proxyHost}:${proxyPort}`, '(No reverse-proxy)');
     }
 
-    console.log(requestBody);
+    if (simplyConsole) {
+        console.log('Request:');
+        printJsonInBackground(requestBody);
+    } else {
+        console.log(requestBody);
+    }
 
     makeRequest(config, response, request);
 
