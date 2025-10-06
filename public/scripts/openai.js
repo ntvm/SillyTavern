@@ -1974,22 +1974,24 @@ async function sendOpenAIRequest(type, messages, signal) {
             generate_data['model'] = generate_data['model'] + '-v1:0';
         }
 
-        if (generate_data.model.includes('claude-opus-4-1') || generate_data.model.includes('claude-sonnet-4-5')) {
+        if (!(generate_data.model.includes('claude-3') || generate_data.model.includes('claude-2'))
+            || !(['claude-opus-4-0', 'claude-opus-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-20250514'].includes(generate_data.model))
+		) {
 
-            if ( generate_data.temperature && generate_data.top_p == 0 ) {
-                console.log('Top_p deleted, Since value is 0 and Opus 4.1 NOT supporting BOTH temperature and Top_p');
+            if ( generate_data.temperature && ( generate_data.top_p == 1 || generate_data.top_p == 0 ) ) {
+                console.log('Top_p deleted, Since Top-p value is 0 or 1, and 4.1+ models NOT supporting BOTH temperature and Top_p');
                 delete generate_data.top_p;
             }
 
             if ( generate_data.temperature == 0 && generate_data.top_p ) {
-                console.log('Temperature deleted, Since value is 0 and Opus 4.1 NOT supporting BOTH temperature and Top_p');
+                console.log('Temperature deleted, Since temperature value is 0 and 4.1+ models NOT supporting BOTH temperature and Top_p');
                 delete generate_data.temperature;
             }
 
-            if ( generate_data.temperature && generate_data.top_p ) {
-                alert('Opus 4.1 does not allow both temperature and top_p parameters to be specified.'
+            if ( generate_data.temperature && (generate_data.top_p && !( generate_data.top_p == 1 || generate_data.top_p == 0 ) ) ) {
+                alert('4.1+ models does not allow both temperature and top_p parameters to be specified.'
                     + '\nAssuming TEMP is Priority parameter. (Top_p will be deleted)'
-                    + 'Please, set unimportant parameter to zero'
+                    + 'Please, set unimportant parameter to zero or one'
                 );
                 delete generate_data.top_p;
             }
