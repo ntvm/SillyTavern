@@ -1974,7 +1974,7 @@ async function sendOpenAIRequest(type, messages, signal) {
             generate_data['model'] = generate_data['model'] + '-v1:0';
         }
 
-        if (generate_data.model.includes('claude-opus-4-1')) {
+        if (generate_data.model.includes('claude-opus-4-1') || generate_data.model.includes('claude-sonnet-4-5')) {
 
             if ( generate_data.temperature && generate_data.top_p == 0 ) {
                 console.log('Top_p deleted, Since value is 0 and Opus 4.1 NOT supporting BOTH temperature and Top_p');
