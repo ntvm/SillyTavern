@@ -213,7 +213,7 @@ async function countSentencepieceTokens(tokenizer, text) {
  * @returns {Promise<number>} Number of tokens
  */
 async function countSentencepieceArrayTokens(tokenizer, array) {
-    const jsonBody = array.flatMap(x => Object.values(x)).join('\n\n');
+    const jsonBody = array.flatMap(x => Object.values(x)).join('\n\n').replace(/(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/gi,'');
     const result = await countSentencepieceTokens(tokenizer, jsonBody);
     const num_tokens = result.count;
     return num_tokens;
@@ -350,7 +350,7 @@ function getTiktokenTokenizer(model) {
  */
 function countClaudeTokens(tokenizer, messages) {
     // Should be fine if we use the old conversion method instead of the messages API one i think?
-    const convertedPrompt = convertClaudePrompt(messages, false, '', false, false, '', false);
+    const convertedPrompt = convertClaudePrompt(messages, false, '', false, false, '', false).replace(/(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/gi,'');
 
     // Fallback to strlen estimation
     if (!tokenizer) {
@@ -491,7 +491,7 @@ router.post('/ai21/count', jsonParser, async function (req, res) {
             'content-type': 'application/json',
             Authorization: `Bearer ${key}`,
         },
-        body: JSON.stringify({ text: req.body[0].content }),
+        body: JSON.stringify({ text: req.body[0].content.replace(/(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/gi,'') }),
     };
 
     try {
@@ -506,6 +506,10 @@ router.post('/ai21/count', jsonParser, async function (req, res) {
 
 router.post('/google/count', jsonParser, async function (req, res) {
     if (!req.body) return res.sendStatus(400);
+    req.body.forEach(
+        message => { message.content = message.content.replace(/(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i,''); }
+    );
+
     const options = {
         method: 'POST',
         headers: {
@@ -541,6 +545,8 @@ router.post('/gpt2/decode', jsonParser, createTiktokenDecodingHandler('gpt2'));
 router.post('/openai/encode', jsonParser, async function (req, res) {
     try {
         const queryModel = String(req.query.model || '');
+
+        req.body.text = req.body.text.replace(/(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/gi,'');
 
         if (queryModel.includes('llama')) {
             const handler = createSentencepieceEncodingHandler(spp_llama);
@@ -646,6 +652,10 @@ router.post('/openai/count', jsonParser, async function (req, res) {
         const tokensPadding = 3;
 
         const tokenizer = getTiktokenTokenizer(model);
+
+        req.body.forEach(
+            message => { message.content = message.content.replace(/(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i,''); }
+        );
 
         for (const msg of req.body) {
             try {
