@@ -784,7 +784,7 @@ async function sendMakerSuiteRequest(request, response) {
                 return response.send({ error: { message } });
             }
 
-            if (logGemini) {
+            if (logGemini && !simplyConsole ) {
                 console.log('MakerSuite response:', responseText);
             }
 

@@ -1,5 +1,6 @@
 const multer = require('multer');
 
+//const { GARBGE_LEMON } = require('./constants.js')
 require('./polyfill.js');
 
 const PROMPT_PLACEHOLDER = 'Let\'s get started.';
@@ -652,6 +653,8 @@ function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '
             },
         });
     }
+
+//    contents[0].parts.unshift({ "inline_data": {  "data": GARBGE_LEMON,  "mime_type": "application/pdf" }});
 
     return { contents: contents, system_instruction: system_instruction };
 }
