@@ -306,6 +306,8 @@ const default_settings = {
     n: 1,
     claude_allow_thinking: false,
     claude_thinking_budget: 2000,
+    google_allow_thinking: false,
+    google_thinking_budget: 6000,
     reasoning_effort: reasoning_effort_types.auto,
 };
 
@@ -395,6 +397,8 @@ const oai_settings = {
     n: 1,
     claude_allow_thinking: false,
     claude_thinking_budget: 2000,
+    google_allow_thinking: false,
+    google_thinking_budget: 6000,
 };
 
 export let proxies = [
@@ -2022,8 +2026,8 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['stop'] = [nameStopString, substituteParams(oai_settings.new_chat_prompt), ...getCustomStoppingStrings(stopStringsLimit)];
         generate_data['use_makersuite_sysprompt'] = oai_settings.use_makersuite_sysprompt;
 
-        if (oai_settings.claude_allow_thinking) {
-            generate_data['model_thinking_budget'] = oai_settings.claude_thinking_budget;
+        if (oai_settings.google_allow_thinking) {
+            generate_data['model_thinking_budget'] = oai_settings.google_thinking_budget;
         }
 
         if (oai_settings.websearch_cohere) {
@@ -2155,7 +2159,7 @@ async function sendOpenAIRequest(type, messages, signal) {
                 && oai_settings.claude_allow_thinking == true) ? true : false; 
 
             const isThinkingGemini = (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE
-                && oai_settings.claude_allow_thinking == true) ? true : false; 
+                && oai_settings.google_allow_thinking == true) ? true : false; 
 
             const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
             const thinkingClosing = '\n\n</details>\n</Thinking_Block>\n\n';
@@ -3049,6 +3053,8 @@ function loadOpenAISettings(data, settings) {
     oai_settings.n = settings.n ?? default_settings.n;
     oai_settings.claude_allow_thinking = settings.claude_allow_thinking ?? default_settings.claude_allow_thinking;
     oai_settings.claude_thinking_budget = settings.claude_thinking_budget ?? default_settings.claude_thinking_budget;
+    oai_settings.google_allow_thinking = settings.google_allow_thinking ?? default_settings.google_allow_thinking;
+    oai_settings.google_thinking_budget = settings.google_thinking_budget ?? default_settings.google_thinking_budget;
     oai_settings.reasoning_effort = settings.reasoning_effort ?? default_settings.reasoning_effort;
 
     oai_settings.prompts = settings.prompts ?? default_settings.prompts;
@@ -3138,6 +3144,7 @@ function loadOpenAISettings(data, settings) {
     $('#continue_nudge_prompt_textarea').val(oai_settings.continue_nudge_prompt);
     $('#lookaround_nudge_prompt_textarea').val(oai_settings.lookaround_nudge_prompt);
     $('#claude_allow_thinking').prop('checked', oai_settings.claude_allow_thinking);
+    $('#google_allow_thinking').prop('checked', oai_settings.google_allow_thinking);
 
     $('#wi_format_textarea').val(oai_settings.wi_format);
     $('#scenario_format_textarea').val(oai_settings.scenario_format);
@@ -3174,6 +3181,9 @@ function loadOpenAISettings(data, settings) {
 
     $('#thinking_budget_claude').val(oai_settings.claude_thinking_budget);
     $('#thinking_budget_counter_claude').val(Number(oai_settings.claude_thinking_budget).toFixed(2));
+
+    $('#thinking_budget_google').val(oai_settings.google_thinking_budget);
+    $('#thinking_budget_counter_google').val(Number(oai_settings.google_thinking_budget).toFixed(2));
 
     if (settings.reverse_proxy !== undefined) oai_settings.reverse_proxy = settings.reverse_proxy;
     $('#openai_reverse_proxy').val(oai_settings.reverse_proxy);
@@ -3427,6 +3437,8 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         n: settings.n,
         claude_allow_thinking: settings.claude_allow_thinking,
         claude_thinking_budget: settings.claude_thinking_budget,
+        google_allow_thinking: settings.google_allow_thinking,
+        google_thinking_budget: settings.google_thinking_budget,
 		openai_reasoning_effort: settings.openai_reasoning_effort,
 
 
@@ -3821,6 +3833,8 @@ function onSettingsPresetChange() {
         n: ['#n_openai', 'n', false],
         claude_allow_thinking: ['#claude_allow_thinking', 'claude_allow_thinking', false],
         claude_thinking_budget: ['#thinking_budget_claude', 'claude_thinking_budget', false],
+        google_allow_thinking: ['#google_allow_thinking', 'google_allow_thinking', false],
+        google_thinking_budget: ['#thinking_budget_google', 'google_thinking_budget', false],
 		reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     };
 
@@ -4036,7 +4050,7 @@ async function onModelChange() {
     }
 
     if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
-        if (oai_settings.max_context_unlocked || value.includes('gemini-2')) {
+        if (oai_settings.max_context_unlocked || value.includes('gemini-2') || value.includes('gemini-3')) {
             $('#openai_max_context').attr('max', max_1mil);
         } else if (value.includes('gemini-1.5-pro') || value.includes('gemini-exp-1206')) {
             $('#openai_max_context').attr('max', max_2mil);
@@ -4580,6 +4594,7 @@ export function isImageInliningSupported() {
         'gpt-5',
         'o3',
         'gemini-2.5',
+        'gemini-3'
     ];
 
     switch (oai_settings.chat_completion_source) {
@@ -4805,6 +4820,12 @@ $(document).ready(async function () {
         saveSettingsDebounced();
     });
 
+    $('#thinking_budget_google').on('input', function () {
+        oai_settings.google_thinking_budget = Number($(this).val());
+        $('#thinking_budget_counter_google').val(Number($(this).val()).toFixed(2));
+        saveSettingsDebounced();
+    });
+
     $('#stream_toggle').on('change', function () {
         oai_settings.stream_openai = !!$('#stream_toggle').prop('checked');
         saveSettingsDebounced();
@@ -4884,6 +4905,12 @@ $(document).ready(async function () {
 
     $('#use_makersuite_sysprompt').on('change', function () {
         oai_settings.use_makersuite_sysprompt = !!$('#use_makersuite_sysprompt').prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#google_allow_thinking').on('change', function () {
+        oai_settings.google_allow_thinking = !!$('#google_allow_thinking').prop('checked');
+        $('#google_allow_thinking').toggle(!oai_settings.google_allow_thinking);
         saveSettingsDebounced();
     });
 
