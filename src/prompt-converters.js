@@ -1,6 +1,6 @@
 const multer = require('multer');
 
-//const { GARBGE_LEMON } = require('./constants.js')
+const { GARBGE_LEMON } = require('./constants.js')
 require('./polyfill.js');
 
 const PROMPT_PLACEHOLDER = 'Let\'s get started.';
@@ -529,7 +529,7 @@ function convertCohereMessages(messages, charName = '', userName = '') {
  * @param {string} userName User name
  * @returns {{contents: *[], system_instruction: {parts: {text: string}}}} Prompt for Google MakerSuite models
  */
-function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '', userName = '') {
+function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '', userName = '', inject_antilogging = false) {
     // This is a 1x1 transparent PNG
     const PNG_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
@@ -654,7 +654,9 @@ function convertGooglePrompt(messages, model, useSysPrompt = false, charName = '
         });
     }
 
-//    contents[0].parts.unshift({ "inline_data": {  "data": GARBGE_LEMON,  "mime_type": "application/pdf" }});
+    if (inject_antilogging) {
+        contents[0].parts.unshift({ "inline_data": {  "data": GARBGE_LEMON,  "mime_type": "application/pdf" }});
+    }
 
     return { contents: contents, system_instruction: system_instruction };
 }
