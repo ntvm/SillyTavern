@@ -630,7 +630,9 @@ async function sendMakerSuiteRequest(request, response) {
             model.startsWith('gemini-exp')
         ) && request.body.use_makersuite_sysprompt;
 
-        const prompt = convertGooglePrompt(request.body.messages, model, should_use_system_prompt, request.body.char_name, request.body.user_name);
+        let Is_inject_antilogging = request.body.google_antilog ?? false;
+
+        const prompt = convertGooglePrompt(request.body.messages, model, should_use_system_prompt, request.body.char_name, request.body.user_name, Is_inject_antilogging);
         let safetySettings = GEMINI_SAFETY;
 
         if (model.includes('gemini-2.0-flash-exp')) {
@@ -702,7 +704,7 @@ async function sendMakerSuiteRequest(request, response) {
             controller.abort();
         });
 
-        const apiVersion = isGemini ? 'v1beta' : 'v1beta2';
+        const apiVersion = isGemini ? 'v1beta' : 'v1alpha';
         const responseType = isGemini
             ? (stream ? 'streamGenerateContent' : 'generateContent')
             : (isText ? 'generateText' : 'generateMessage');

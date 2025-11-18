@@ -306,6 +306,7 @@ const default_settings = {
     n: 1,
     claude_allow_thinking: false,
     claude_thinking_budget: 2000,
+    google_inject_antilog: false,
     google_allow_thinking: false,
     google_thinking_budget: 6000,
     reasoning_effort: reasoning_effort_types.auto,
@@ -397,6 +398,7 @@ const oai_settings = {
     n: 1,
     claude_allow_thinking: false,
     claude_thinking_budget: 2000,
+    google_inject_antilog: false,
     google_allow_thinking: false,
     google_thinking_budget: 6000,
 };
@@ -2030,6 +2032,10 @@ async function sendOpenAIRequest(type, messages, signal) {
             generate_data['model_thinking_budget'] = oai_settings.google_thinking_budget;
         }
 
+        if (oai_settings.google_inject_antilog) {
+            generate_data['google_antilog'] = oai_settings.google_inject_antilog;
+        }
+
         if (oai_settings.websearch_cohere) {
             generate_data['websearch'] = oai_settings.websearch_cohere;
         }
@@ -3053,6 +3059,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.n = settings.n ?? default_settings.n;
     oai_settings.claude_allow_thinking = settings.claude_allow_thinking ?? default_settings.claude_allow_thinking;
     oai_settings.claude_thinking_budget = settings.claude_thinking_budget ?? default_settings.claude_thinking_budget;
+    oai_settings.google_inject_antilog = settings.google_inject_antilog ?? default_settings.google_inject_antilog;
     oai_settings.google_allow_thinking = settings.google_allow_thinking ?? default_settings.google_allow_thinking;
     oai_settings.google_thinking_budget = settings.google_thinking_budget ?? default_settings.google_thinking_budget;
     oai_settings.reasoning_effort = settings.reasoning_effort ?? default_settings.reasoning_effort;
@@ -3144,6 +3151,7 @@ function loadOpenAISettings(data, settings) {
     $('#continue_nudge_prompt_textarea').val(oai_settings.continue_nudge_prompt);
     $('#lookaround_nudge_prompt_textarea').val(oai_settings.lookaround_nudge_prompt);
     $('#claude_allow_thinking').prop('checked', oai_settings.claude_allow_thinking);
+    $('#google_inject_antilog').prop('checked', oai_settings.google_inject_antilog);
     $('#google_allow_thinking').prop('checked', oai_settings.google_allow_thinking);
 
     $('#wi_format_textarea').val(oai_settings.wi_format);
@@ -3437,6 +3445,7 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         n: settings.n,
         claude_allow_thinking: settings.claude_allow_thinking,
         claude_thinking_budget: settings.claude_thinking_budget,
+        google_inject_antilog: settings.google_inject_antilog,
         google_allow_thinking: settings.google_allow_thinking,
         google_thinking_budget: settings.google_thinking_budget,
 		openai_reasoning_effort: settings.openai_reasoning_effort,
@@ -3831,9 +3840,10 @@ function onSettingsPresetChange() {
         continue_postfix: ['#continue_postfix', 'continue_postfix', false],
         seed: ['#seed_openai', 'seed', false],
         n: ['#n_openai', 'n', false],
-        claude_allow_thinking: ['#claude_allow_thinking', 'claude_allow_thinking', false],
+        claude_allow_thinking: ['#claude_allow_thinking', 'claude_allow_thinking', true],
         claude_thinking_budget: ['#thinking_budget_claude', 'claude_thinking_budget', false],
-        google_allow_thinking: ['#google_allow_thinking', 'google_allow_thinking', false],
+        google_inject_antilog: ['#google_inject_antilog', 'google_inject_antilog', true],
+        google_allow_thinking: ['#google_allow_thinking', 'google_allow_thinking', true],
         google_thinking_budget: ['#thinking_budget_google', 'google_thinking_budget', false],
 		reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     };
@@ -4910,7 +4920,11 @@ $(document).ready(async function () {
 
     $('#google_allow_thinking').on('change', function () {
         oai_settings.google_allow_thinking = !!$('#google_allow_thinking').prop('checked');
-        $('#google_allow_thinking').toggle(!oai_settings.google_allow_thinking);
+        saveSettingsDebounced();
+    });
+
+    $('#google_inject_antilog').on('change', function () {
+        oai_settings.google_inject_antilog = !!$('#google_inject_antilog').prop('checked');
         saveSettingsDebounced();
     });
 
