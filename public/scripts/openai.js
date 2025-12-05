@@ -2028,7 +2028,7 @@ async function sendOpenAIRequest(type, messages, signal) {
         generate_data['stop'] = [nameStopString, substituteParams(oai_settings.new_chat_prompt), ...getCustomStoppingStrings(stopStringsLimit)];
         generate_data['use_makersuite_sysprompt'] = oai_settings.use_makersuite_sysprompt;
 
-        if (oai_settings.google_allow_thinking) {
+        if (oai_settings.google_allow_thinking && !isQuiet) {
             generate_data['model_thinking_budget'] = oai_settings.google_thinking_budget;
         }
 

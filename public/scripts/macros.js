@@ -295,6 +295,19 @@ export function evaluateMacros(content, env) {
         return '';
     }
 
+    if (typeof content === 'object') {
+        if (Array.isArray(content.prompt)) {
+            content.prompt.forEach(item => {
+                if (item && typeof item.content === 'string') {
+                    item.content = evaluateMacros(item.content, env);
+                }
+            });
+            return JSON.stringify(content) || '';
+        }
+        return content;
+    }
+
+
     const rawContent = content;
 
     // Legacy non-macro substitutions
