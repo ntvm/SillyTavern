@@ -154,6 +154,7 @@ import {
     isValidUrl,
     ensureImageFormatSupported,
     flashHighlight,
+    saveBase64AsFile,
 } from './scripts/utils.js';
 import { debounce_timeout } from './scripts/constants.js';
 
@@ -2693,6 +2694,8 @@ class StreamingProcessor {
         this.swipes = [];
         /** @type {import('./scripts/logprobs.js').TokenLogprobs[]} */
         this.messageLogprobs = [];
+        /** @type {string} */
+        this.image = '';
     }
 
     showMessageButtons(messageId) {
@@ -2720,7 +2723,7 @@ class StreamingProcessor {
             $('#send_textarea').val('').trigger('input');
         }
         else {
-            await saveReply(this.type, text, true);
+            await saveReply({ type: this.type, getMessage: text, fromStreaming: true });
             messageId = chat.length - 1;
             this.showMessageButtons(messageId);
         }
@@ -2817,6 +2820,11 @@ class StreamingProcessor {
             chat[messageId].swipe_info.push(...swipeInfoArray);
         }
 
+        if (Array.isArray(this.images) && this.images.length > 0) {
+            await processImageAttachment(chat[messageId], { imageUrls: this.images });
+            appendMediaToMessage(chat[messageId], $(this.messageDom));
+        }
+
         if (this.type !== 'impersonate') {
             await eventSource.emit(event_types.MESSAGE_RECEIVED, this.messageId);
             await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, this.messageId);
@@ -2908,7 +2916,7 @@ class StreamingProcessor {
         try {
             const sw = new Stopwatch(1000 / power_user.streaming_fps);
             const timestamps = [];
-            for await (const { text, swipes, logprobs } of this.generator()) {
+            for await (const { text, swipes, logprobs, state } of this.generator()) {
                 timestamps.push(Date.now());
                 if (this.isStopped) {
                     return;
@@ -2919,6 +2927,7 @@ class StreamingProcessor {
                 if (logprobs) {
                     this.messageLogprobs.push(...(Array.isArray(logprobs) ? logprobs : [logprobs]));
                 }
+                this.image = state?.image ?? '';
                 await sw.tick(() => this.onProgressStreaming(this.messageId, this.messageAlreadyGenerated + text));
             }
             const seconds = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
@@ -4118,6 +4127,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         //const getData = await response.json();
         let getMessage = extractMessageFromData(data);
         let title = extractTitleFromData(data);
+        let imageUrl = extractImagesFromData(data);
         kobold_horde_model = title;
 
         const swipes = extractMultiSwipes(data, type);
@@ -4132,7 +4142,7 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
         const displayIncomplete = type === 'quiet' && !quietToLoud;
         getMessage = cleanUpMessage(getMessage, isImpersonate, isContinue, displayIncomplete);
 
-        if (getMessage.length > 0) {
+        if (getMessage.length > 0 || imageUrl.length > 0) {
             if (isImpersonate) {
                 $('#send_textarea').val(getMessage).trigger('input');
                 generatedPromptCache = '';
@@ -4145,10 +4155,10 @@ async function Generate(type, { automatic_trigger, force_name2, quiet_prompt, qu
             else {
                 // Without streaming we'll be having a full message on continuation. Treat it as a last chunk.
                 if (originalType !== 'continue') {
-                    ({ type, getMessage } = await saveReply(type, getMessage, false, title, swipes));
+                    ({ type, getMessage } = await saveReply({type:type, getMessage, fromStreaming:false, title:title, swipes:swipes, imageUrl:imageUrl}));
                 }
                 else {
-                    ({ type, getMessage } = await saveReply('appendFinal', getMessage, false, title, swipes));
+                    ({ type, getMessage } = await saveReply({type:'appendFinal', getMessage, fromStreaming:false, title:title, swipes:swipes, imageUrl:imageUrl}));
                 }
 
                 // This relies on `saveReply` having been called to add the message to the chat, so it must be last.
@@ -4884,6 +4894,39 @@ function extractTitleFromData(data) {
 }
 
 /**
+ * Extracts the image from the response data.
+ * @param {object} data Response data
+ * @param {object} [options] Extraction options
+ * @param {string} [options.mainApi] Main API to use
+ * @param {string} [options.chatCompletionSource] Chat completion source
+ * @returns {string[]} Extracted images or empty array
+ */
+function extractImagesFromData(data, { mainApi = null, chatCompletionSource = null } = {}) {
+    switch (mainApi ?? main_api) {
+        case 'openai': {
+            switch (chatCompletionSource ?? oai_settings.chat_completion_source) {
+                case chat_completion_sources.VERTEXAI:
+                case chat_completion_sources.MAKERSUITE: {
+                    const inlineData = data?.responseContent?.parts?.filter(x => x.inlineData && !x.thought)?.map(x => x.inlineData);
+                    if (Array.isArray(inlineData) && inlineData.length > 0) {
+                        return inlineData.map(x => `data:${x.mimeType};base64,${x.data}`).filter(isDataURL);
+                    }
+                } break;
+                case chat_completion_sources.OPENROUTER: {
+                    const imageUrl = data?.choices[0]?.message?.images?.filter(x => x.type === 'image_url')?.map(x => x?.image_url?.url);
+                    if (Array.isArray(imageUrl) && imageUrl.length > 0) {
+                        return imageUrl.filter(isDataURL);
+                    }
+                    // TODO: Handle remote URLs
+                }
+            }
+        } break;
+    }
+
+    return [];
+}
+
+/**
  * parseAndSaveLogprobs receives the full data response for a non-streaming
  * generation, parses logprobs for all tokens in the message, and saves them
  * to the currently active message.
@@ -5124,7 +5167,59 @@ function cleanUpMessage(getMessage, isImpersonate, isContinue, displayIncomplete
     return getMessage;
 }
 
-async function saveReply(type, getMessage, fromStreaming, title, swipes) {
+/**
+ * Adds an image to the message.
+ * @param {object} message Message object
+ * @param {object} sources Image sources
+ * @param {ParsedImage} [sources.parsedImage] Parsed image
+ * @param {string} [sources.imageUrl] Image URL
+ *
+ * @returns {Promise<void>}
+ */
+async function processImageAttachment(message, { parsedImage, imageUrl }) {
+    if (parsedImage?.image) {
+        saveImageToMessage(parsedImage, message);
+        return;
+    }
+
+    if (!imageUrl) {
+        return;
+    }
+
+    let url = imageUrl;
+    if (isDataURL(url)) {
+        const fileName = `inline_image_${Date.now().toString()}`;
+        const [mime, base64] = /^data:(.*?);base64,(.*)$/.exec(imageUrl).slice(1);
+        url = await saveBase64AsFile(base64, message.name, fileName, mime.split('/')[1]);
+    }
+    saveImageToMessage({ image: url, inline: true }, message);
+}
+
+ /**
+ * Saves a resulting message to the chat
+ * @param {SaveReplyParams} params
+ * @returns {Promise<SaveReplyResult>} Promise when the message is saved
+ *
+ * @typedef {object} SaveReplyParams
+ * @property {string} type Type of generation
+ * @property {string} getMessage Generated message
+ * @property {boolean} [fromStreaming] If the message is from streaming
+ * @property {string} [title] Message tooltip
+ * @property {string[]} [swipes] Extra swipes
+ * @property {string} [reasoning] Message reasoning
+ * @property {string} [imageUrl] Link to an image
+ *
+ * @typedef {object} SaveReplyResult
+ * @property {string} type Type of generation
+ * @property {string} getMessage Generated message
+ */
+
+export async function saveReply({ type, getMessage, fromStreaming = false, title = '', swipes = [], imageUrl = '' }) {
+    // Backward compatibility
+    if (arguments.length > 1 && typeof arguments[0] !== 'object') {
+        console.trace('saveReply called with positional arguments. Please use an object instead.');
+        [type, getMessage, fromStreaming, title, swipes, imageUrl] = arguments;
+    }
     if (type != 'append' && type != 'continue' && type != 'appendFinal' && chat.length && (chat[chat.length - 1]['swipe_id'] === undefined ||
         chat[chat.length - 1]['is_user'])) {
         type = 'normal';
@@ -5136,8 +5231,8 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
 
     let oldMessage = '';
     const generationFinished = new Date();
-    const img = extractImageFromMessage(getMessage);
-    getMessage = img.getMessage;
+    const parsedImage = extractImageFromMessage(getMessage);
+    getMessage = parsedImage.getMessage;
     if (type === 'swipe') {
         oldMessage = chat[chat.length - 1]['mes'];
         chat[chat.length - 1]['swipes'].length++;
@@ -5150,6 +5245,11 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
             chat[chat.length - 1]['extra']['api'] = getGeneratingApi();
             chat[chat.length - 1]['extra']['model'] = getGeneratingModel();
             chat[chat.length - 1]['extra']['is_favorite'] = 'false';
+
+            if (!(parsedImage.image == '') || imageUrl.length > 0) {
+                await processImageAttachment(chat[chat.length - 1], { parsedImage, imageUrl });
+            }
+
             if (power_user.message_token_count_enabled) {
                 chat[chat.length - 1]['extra']['token_count'] = await getTokenCountAsync(chat[chat.length - 1]['mes'], 0);
             }
@@ -5170,6 +5270,11 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
         chat[chat.length - 1]['send_date'] = getMessageTimeStamp();
         chat[chat.length - 1]['extra']['api'] = getGeneratingApi();
         chat[chat.length - 1]['extra']['model'] = getGeneratingModel();
+
+        if (!(parsedImage.image == '') || imageUrl.length > 0) {
+            await processImageAttachment(chat[chat.length - 1], { parsedImage, imageUrl });
+        }
+
         if (power_user.message_token_count_enabled) {
             chat[chat.length - 1]['extra']['token_count'] = await getTokenCountAsync(chat[chat.length - 1]['mes'], 0);
         }
@@ -5187,6 +5292,11 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
         chat[chat.length - 1]['send_date'] = getMessageTimeStamp();
         chat[chat.length - 1]['extra']['api'] = getGeneratingApi();
         chat[chat.length - 1]['extra']['model'] = getGeneratingModel();
+
+        if (!(parsedImage.image == '') || imageUrl.length > 0) {
+            await processImageAttachment(chat[chat.length - 1], { parsedImage, imageUrl });
+        }
+
         if (power_user.message_token_count_enabled) {
             chat[chat.length - 1]['extra']['token_count'] = await getTokenCountAsync(chat[chat.length - 1]['mes'], 0);
         }
@@ -5227,7 +5337,10 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
             chat[chat.length - 1]['extra']['gen_id'] = group_generation_id;
         }
 
-        saveImageToMessage(img, chat[chat.length - 1]);
+        if (!(parsedImage.image == '') || imageUrl.length > 0) {
+            await processImageAttachment(chat[chat.length - 1], { parsedImage, imageUrl: imageUrl });
+        }
+
         const chat_id = (chat.length - 1);
 
         !fromStreaming && await eventSource.emit(event_types.MESSAGE_RECEIVED, chat_id);
@@ -5278,6 +5391,12 @@ async function saveReply(type, getMessage, fromStreaming, title, swipes) {
     return { type, getMessage };
 }
 
+/**
+ * Saves the image to the message object.
+ * @param {ParsedImage} img Image object
+ * @param {object} mes Chat message object
+ * @typedef {{ image?: string, title?: string, inline?: boolean }} ParsedImage
+ */
 function saveImageToMessage(img, mes) {
     if (mes && img.image) {
         if (!mes.extra || typeof mes.extra !== 'object') {
@@ -5285,6 +5404,7 @@ function saveImageToMessage(img, mes) {
         }
         mes.extra.image = img.image;
         mes.extra.title = img.title;
+        mes.extra.inline_image = img.inline;
     }
 }
 
@@ -5327,7 +5447,7 @@ function extractImageFromMessage(getMessage) {
     const image = results ? results[1] : '';
     const title = results ? results[2] : '';
     getMessage = getMessage.replace(regex, '');
-    return { getMessage, image, title };
+    return { getMessage, image, title, inline: true };
 }
 
 export function activateSendButtons() {

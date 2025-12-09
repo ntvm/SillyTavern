@@ -574,6 +574,7 @@ async function sendMakerSuiteRequest(request, response) {
     const isGemini = model.includes('gemini');
     const isText = model.includes('text');
     const stream = Boolean(request.body.stream) && isGemini;
+    const requestImages = Boolean(request.body.request_images);
 
     const generationConfig = {
         stopSequences: request.body.stop,
@@ -619,12 +620,30 @@ async function sendMakerSuiteRequest(request, response) {
     var logGemini;
 
     function getGeminiBody() {
+        const imageGenerationModels = [
+            'gemini-2.0-flash-exp',
+            'gemini-2.0-flash-exp-image-generation',
+            'gemini-2.0-flash-preview-image-generation',
+            'gemini-2.5-flash-image-preview',
+            'gemini-2.5-flash-image',
+            'gemini-3-pro-image-preview',
+        ];
+
         if (!Array.isArray(generationConfig.stopSequences) || !generationConfig.stopSequences.length) {
             delete generationConfig.stopSequences;
         }
-        const should_use_system_prompt = (
+
+        const enableImageModality = requestImages && imageGenerationModels.includes(model);
+        const useMultiModal = requestImages;
+
+        if (enableImageModality) {
+            generationConfig.responseModalities = ['text', 'image'];
+        }
+
+        const should_use_system_prompt = !useMultiModal && (
+            model.includes('gemini-2.0-pro') ||
+            model.includes('gemini-2.0-flash') ||
             model.includes('gemini-2.0-flash-thinking-exp') ||
-            model.includes('gemini-2.0-flash-exp') ||
             model.includes('gemini-1.5-flash') ||
             model.includes('gemini-1.5-pro') ||
             model.startsWith('gemini-exp')
@@ -649,7 +668,7 @@ async function sendMakerSuiteRequest(request, response) {
             body.system_instruction = prompt.system_instruction;
         }
 
-        if (request.body.websearch) {
+        if (request.body.websearch && !useMultiModal) {
             body.tools = [{ googleSearch: {}}];
 		}
 
@@ -752,6 +771,8 @@ async function sendMakerSuiteRequest(request, response) {
             const generateResponseJson = await generateResponse.json();
 
             const candidates = generateResponseJson?.candidates;
+            const CandidateDeepcopy = JSON.parse(JSON.stringify(candidates));
+			
             if (!candidates || candidates.length === 0) {
                 let message = 'MakerSuite API returned no candidate';
                 console.log(message, generateResponseJson);
@@ -767,8 +788,8 @@ async function sendMakerSuiteRequest(request, response) {
                         console.log('MakerSuite response thinking:', candidates[0].content.parts[0].text);
                         const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
                         const mainThinking = candidates[0].content.parts[0].text;
-                        const thinkingClosing = `\nTotal thinking tokens usage: ${generateResponseJson.usageMetadata.thoughtsTokenCount}\n\n</details>\n</Thinking_Block>\n\n`;
-                        const mainAnswer = candidates[0].content.parts[1].text;
+                        const thinkingClosing = `\nTotal thinking tokens usage: ${generateResponseJson?.usageMetadata?.thoughtsTokenCount}\n\n</details>\n</Thinking_Block>\n\n`;
+                        const mainAnswer = candidates[0]?.content?.parts[1]?.text;
                         console.log('\n\n\nMakerSuite response:', mainAnswer);
                         candidates[0].content = thinkingOpening + mainThinking + thinkingClosing + mainAnswer;
                     }
@@ -779,8 +800,9 @@ async function sendMakerSuiteRequest(request, response) {
 
             const responseContent = candidates[0].content ?? candidates[0].output;
             const responseText = typeof responseContent === 'string' ? responseContent : responseContent?.parts?.[0]?.text;
+            const inlineData = (candidates?.[0]?.content?.parts ?? []).some(part => part.inlineData);
 
-            if (!responseText) {
+            if (!responseText && !inlineData) {
                 let message = 'MakerSuite Candidate text empty';
                 console.log(message, generateResponseJson);
                 return response.send({ error: { message } });
@@ -791,7 +813,7 @@ async function sendMakerSuiteRequest(request, response) {
             }
 
             // Wrap it back to OAI format
-            const reply = { choices: [{ 'message': { 'content': responseText } }] };
+            const reply = { choices: [{ 'message': { 'content': responseText } }], 'responseContent': CandidateDeepcopy?.[0]?.content};
             return response.send(reply);
         }
     } catch (error) {

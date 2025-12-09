@@ -38,7 +38,6 @@ import { registerSlashCommand } from './slash-commands.js';
 
 import { extension_settings} from "./extensions.js";
 
-
 import {
     chatCompletionDefaultPrompts,
     INJECTION_POSITION,
@@ -310,12 +309,8 @@ const default_settings = {
     google_allow_thinking: false,
     google_thinking_budget: 6000,
     reasoning_effort: reasoning_effort_types.auto,
+    request_images: false,
 };
-
-
-
-
-
 
 const oai_settings = {
     preset_settings_openai: 'Default',
@@ -401,6 +396,8 @@ const oai_settings = {
     google_inject_antilog: false,
     google_allow_thinking: false,
     google_thinking_budget: 6000,
+    reasoning_effort: reasoning_effort_types.auto,
+    request_images: false,
 };
 
 export let proxies = [
@@ -2037,7 +2034,11 @@ async function sendOpenAIRequest(type, messages, signal) {
         }
 
         if (oai_settings.websearch_cohere) {
-            generate_data['websearch'] = oai_settings.websearch_cohere;
+           generate_data['websearch'] = oai_settings.websearch_cohere;
+        }
+
+        if (oai_settings.request_images) {
+            generate_data['request_images'] = oai_settings.request_images;
         }
 
     }
@@ -2176,6 +2177,8 @@ async function sendOpenAIRequest(type, messages, signal) {
                 currentlyThinking = true
             };
             const swipes = [];
+            const toolCalls = [];
+            const state = { reasoning: '', image: '' };
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) return;
@@ -2204,12 +2207,12 @@ async function sendOpenAIRequest(type, messages, signal) {
 
                 if (Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
                     const swipeIndex = parsed.choices[0].index - 1;
-                    swipes[swipeIndex] = (swipes[swipeIndex] || '') + getStreamingReply(parsed);
+                    swipes[swipeIndex] = (swipes[swipeIndex] || '') + getStreamingReply(parsed, state);
                 } else {
-                    text += getStreamingReply(parsed);
+                    text += getStreamingReply(parsed, state);
                 }
 
-                yield { text, swipes: swipes, logprobs: parseChatCompletionLogprobs(parsed) };
+                yield { text, swipes: swipes, logprobs: parseChatCompletionLogprobs(parsed), state };
             }
         };
     }
@@ -2235,12 +2238,16 @@ async function sendOpenAIRequest(type, messages, signal) {
     }
 }
 
-function getStreamingReply(data) {
+function getStreamingReply(data, state) {
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE && oai_settings.claude_allow_plaintext == true) {
         return data?.completion || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
         return data?.delta?.text|| data?.delta?.thinking || '';
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MAKERSUITE) {
+        const inlineData = data?.candidates?.[0]?.content?.parts?.find(x => x.inlineData)?.inlineData;
+        if (inlineData) {
+            state.image = `data:${inlineData.mimeType};base64,${inlineData.data}`;
+        }
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } else {
         return data.choices[0]?.delta?.content ?? data.choices[0]?.message?.content ?? data.choices[0]?.text ?? '';
@@ -3063,6 +3070,7 @@ function loadOpenAISettings(data, settings) {
     oai_settings.google_allow_thinking = settings.google_allow_thinking ?? default_settings.google_allow_thinking;
     oai_settings.google_thinking_budget = settings.google_thinking_budget ?? default_settings.google_thinking_budget;
     oai_settings.reasoning_effort = settings.reasoning_effort ?? default_settings.reasoning_effort;
+    oai_settings.request_images = settings.request_images ?? default_settings.request_images;
 
     oai_settings.prompts = settings.prompts ?? default_settings.prompts;
     oai_settings.prompt_order = settings.prompt_order ?? default_settings.prompt_order;
@@ -3192,6 +3200,8 @@ function loadOpenAISettings(data, settings) {
 
     $('#thinking_budget_google').val(oai_settings.google_thinking_budget);
     $('#thinking_budget_counter_google').val(Number(oai_settings.google_thinking_budget).toFixed(2));
+
+    $('#openai_request_images').prop('checked', oai_settings.request_images);
 
     if (settings.reverse_proxy !== undefined) oai_settings.reverse_proxy = settings.reverse_proxy;
     $('#openai_reverse_proxy').val(oai_settings.reverse_proxy);
@@ -3448,9 +3458,8 @@ async function saveOpenAIPreset(name, settings, triggerUi = true) {
         google_inject_antilog: settings.google_inject_antilog,
         google_allow_thinking: settings.google_allow_thinking,
         google_thinking_budget: settings.google_thinking_budget,
-		openai_reasoning_effort: settings.openai_reasoning_effort,
-
-
+        openai_reasoning_effort: settings.openai_reasoning_effort,
+        request_images: settings.request_images,
     };
 
     const savePresetSettings = await fetch(`/api/presets/save-openai?name=${name}`, {
@@ -5228,6 +5237,11 @@ $(document).ready(async function () {
     $('#continue_postfix_double_newline').on('input', function () {
         oai_settings.continue_postfix = continue_postfix_types.DOUBLE_NEWLINE;
         setContinuePostfixControls();
+        saveSettingsDebounced();
+    });
+
+    $('#openai_request_images').on('input', function () {
+        oai_settings.request_images = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 
