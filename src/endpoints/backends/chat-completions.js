@@ -769,9 +769,12 @@ async function sendMakerSuiteRequest(request, response) {
             }
 
             const generateResponseJson = await generateResponse.json();
-
             const candidates = generateResponseJson?.candidates;
-            const CandidateDeepcopy = JSON.parse(JSON.stringify(candidates));
+            let CandidateDeepcopy;
+
+            if (candidates) {
+                CandidateDeepcopy = JSON.parse(JSON.stringify(candidates));
+            } else { CandidateDeepcopy = {'empty':'candidate_empty'} }
 			
             if (!candidates || candidates.length === 0) {
                 let message = 'MakerSuite API returned no candidate';
@@ -1339,9 +1342,22 @@ router.post('/bias', jsonParser, async function (request, response) {
 router.post('/generate', jsonParser, function (request, response) {
     if (!request.body) return response.status(400).send({ error: true });
 
-    request.body.messages.forEach(
-        message => { message.content = message.content.replace(/(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i,''); }
-    );
+    request.body.messages.forEach(message => {
+        const regex = /(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i;
+    
+        // Handle standard text messages
+        if (typeof message.content === 'string') {
+            message.content = message.content.replace(regex, '');
+        } 
+        // Handle messages with inline images (Content is an Array)
+        else if (Array.isArray(message.content)) {
+            message.content.forEach(part => {
+                if (part.type === 'text' && typeof part.text === 'string') {
+                    part.text = part.text.replace(regex, '');
+                }
+            });
+        }
+    });
 
     switch (request.body.chat_completion_source) {
         case CHAT_COMPLETION_SOURCES.CLAUDE: return sendClaudeRequest(request, response);
