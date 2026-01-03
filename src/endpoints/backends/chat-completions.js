@@ -507,7 +507,7 @@ async function sendScaleRequest(request, response) {
     } else {
         console.log('Scale request: ', converted_prompt);
     }
-  
+
     try {
         const controller = new AbortController();
         request.socket.removeAllListeners('close');
@@ -609,7 +609,7 @@ async function sendMakerSuiteRequest(request, response) {
         }
 
         let thinkingRequest = { 'includeThoughts':true };
-		
+
         if (InsertTokens == true) {
             thinkingRequest.thinkingBudget = request.body.model_thinking_budget
         } else { isThinkingRequest = false }
@@ -670,7 +670,7 @@ async function sendMakerSuiteRequest(request, response) {
 
         if (request.body.websearch && !useMultiModal) {
             body.tools = [{ googleSearch: {}}];
-		}
+        }
 
         return body;
     }
@@ -775,7 +775,7 @@ async function sendMakerSuiteRequest(request, response) {
             if (candidates) {
                 CandidateDeepcopy = JSON.parse(JSON.stringify(candidates));
             } else { CandidateDeepcopy = {'empty':'candidate_empty'} }
-			
+
             if (!candidates || candidates.length === 0) {
                 let message = 'MakerSuite API returned no candidate';
                 console.log(message, generateResponseJson);
@@ -795,7 +795,7 @@ async function sendMakerSuiteRequest(request, response) {
                         const mainAnswer = candidates[0]?.content?.parts[1]?.text;
                         console.log('\n\n\nMakerSuite response:', mainAnswer);
                         candidates[0].content = thinkingOpening + mainThinking + thinkingClosing + mainAnswer;
-                    }
+                    } else { console.log(`\n\n\nMakerSuite response: ${candidates[0].content.parts[0].text}`); }
                 } else { logGemini = true; }
             } else {
                 logGemini = true;
@@ -1344,11 +1344,11 @@ router.post('/generate', jsonParser, function (request, response) {
 
     request.body.messages.forEach(message => {
         const regex = /(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i;
-    
+
         // Handle standard text messages
         if (typeof message.content === 'string') {
             message.content = message.content.replace(regex, '');
-        } 
+        }
         // Handle messages with inline images (Content is an Array)
         else if (Array.isArray(message.content)) {
             message.content.forEach(part => {
