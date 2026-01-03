@@ -419,12 +419,12 @@ let openai_settings;
 let promptManager = null;
 
 function validateReverseProxy() {
-    if (!oai_settings.reverse_proxy) {
+    if (!oai_settings.reverse_proxy || !extension_settings.ProxyManager.ProxyURL) {
         return;
     }
 
     try {
-        new URL(oai_settings.reverse_proxy);
+        new URL((extension_settings.ProxyManager.ProxyPrior) ? extension_settings.ProxyManager.ProxyURL : oai_settings.reverse_proxy);
     }
     catch (err) {
         toastr.error('Entered reverse proxy address is not a valid URL');
@@ -1869,7 +1869,7 @@ async function sendOpenAIRequest(type, messages, signal) {
     const isContinue = type === 'continue';
     const stream = oai_settings.stream_openai && !isQuiet && !isScale && !isAI21 && !(isGoogle && oai_settings.google_model.includes('bison'));
     const useLogprobs = !!power_user.request_token_probabilities;
-    const canMultiSwipe = oai_settings.n > 1 && !isContinue && !isImpersonate && !isQuiet && (isOAI || isCustom);
+    const canMultiSwipe = oai_settings.n > 1 && !isContinue && !isImpersonate && !isQuiet && (isOAI || isGoogle || isCustom);
 
     if (isTextCompletion && isOpenRouter) {
         messages = convertChatCompletionToInstruct(messages, type);
@@ -3296,8 +3296,8 @@ async function getStatusOpen() {
     }
 
     let data = {
-        reverse_proxy: oai_settings.reverse_proxy,
-        proxy_password: oai_settings.proxy_password,
+        reverse_proxy: ((extension_settings.ProxyManager.ProxyPrior) ? extension_settings.ProxyManager.ProxyURL : oai_settings.reverse_proxy),
+        proxy_password: ((extension_settings.ProxyManager.ProxyPrior) ? extension_settings.ProxyManager.ProxyPassword : oai_settings.proxy_password),
         chat_completion_source: oai_settings.chat_completion_source,
     };
 
