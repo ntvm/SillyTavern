@@ -65,7 +65,7 @@ const defaultSettings = {
     depth: 2,
     promptWords: 200,
     promptMinWords: 25,
-    promptMaxWords: 1000,
+    promptMaxWords: 4000,
     promptWordsStep: 25,
     promptInterval: 10,
     promptMinInterval: 0,
