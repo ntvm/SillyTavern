@@ -142,6 +142,7 @@ const spp_nerd_v2 = new SentencePieceTokenizer('src/tokenizers/nerdstash_v2.mode
 const spp_mistral = new SentencePieceTokenizer('src/tokenizers/mistral.model');
 const spp_yi = new SentencePieceTokenizer('src/tokenizers/yi.model');
 const claude_tokenizer = new WebTokenizer('src/tokenizers/claude.json');
+const spp_gemma = new SentencePieceTokenizer('src/tokenizers/gemma.model');
 
 const sentencepieceTokenizers = [
     'llama',
@@ -175,6 +176,10 @@ function getSentencepiceTokenizer(model) {
 
     if (model.includes('yi')) {
         return spp_yi;
+    }
+
+    if (model.includes('gemma')) {
+        return spp_gemma;
     }
 
     return null;
@@ -262,6 +267,10 @@ function getWebTokenizersChunks(tokenizer, ids) {
  */
 function getTokenizerModel(requestModel) {
 
+    if (requestModel.includes('gpt-5')) {
+        return 'gpt-4o';
+    }
+
     if (requestModel.includes('o1')) {
         return 'gpt-4o';
     }
@@ -285,18 +294,16 @@ function getTokenizerModel(requestModel) {
         return 'gpt-4o';
     }
 
+    if (requestModel.includes('gpt-4.1') || requestModel.includes('gpt-4.5')) {
+        return 'gpt-4o';
+    }
+
     if (requestModel.includes('gpt-4-32k')) {
         return 'gpt-4-32k';
     }
 
     if (requestModel.includes('gpt-4')) {
         return 'gpt-4';
-    }
-
-    if (requestModel.includes('gpt-4.1') || requestModel.includes('gpt-4.5')) {
- 
-        return 'gpt-4o';
- 
     }
 
     if (requestModel.includes('gpt-3.5-turbo-0301')) {
@@ -534,6 +541,8 @@ router.post('/nerdstash/encode', jsonParser, createSentencepieceEncodingHandler(
 router.post('/nerdstash_v2/encode', jsonParser, createSentencepieceEncodingHandler(spp_nerd_v2));
 router.post('/mistral/encode', jsonParser, createSentencepieceEncodingHandler(spp_mistral));
 router.post('/yi/encode', jsonParser, createSentencepieceEncodingHandler(spp_yi));
+router.post('/gemma/encode', jsonParser, createSentencepieceEncodingHandler(spp_gemma));
+router.post('/gemma/decode', jsonParser, createSentencepieceDecodingHandler(spp_gemma));
 router.post('/gpt2/encode', jsonParser, createTiktokenEncodingHandler('gpt2'));
 router.post('/llama/decode', jsonParser, createSentencepieceDecodingHandler(spp_llama));
 router.post('/nerdstash/decode', jsonParser, createSentencepieceDecodingHandler(spp_nerd));
@@ -560,6 +569,11 @@ router.post('/openai/encode', jsonParser, async function (req, res) {
 
         if (queryModel.includes('yi')) {
             const handler = createSentencepieceEncodingHandler(spp_yi);
+            return handler(req, res);
+        }
+
+        if (queryModel.includes('gemma') || queryModel.includes('gemini')) {
+            const handler = createSentencepieceEncodingHandler(spp_gemma);
             return handler(req, res);
         }
 
@@ -644,6 +658,11 @@ router.post('/openai/count', jsonParser, async function (req, res) {
 
         if (model === 'yi') {
             num_tokens = await countSentencepieceArrayTokens(spp_yi, req.body);
+            return res.send({ 'token_count': num_tokens });
+        }
+
+        if (model === 'gemma' || model === 'gemini') {
+            num_tokens = await countSentencepieceArrayTokens(spp_gemma, req.body);
             return res.send({ 'token_count': num_tokens });
         }
 

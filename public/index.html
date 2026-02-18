@@ -1763,7 +1763,7 @@
                                             <input id="use_google_tokenizer" type="checkbox" /><span data-i18n="Use Google Tokenizer">Use Google Tokenizer</span>
                                         </label>
                                         <div class="toggle-description justifyLeft">
-                                            <span data-i18n="Use the appropriate tokenizer for Google models via their API. Slower prompt processing, but offers much more accurate token counting.">Use the appropriate tokenizer for Google models via their API. Slower prompt processing, but offers much more accurate token counting.</span>
+                                            <span data-i18n="Use the appropriate tokenizer for Google models via their API. Slower prompt processing, but offers much more accurate token counting.">Use the tokenizer at the Google server for Gemini models via their API. Slower prompt processing, but offers more accurate token counting. (Current local gemma tokenizer giving almost accurate count.)</span>
                                         </div>
                                     </div>
                                     <div class="range-block" data-source="makersuite">
@@ -2704,8 +2704,9 @@
                                 <h4 data-i18n="Claude Model">Claude Model</h4>
                                 <select id="model_claude_select">
                                     <optgroup label="Versions">
+                                        <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
                                         <option value="claude-opus-4-6">claude-opus-4-6</option>
-                                        <option value="claude-opus-4-6">claude-opus-4-6-20260205</option>
+                                        <option value="claude-opus-4-6-20260205">claude-opus-4-6-20260205</option>
                                         <option value="claude-opus-4-5">claude-opus-4-5</option>
                                         <option value="claude-opus-4-5-20251101">claude-opus-4-5-20251101</option>
                                         <option value="claude-sonnet-4-5">claude-sonnet-4-5</option>
