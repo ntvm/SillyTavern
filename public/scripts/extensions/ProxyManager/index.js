@@ -109,6 +109,9 @@ function onProxytypeChange(){
         case 'mixtral':
             extension_settings.ProxyManager.ProxyURL = baseproxy + '/mistral-ai';
             break;
+        case 'openrouter':
+            extension_settings.ProxyManager.ProxyURL = baseproxy + '/openrouter';
+            break;
         default:
             noreturn = 1;
             return noreturn;
@@ -299,6 +302,7 @@ jQuery(function () {
                         <option value="gcpclaude">Vertex Claude</option>
                         <option value="google">Google AI</option>
                         <option value="mixtral">Mixtral</option>
+                        <option value="openrouter">Openrouter</option>
                     </select>
                     <label for="ProxyPassword">Current proxy password: </label>
                     <textarea id="ProxyPassword" class="text_pole textarea_compact" rows="2" placeholder="Put proxy password here..."></textarea>
