@@ -803,7 +803,7 @@ async function sendMakerSuiteRequest(request, response) {
 
             const responseContent = candidates[0].content ?? candidates[0].output;
             const responseText = typeof responseContent === 'string' ? responseContent : responseContent?.parts?.[0]?.text;
-            const inlineData = (candidates?.[0]?.content?.parts ?? []).some(part => part.inlineData);
+            const inlineData = (CandidateDeepcopy?.[0]?.content?.parts ?? []).some(part => part.inlineData);
 
             if (!responseText && !inlineData) {
                 let message = 'MakerSuite Candidate text empty';
