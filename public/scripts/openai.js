@@ -2003,6 +2003,16 @@ async function sendOpenAIRequest(type, messages, signal) {
             }
         }
 
+        if (!(generate_data.model.includes('claude-opus-4-7') || !generate_data.model.includes('claude-sonnet-4-7') || !generate_data.model.includes('claude-opus-4-8') || !generate_data.model.includes('claude-sonnet-4-8'))) {
+            console.log('Temperature IS inserted.')
+		} else {
+            delete generate_data.temperature;
+            delete generate_data.top_k;
+            delete generate_data.top_p;
+            console.log('Temperature was deleted.')
+		}
+			
+
     }
 
     if (isOpenRouter) {
