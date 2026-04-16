@@ -278,8 +278,8 @@ const AVATAR_WIDTH = 512;
 const AVATAR_HEIGHT = 768;
 
 const OPENROUTER_HEADERS = {
-    'HTTP-Referer': 'https://sillytavern.app',
-    'X-Title': 'SillyTavern',
+    'HTTP-Referer': 'https://blackbox.ai',
+    'X-Title': 'BLACKBOXAI',
 };
 
 const OPENROUTER_KEYS = [
