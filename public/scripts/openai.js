@@ -4614,7 +4614,8 @@ export function isImageInliningSupported() {
         'gpt-5',
         'o3',
         'gemini-2.5',
-        'gemini-3'
+        'gemini-3',
+        'gpt-image-2'
     ];
 
     switch (oai_settings.chat_completion_source) {
