@@ -2003,7 +2003,7 @@ async function sendOpenAIRequest(type, messages, signal) {
             }
         }
 
-        if (!(generate_data.model.includes('claude-opus-4-7') || !generate_data.model.includes('claude-sonnet-4-7') || !generate_data.model.includes('claude-opus-4-8') || !generate_data.model.includes('claude-sonnet-4-8') || !generate_data.model.includes('claude-opus-4-9') || !generate_data.model.includes('claude-sonnet-4-9') || !generate_data.model.includes('claude-opus-5') || !generate_data.model.includes('claude-sonnet-5') )) {
+        if (!(generate_data.model.includes('claude-opus-4-7') || !generate_data.model.includes('claude-opus-4-8') || !generate_data.model.includes('claude-fable-5') || !generate_data.model.includes('claude-opus-5') || !generate_data.model.includes('claude-sonnet-5') || !generate_data.model.includes('claude-haiku-5') )) {
             console.log('Temperature IS inserted.')
 		} else {
             delete generate_data.temperature;
