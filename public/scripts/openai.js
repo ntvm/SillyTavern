@@ -2126,9 +2126,8 @@ async function sendOpenAIRequest(type, messages, signal) {
                 break;
         }
 
-        if (isOAI && oai_settings.openai_model.startsWith('o1') || isCustom && oai_settings.custom_model.includes('o1') || 
-        isOAI && oai_settings.openai_model.startsWith('o3') || isCustom && oai_settings.custom_model.includes('o3') ||
-        (oai_settings.openai_model.startsWith('gpt-5') && oai_settings.openai_model !== 'gpt-5-chat-latest') ){
+        if (isOAI || isCustom && oai_settings.custom_model.includes('o1') || oai_settings.custom_model.includes('o3') ||
+        (oai_settings.openai_model.startsWith('gpt-5') && oai_settings.openai_model !== 'gpt-5-chat-latest') || oai_settings.custom_model.includes('gpt-6') ){
             generate_data['max_completion_tokens'] = generate_data['max_tokens'];
             delete generate_data.max_tokens;
             delete generate_data.logprobs;
