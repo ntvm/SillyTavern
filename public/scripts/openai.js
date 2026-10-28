@@ -4605,7 +4605,7 @@ export function isImageInliningSupported() {
         'gemini-1.5-pro-latest',
         'gemini-pro-vision',
         'claude-3',
-        'claude-4',
+        'claude',
         'gpt-4-turbo',
         'gpt-4o',
         'chatgpt-4o-latest',
