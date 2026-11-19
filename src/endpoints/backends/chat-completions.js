@@ -766,18 +766,55 @@ async function sendMakerSuiteRequest(request, response) {
                 return response.send({ error: { message } });
             }
 
-            if (isThinkingRequest == true){
-                if (!(candidates[0]?.content?.parts[0]?.thought == undefined)){
-                    if (candidates[0].content.parts[0].thought == true) {
-                        console.log('MakerSuite response thinking:', candidates[0].content.parts[0].text);
+            if (candidates && candidates[0]) {
+                const candidate = candidates[0];
+                const parts = candidate?.content?.parts;
+
+                if (Array.isArray(parts) && parts.length > 0) {
+
+                    const searchQueries = candidate?.groundingMetadata?.webSearchQueries;
+                    if (Array.isArray(searchQueries) && searchQueries.length > 0) {
+                        console.log('[Grounding Queries]:', searchQueries);
+                    }
+
+                    // Разделяем части на блоки размышлений и блоки основного ответа
+                    const thinkingParts = parts.filter(part => part.thought === true && part.text);
+                    const answerParts = parts.filter(part => part.thought !== true && part.text);
+
+                    if (thinkingParts.length > 0) {
+                        const mainThinking = thinkingParts.map(part => part.text).join('\n');
                         const thinkingOpening = '<Thinking_Block>\n<details open>\n<summary> 🧠Thinking </summary>\n';
-                        const mainThinking = candidates[0].content.parts[0].text;
-                        const thinkingClosing = `\nTotal thinking tokens usage: ${generateResponseJson.usageMetadata.thoughtsTokenCount}\n\n</details>\n</Thinking_Block>\n\n`;
-                        const mainAnswer = candidates[0].content.parts[1].text;
+                        const thoughtsCount = generateResponseJson?.usageMetadata?.thoughtsTokenCount ?? 0;
+                        const thinkingClosing = `\nTotal thinking tokens usage: ${thoughtsCount}\n\n</details>\n</Thinking_Block>\n\n`;
+                        console.log('MakerSuite response thinking:', `${thinkingOpening} ${mainThinking} ${thinkingClosing}`);
+                        const mainAnswer = answerParts.map(part => part.text).join('\n');
                         console.log('\n\n\nMakerSuite response:', mainAnswer);
+
                         candidates[0].content = thinkingOpening + mainThinking + thinkingClosing + mainAnswer;
-                    } else { console.log(`\n\n\nMakerSuite response: ${candidates[0].content.parts[0].text}`); }
-                } else { logGemini = true; }
+                        
+                        if (isThinkingRequest !== true) {
+                            logGemini = false;
+                        }
+
+                       const searchQueries = candidate?.groundingMetadata?.webSearchQueries;
+                       if (Array.isArray(searchQueries) && searchQueries.length > 0) {
+                           console.log('[Grounding Queries]:', searchQueries);
+                       }
+
+                    } else {
+                        // Если мыслей в ответе нет
+                        const fullText = answerParts.map(part => part.text || '').join('\n');
+                        console.log(`\n\n\nMakerSuite response: ${fullText}`);
+
+                        candidates[0].content = fullText;
+
+                        if (isThinkingRequest !== true) {
+                            logGemini = true;
+                        }
+                    }
+                } else {
+                    logGemini = true;
+                }
             } else {
                 logGemini = true;
             }
@@ -1324,8 +1361,8 @@ router.post('/generate', jsonParser, function (request, response) {
     if (!request.body) return response.status(400).send({ error: true });
 
     request.body.messages.forEach(message => {
-        const regex = /(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i;
-
+        const regex = /(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i;
+        //const regex = /(^)(```)?\n?<Thinking_Block>[\s\S]*?<\/Thinking_Block>\n?(```)?\n?\n?/i;
         // Handle standard text messages
         if (typeof message.content === 'string') {
             message.content = message.content.replace(regex, '');
