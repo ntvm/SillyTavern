@@ -4611,9 +4611,11 @@ export function isImageInliningSupported() {
         'chatgpt-4o-latest',
         'gpt-4.1',
         'gpt-5',
+        'gpt-6',
         'o3',
         'gemini-2.5',
         'gemini-3',
+        'gemini-4',
         'gpt-image-2'
     ];
 
